@@ -1,0 +1,108 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="344" height="215" viewBox="0 0 344 215" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Bike &#194;&#183; Classic 350 (vector)">
+<ellipse id="Shadow" cx="176.3" cy="204.68" rx="150.5" ry="8.6" fill="url(#paint0_radial_0_4)"/>
+<circle id="Rear tyre" cx="75.68" cy="153.08" r="46.01" stroke="#212124" stroke-width="11.18"/>
+<circle id="tread hl" cx="75.68" cy="153.08" r="51.084" stroke="#4D4D52" stroke-width="1.032"/>
+<circle id="Rear rim" cx="75.68" cy="153.08" r="43.645" stroke="#D1D4DB" stroke-width="2.15"/>
+<path id="Rear spokes" d="M82.56 153.08L118.176 163.931M82.145 155.433L111.902 177.812M80.9503 157.503L101.259 188.709M79.12 159.039L87.5308 195.309M76.8747 159.856L72.3731 196.815M74.4853 159.856L57.6142 193.047M72.24 159.039L45.0343 184.458M70.4096 157.503L36.1508 172.084M69.2149 155.433L32.035 157.418M68.8 153.08L33.1835 142.229M69.2149 150.727L39.4576 128.349M70.4096 148.658L50.1007 117.452M72.24 147.122L63.8291 110.852M74.4853 146.305L78.9868 109.345M76.8747 146.305L93.7457 113.114M79.12 147.122L106.326 121.703M80.9503 148.658L115.209 134.077M82.145 150.727L119.325 148.742" stroke="#D1D4DB" stroke-opacity="0.7" stroke-width="0.602" stroke-linecap="round" stroke-linejoin="round"/>
+<circle id="Rear hub" cx="75.68" cy="153.08" r="9.46" fill="url(#paint1_linear_0_4)"/>
+<circle id="Ellipse" cx="75.68" cy="153.08" r="3.44" fill="#141417"/>
+<path id="Rear fender" d="M15.5988 149.3C16.3262 137.738 20.374 126.632 27.2566 117.314C34.1392 107.996 43.5642 100.861 54.4008 96.7663C65.2374 92.6714 77.0254 91.7903 88.3504 94.2285C99.6754 96.6667 110.056 102.321 118.248 110.512L113.14 115.62C105.931 108.412 96.7959 103.436 86.8299 101.291C76.864 99.145 66.4906 99.9205 56.9543 103.524C47.4181 107.127 39.1241 113.406 33.0674 121.606C27.0107 129.806 23.4486 139.579 22.8085 149.754L15.5988 149.3Z" fill="url(#paint2_linear_0_4)"/>
+<circle id="Front tyre" cx="276.92" cy="153.08" r="46.01" stroke="#212124" stroke-width="11.18"/>
+<circle id="tread hl_2" cx="276.92" cy="153.08" r="51.084" stroke="#4D4D52" stroke-width="1.032"/>
+<circle id="Front rim" cx="276.92" cy="153.08" r="43.645" stroke="#D1D4DB" stroke-width="2.15"/>
+<path id="Front spokes" d="M283.8 153.08L319.416 163.931M283.385 155.433L313.142 177.812M282.19 157.503L302.499 188.709M280.36 159.039L288.771 195.309M278.115 159.856L273.613 196.815M275.725 159.856L258.854 193.047M273.48 159.039L246.274 184.458M271.65 157.503L237.391 172.084M270.455 155.433L233.275 157.418M270.04 153.08L234.423 142.229M270.455 150.727L240.698 128.349M271.65 148.658L251.341 117.452M273.48 147.122L265.069 110.852M275.725 146.305L280.227 109.345M278.115 146.305L294.986 113.114M280.36 147.122L307.566 121.703M282.19 148.658L316.449 134.077M283.385 150.727L320.565 148.742" stroke="#D1D4DB" stroke-opacity="0.7" stroke-width="0.602" stroke-linecap="round" stroke-linejoin="round"/>
+<circle id="Front hub" cx="276.92" cy="153.08" r="9.46" fill="url(#paint3_linear_0_4)"/>
+<circle id="Ellipse_2" cx="276.92" cy="153.08" r="3.44" fill="#141417"/>
+<path id="Front fender" d="M218.611 138.109C221.934 125.169 229.466 113.701 240.023 105.513C250.579 97.3242 263.56 92.88 276.92 92.88C290.28 92.88 303.261 97.3242 313.817 105.513C324.374 113.701 331.906 125.169 335.229 138.109L328.232 139.905C325.308 128.518 318.679 118.427 309.389 111.221C300.1 104.015 288.677 100.104 276.92 100.104C265.163 100.104 253.74 104.015 244.451 111.221C235.161 118.427 228.532 128.518 225.608 139.905L218.611 138.109Z" fill="url(#paint4_linear_0_4)"/>
+<path id="Exhaust" d="M159.1 168.56L51.6 159.96C41.28 159.1 34.4 163.4 34.4 168.56C34.4 173.72 41.28 177.16 51.6 176.3L159.1 177.16V168.56Z" fill="url(#paint5_linear_0_4)"/>
+<path id="Seat tube" d="M129 104.92L144.48 129" stroke="#0F0F12" stroke-width="5.16" stroke-linecap="round"/>
+<path id="Down tube" d="M254.56 77.4L225.32 129" stroke="#0F0F12" stroke-width="5.16" stroke-linecap="round"/>
+<path id="Top tube" d="M129 104.92L254.56 77.4" stroke="#0F0F12" stroke-width="5.16" stroke-linecap="round"/>
+<path id="Swingarm" d="M75.68 153.08L146.2 158.24" stroke="#0F0F12" stroke-width="6.02" stroke-linecap="round"/>
+<path id="Shock" d="M84.28 96.32L96.32 137.6" stroke="#D1D4DB" stroke-width="4.3" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Engine" d="M144.48 110.08H213.28C220.16 110.08 223.6 115.24 223.6 122.12L221.88 151.36C221.02 159.96 215 165.12 206.4 165.12H154.8C146.2 165.12 141.04 159.1 141.04 151.36V115.24C141.04 111.8 141.9 110.08 144.48 110.08Z" fill="url(#paint6_linear_0_4)"/>
+<path id="Cylinder" d="M172 86H199.52V111.8H172V86Z" fill="#333336"/>
+<path id="Cylinder fins" d="M168.56 89.44H202.96M168.56 93.74H202.96M168.56 98.04H202.96M168.56 102.34H202.96M168.56 106.64H202.96M168.56 110.94H202.96" stroke="#D1D4DB" stroke-width="2.064" stroke-linecap="round" stroke-linejoin="round"/>
+<circle id="Crankcase cover" cx="158.24" cy="146.2" r="14.62" fill="url(#paint7_linear_0_4)"/>
+<circle id="Gear cover" cx="202.1" cy="147.92" r="10.32" fill="url(#paint8_linear_0_4)"/>
+<path id="Side box" d="M103.2 101.48H137.6V129C137.6 134.16 133.3 137.6 128.14 137.6H110.08C105.78 137.6 103.2 134.16 103.2 129V101.48Z" fill="url(#paint9_linear_0_4)"/>
+<path id="Seat" d="M79.12 89.44C86 77.4 129 75.68 147.92 84.28C151.36 87.72 149.64 94.6 144.48 96.32L87.72 98.04C80.84 98.04 75.68 94.6 79.12 89.44Z" fill="url(#paint10_linear_0_4)"/>
+<path id="Seat springs" d="M91.16 99.76L94.6 108.36M135.88 98.04L132.44 108.36" stroke="#D1D4DB" stroke-width="1.72" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Tank" d="M151.36 82.5599C159.96 58.4799 225.32 51.5999 249.4 67.0799C259.72 75.6799 256.28 96.3199 242.52 101.48L161.68 103.2C151.36 101.48 146.2 92.8799 151.36 82.5599Z" fill="url(#paint11_linear_0_4)"/>
+<path id="Tank chrome panel" d="M172 79.12C182.32 67.08 215 65.36 230.48 73.96C233.92 82.56 228.76 91.16 220.16 92.88H180.6C172 91.16 168.56 86 172 79.12Z" fill="url(#paint12_linear_0_4)"/>
+<path id="Badge" d="M182.32 82.56L221.88 80.84" stroke="#BF994D" stroke-width="2.58" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Tank highlight" d="M163.4 68.8C184.9 56.76 219.3 55.04 240.8 63.64" stroke="white" stroke-opacity="0.35" stroke-width="2.58" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Fork" d="M256.28 72.24L276.92 153.08" stroke="#D1D4DB" stroke-width="5.16" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Fork rear" d="M249.4 75.68L268.32 146.2" stroke="#9999A3" stroke-width="3.44" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Handlebar" d="M233.92 49.88C242.52 56.76 258 56.76 268.32 48.16" stroke="#141417" stroke-width="3.44" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Mirror stems" d="M244.24 51.6L240.8 34.4M261.44 49.88L266.6 32.68" stroke="#141417" stroke-width="1.376" stroke-linecap="round" stroke-linejoin="round"/>
+<circle id="Ellipse_3" cx="240.8" cy="32.68" r="4.3" fill="#D1D4DB"/>
+<circle id="Ellipse_4" cx="266.6" cy="30.96" r="4.3" fill="#D1D4DB"/>
+<circle id="Headlamp shell" cx="271.76" cy="70.52" r="14.62" fill="url(#paint13_linear_0_4)"/>
+<circle id="Headlamp lens" cx="275.2" cy="70.52" r="10.32" fill="url(#paint14_radial_0_4)"/>
+<circle id="Tail lamp" cx="65.36" cy="89.44" r="4.3" fill="#F23326"/>
+</g>
+<defs>
+<radialGradient id="paint0_radial_0_4" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(176.3 204.68) scale(150.5 8.6)">
+<stop stop-opacity="0.7"/>
+<stop offset="1" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="paint1_linear_0_4" x1="75.68" y1="143.62" x2="75.68" y2="162.54" gradientUnits="userSpaceOnUse">
+<stop stop-color="#E6E6EB"/>
+<stop offset="1" stop-color="#737380"/>
+</linearGradient>
+<linearGradient id="paint2_linear_0_4" x1="75.68" y1="92.88" x2="75.68" y2="213.28" gradientUnits="userSpaceOnUse">
+<stop stop-color="#9E1A1F"/>
+<stop offset="1" stop-color="#4D080D"/>
+</linearGradient>
+<linearGradient id="paint3_linear_0_4" x1="276.92" y1="143.62" x2="276.92" y2="162.54" gradientUnits="userSpaceOnUse">
+<stop stop-color="#E6E6EB"/>
+<stop offset="1" stop-color="#737380"/>
+</linearGradient>
+<linearGradient id="paint4_linear_0_4" x1="276.92" y1="92.88" x2="276.92" y2="213.28" gradientUnits="userSpaceOnUse">
+<stop stop-color="#9E1A1F"/>
+<stop offset="1" stop-color="#4D080D"/>
+</linearGradient>
+<linearGradient id="paint5_linear_0_4" x1="96.75" y1="159.85" x2="96.75" y2="177.16" gradientUnits="userSpaceOnUse">
+<stop stop-color="#F2F2F7"/>
+<stop offset="1" stop-color="#80808C"/>
+</linearGradient>
+<linearGradient id="paint6_linear_0_4" x1="182.32" y1="110.08" x2="182.32" y2="165.12" gradientUnits="userSpaceOnUse">
+<stop stop-color="#47474D"/>
+<stop offset="1" stop-color="#1A1A1C"/>
+</linearGradient>
+<linearGradient id="paint7_linear_0_4" x1="158.24" y1="131.58" x2="158.24" y2="160.82" gradientUnits="userSpaceOnUse">
+<stop stop-color="#F2F2F7"/>
+<stop offset="1" stop-color="#8C8C99"/>
+</linearGradient>
+<linearGradient id="paint8_linear_0_4" x1="202.1" y1="137.6" x2="202.1" y2="158.24" gradientUnits="userSpaceOnUse">
+<stop stop-color="#E6E6EB"/>
+<stop offset="1" stop-color="#80808C"/>
+</linearGradient>
+<linearGradient id="paint9_linear_0_4" x1="120.4" y1="101.48" x2="120.4" y2="137.6" gradientUnits="userSpaceOnUse">
+<stop stop-color="#8C141A"/>
+<stop offset="1" stop-color="#47080D"/>
+</linearGradient>
+<linearGradient id="paint10_linear_0_4" x1="113.867" y1="78.905" x2="113.867" y2="98.04" gradientUnits="userSpaceOnUse">
+<stop stop-color="#382921"/>
+<stop offset="1" stop-color="#0F0D0D"/>
+</linearGradient>
+<linearGradient id="paint11_linear_0_4" x1="202.368" y1="58.8143" x2="202.368" y2="103.2" gradientUnits="userSpaceOnUse">
+<stop stop-color="#B81F24"/>
+<stop offset="1" stop-color="#47050A"/>
+</linearGradient>
+<linearGradient id="paint12_linear_0_4" x1="201.12" y1="68.585" x2="201.12" y2="92.88" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FAFAFF"/>
+<stop offset="1" stop-color="#9999A8"/>
+</linearGradient>
+<linearGradient id="paint13_linear_0_4" x1="271.76" y1="55.9" x2="271.76" y2="85.14" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FAFAFF"/>
+<stop offset="1" stop-color="#80808F"/>
+</linearGradient>
+<radialGradient id="paint14_radial_0_4" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(275.2 70.52) scale(10.32)">
+<stop stop-color="#FFFAE0"/>
+<stop offset="1" stop-color="#D9CC99"/>
+</radialGradient>
+</defs>
+</svg>
