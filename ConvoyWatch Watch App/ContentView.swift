@@ -43,35 +43,71 @@ struct ContentView: View {
         }
         .id(step)
         .transition(.opacity)
-        .containerBackground(.black, for: .navigation)
     }
 
     private func advance() { withAnimation(.easeInOut(duration: 0.2)) { step = step.next } }
 }
 
+// MARK: - Canvas
+
+/// Draws a screen on Figma's 187 × 223 watch canvas, scaled to the real display width and anchored to the true top-left
+/// (the system clock sits in the top-right exactly where the design leaves room for it). This keeps the Figma
+/// paddings relative to the rounded screen edge on every watch size, so nothing clips at the corners.
+private struct WatchCanvas<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        GeometryReader { geo in
+            let scale = geo.size.width / 187
+            content
+                .frame(width: 187, height: geo.size.height / scale, alignment: .top)
+                .scaleEffect(scale, anchor: .topLeading)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+        }
+        .ignoresSafeArea()
+        .background(Color.black.ignoresSafeArea())
+    }
+}
+
 // MARK: - Shared pieces
 
-/// Small round pill-style action ("Stop here", "Skip", …).
+/// Figma's custom route / fuel / mountain glyphs, tinted.
+private struct Glyph: View {
+    let name: String
+    var width: CGFloat
+    var color: Color = .white
+    var body: some View {
+        Image(name).renderingMode(.template).resizable().scaledToFit().frame(width: width).foregroundStyle(color)
+    }
+}
+
+/// Pill action ("Stop here", "Skip", …). Dark by default; white / amber / red for the primary one, as in the design.
+private enum ActionStyle {
+    case dark, white, amber, red
+    var fill: Color { switch self { case .dark: W.button; case .white: .white; case .amber: W.amber; case .red: W.red } }
+    var text: Color { switch self { case .dark, .red: .white; case .white, .amber: .black } }
+}
+
 private struct ActionButton: View {
     let title: String
-    var prominent = false
-    var compact = false
+    var style: ActionStyle = .dark
+    var height: CGFloat = 36
     let action: () -> Void
     var body: some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 15, weight: .semibold))
                 .tracking(-0.225)
-                .foregroundStyle(prominent ? .black : .white)
+                .foregroundStyle(style.text)
+                .lineLimit(1).minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
-                .frame(height: compact ? 30 : 36)
-                .background(prominent ? Color.white : W.button, in: Capsule())
+                .frame(height: height)
+                .background(style.fill, in: Capsule())
         }
         .buttonStyle(.plain)
     }
 }
 
-/// "CONVOY · now" header row. `leading` is the app icon or the sender avatar.
+/// "CONVOY · now" row. `leading` is the red app icon or the sender avatar.
 private struct AlertHeader<Leading: View>: View {
     @ViewBuilder var leading: Leading
     var body: some View {
@@ -79,33 +115,27 @@ private struct AlertHeader<Leading: View>: View {
             leading
             Text("CONVOY").font(.system(size: 11, weight: .semibold)).tracking(0.22).foregroundStyle(W.secondary)
             Spacer(minLength: 0)
-            Text("now").font(.system(size: 11)).foregroundStyle(W.secondary)
+            Text("now").font(.system(size: 11)).tracking(-0.165).foregroundStyle(W.secondary)
         }
     }
 }
 
-private struct RouteBadgeIcon: View {
-    var size: CGFloat = 22
+/// 22 pt red circle with the route glyph (W02, W04, W07).
+private struct AppIcon: View {
     var body: some View {
-        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-            .font(.system(size: size * 0.5, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(W.red, in: Circle())
+        Glyph(name: "glyph_route", width: 11).frame(width: 22, height: 22).background(W.red, in: Circle())
     }
 }
 
-/// Avatar with the little red Convoy badge at its corner.
+/// 22 pt avatar with the tiny red Convoy badge at its corner (W03, W05, W06).
 private struct SenderAvatar: View {
     let image: String
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .topLeading) {
             Image(image).resizable().scaledToFill().frame(width: 22, height: 22).clipShape(Circle())
-            Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                .font(.system(size: 5, weight: .bold)).foregroundStyle(.white)
-                .frame(width: 10, height: 10).background(W.red, in: RoundedRectangle(cornerRadius: 5))
+            Glyph(name: "glyph_route", width: 5).frame(width: 10, height: 10).background(W.red, in: RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.black, lineWidth: 1.5))
-                .offset(x: 2, y: 2)
+                .offset(x: 14, y: 13)
         }.frame(width: 22, height: 22)
     }
 }
@@ -115,16 +145,19 @@ private struct AlertText: View {
     var detail: String? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 16, weight: .semibold)).tracking(-0.24).foregroundStyle(.white)
-            if let detail { Text(detail).font(.system(size: 14)).tracking(-0.21).foregroundStyle(W.secondary) }
+            Text(title).font(.system(size: 16, weight: .semibold)).tracking(-0.24)
+                .foregroundStyle(.white).frame(maxWidth: .infinity, alignment: .leading)
+            if let detail {
+                Text(detail).font(.system(size: 14)).tracking(-0.21).foregroundStyle(W.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .padding(.top, 8)
     }
 }
 
-/// Header + text + spacer + actions — the common layout for W02–W07.
+/// Header + text + (extra) + flexible space + actions — the shared layout of W02–W07 (10 pt sides, 12 pt bottom).
 private struct AlertScreen<Leading: View, Extra: View, Actions: View>: View {
     @ViewBuilder var leading: Leading
     let title: String
@@ -132,14 +165,18 @@ private struct AlertScreen<Leading: View, Extra: View, Actions: View>: View {
     @ViewBuilder var extra: Extra
     @ViewBuilder var actions: Actions
     var body: some View {
-        VStack(spacing: 0) {
-            AlertHeader { leading }
-            AlertText(title: title, detail: detail)
-            extra
-            Spacer(minLength: 6)
-            VStack(spacing: 6) { actions }
+        WatchCanvas {
+            VStack(spacing: 0) {
+                AlertHeader { leading }
+                AlertText(title: title, detail: detail)
+                extra
+                Spacer(minLength: 6)
+                VStack(spacing: 6) { actions }
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 28)
+            .padding(.bottom, 12)
         }
-        .padding(.horizontal, 2)
     }
 }
 
@@ -148,26 +185,27 @@ private struct AlertScreen<Leading: View, Extra: View, Actions: View>: View {
 struct ShortLook: View {
     var onTap: () -> Void
     var body: some View {
-        Button(action: onTap) {
+        WatchCanvas {
+          Button(action: onTap) {
             VStack(spacing: 6) {
                 ZStack(alignment: .bottomTrailing) {
-                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                        .font(.system(size: 30, weight: .semibold)).foregroundStyle(.white)
-                        .frame(width: 72, height: 72).background(W.red, in: Circle())
-                    Image(systemName: "fuelpump.fill")
-                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
-                        .frame(width: 26, height: 26).background(W.amber, in: Circle())
+                    Glyph(name: "glyph_route", width: 36).frame(width: 72, height: 72).background(W.red, in: Circle())
+                    Glyph(name: "glyph_fuel", width: 13).frame(width: 26, height: 26).background(W.amber, in: Circle())
                         .overlay(Circle().strokeBorder(.black, lineWidth: 3))
+                        .offset(x: 4, y: 4)
                 }
-                Color.clear.frame(height: 6)
-                Text("Fuel stop in 2.1 km").font(.system(size: 16, weight: .semibold)).tracking(-0.24).foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
+                .frame(width: 72, height: 72)
+                Color.clear.frame(width: 10, height: 6)
+                Text("Fuel stop in 2.1 km").font(.system(size: 16, weight: .semibold)).tracking(-0.24)
+                    .foregroundStyle(.white).multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.85)
                 Text("CONVOY").font(.system(size: 11, weight: .semibold)).tracking(0.22).foregroundStyle(W.secondary)
             }
+            .padding(.horizontal, 10).padding(.top, 24).padding(.bottom, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -176,9 +214,9 @@ struct ShortLook: View {
 struct LongLook: View {
     var next: () -> Void
     var body: some View {
-        AlertScreen(leading: { RouteBadgeIcon() }, title: "Fuel stop in 2.1 km",
+        AlertScreen(leading: { AppIcon() }, title: "Fuel stop in 2.1 km",
                     detail: "HP Petrol Bunk on your left. All 6 riders were told.", extra: { EmptyView() }) {
-            ActionButton(title: "Stop here", action: next)
+            ActionButton(title: "Stop here", style: .amber, action: next)
             ActionButton(title: "Skip", action: next)
         }
     }
@@ -202,11 +240,11 @@ struct FallingBehind: View {
 struct MeerasWatch: View {
     var next: () -> Void
     var body: some View {
-        AlertScreen(leading: { RouteBadgeIcon() }, title: "You’re 800 m behind",
+        AlertScreen(leading: { AppIcon() }, title: "You’re 800 m behind",
                     detail: "Let the crew know.", extra: { EmptyView() }) {
-            ActionButton(title: "Wait for me", compact: true, action: next)
-            ActionButton(title: "Taking a break", compact: true, action: next)
-            ActionButton(title: "Go ahead", compact: true, action: next)
+            ActionButton(title: "Wait for me", style: .white, height: 30, action: next)
+            ActionButton(title: "Taking a break", height: 30, action: next)
+            ActionButton(title: "Go ahead", height: 30, action: next)
         }
     }
 }
@@ -230,15 +268,15 @@ struct StopAdded: View {
     var body: some View {
         AlertScreen(leading: { SenderAvatar(image: "avatar_rika") }, title: "Rika added a stop", extra: {
             HStack(spacing: 8) {
-                Image(systemName: "fuelpump.fill").font(.system(size: 12)).foregroundStyle(.black)
-                    .frame(width: 24, height: 24).background(W.amber, in: Circle())
+                Glyph(name: "glyph_fuel", width: 12).frame(width: 24, height: 24).background(W.amber, in: Circle())
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("HP Petrol Bunk").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                    Text("1.2 km ahead · +2 min").font(.system(size: 11)).foregroundStyle(W.secondary)
+                    Text("HP Petrol Bunk").font(.system(size: 13, weight: .semibold)).tracking(-0.195).foregroundStyle(.white)
+                    Text("1.2 km ahead · +2 min").font(.system(size: 11)).tracking(-0.165).foregroundStyle(W.secondary)
                 }
+                .lineLimit(1).minimumScaleFactor(0.8)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8).frame(maxWidth: .infinity).frame(height: 43)
+            .padding(.horizontal, 8).padding(.vertical, 7).frame(maxWidth: .infinity)
             .background(W.button, in: RoundedRectangle(cornerRadius: 12))
             .padding(.top, 6)
         }) {
@@ -252,9 +290,9 @@ struct StopAdded: View {
 struct Arrived: View {
     var next: () -> Void
     var body: some View {
-        AlertScreen(leading: { RouteBadgeIcon() }, title: "You’ve arrived",
+        AlertScreen(leading: { AppIcon() }, title: "You’ve arrived",
                     detail: "Nandi Hills summit\n62.4 km · 1h 41m", extra: { EmptyView() }) {
-            ActionButton(title: "Finish ride", action: next)
+            ActionButton(title: "Finish ride", style: .red, action: next)
         }
     }
 }
@@ -264,20 +302,26 @@ struct Arrived: View {
 struct Summit: View {
     var done: () -> Void
     var body: some View {
-        VStack(spacing: 0) {
-            Image(systemName: "mountain.2")
-                .font(.system(size: 18, weight: .semibold)).foregroundStyle(Color(red: 0.23, green: 0.14, blue: 0))
-                .frame(width: 44, height: 44)
-                .background(LinearGradient(colors: [Color(red: 1, green: 0.82, blue: 0.48), Color(red: 0.95, green: 0.6, blue: 0.18)], startPoint: .top, endPoint: .bottom), in: Circle())
-            Text("Summit reached").font(.system(size: 18, weight: .semibold)).tracking(-0.27).foregroundStyle(.white).padding(.top, 10)
+        WatchCanvas {
+          VStack(spacing: 0) {
+            ZStack {
+                Circle().fill(W.amber.opacity(0.22)).frame(width: 86, height: 86)
+                Circle().fill(W.amber).frame(width: 44, height: 44)
+                Glyph(name: "glyph_mountain", width: 20, color: .white)
+            }
+            .frame(width: 44, height: 44)
+            Color.clear.frame(height: 10)
+            Text("Summit reached").font(.system(size: 18, weight: .semibold)).tracking(-0.27).foregroundStyle(.white)
             Text("Nandi Hills · 7:41 AM").font(.system(size: 12)).tracking(-0.18).foregroundStyle(W.secondary)
+            Color.clear.frame(height: 10)
             HStack(spacing: 5) {
                 stat("62.4", "km"); stat("1h 41m", "riding"); stat("6/6", "riders")
-            }.padding(.top, 10)
-            Spacer(minLength: 6)
-            ActionButton(title: "Done", prominent: true, action: done)
+            }
+            Spacer(minLength: 7)
+            ActionButton(title: "Done", style: .white, action: done)
+          }
+          .padding(.horizontal, 10).padding(.top, 26).padding(.bottom, 12)
         }
-        .padding(.horizontal, 2)
     }
     private func stat(_ v: String, _ l: String) -> some View {
         VStack(spacing: 0) {
@@ -287,6 +331,8 @@ struct Summit: View {
         .frame(maxWidth: .infinity).padding(.vertical, 6).background(W.button, in: RoundedRectangle(cornerRadius: 10))
     }
 }
+
+// MARK: - Previews
 
 #Preview("Flow") { ContentView() }
 #Preview("W01 · Short look") { ShortLook {} }
