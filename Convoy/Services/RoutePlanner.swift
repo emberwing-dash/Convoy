@@ -24,7 +24,7 @@ final class RoutePlanner {
     private let bengaluru = MKCoordinateRegion(center: .init(latitude: 12.97, longitude: 77.59),
                                                span: .init(latitudeDelta: 2, longitudeDelta: 2))
 
-    private struct Candidate {
+    fileprivate struct Candidate {
         var coords: [CLLocationCoordinate2D]
         var distance: Double      // metres
         var time: Double          // seconds
@@ -61,13 +61,33 @@ final class RoutePlanner {
             }
 
             let fastest = Self.pickFastest(candidates)
-            let off = Self.pickOffRoute(candidates, fastest: fastest)
-            let scenic = Self.pickScenic(candidates, fastest: fastest, off: off, spots: spots)
+
+            // Off-route: needs a route that differs from the fastest. Widen the detour until we find one.
+            var off = Self.pickOffRoute(candidates, fastest: fastest)
+            var scale = 1.0
+            while off == nil && scale < 3 {
+                scale *= 1.6
+                for wp in detourWaypoints(for: base.coords, scale: scale) {
+                    if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) { candidates.append(c) }
+                }
+                off = Self.pickOffRoute(candidates, fastest: fastest)
+            }
+
+            // Scenic: best weighted score that is distinct from both of the others.
+            var scenic = Self.pickScenic(candidates, avoiding: [fastest] + (off.map { [$0] } ?? []), fastest: fastest, spots: spots)
+            if scenic == nil {
+                for (i, wp) in detourWaypoints(for: base.coords, scale: 1.3, sides: [(0.45, -1), (0.55, 1), (0.3, -1), (0.7, 1)]).enumerated() {
+                    if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) { candidates.append(c) }
+                    if i >= 1, let s2 = Self.pickScenic(candidates, avoiding: [fastest] + (off.map { [$0] } ?? []), fastest: fastest, spots: spots) { scenic = s2; break }
+                }
+            }
+            guard let offFinal = off ?? scenic else { throw PlanError.none }
+            let scenicFinal = scenic ?? Self.pickScenic(candidates, avoiding: [fastest], fastest: fastest, spots: spots) ?? offFinal
 
             routes = [
                 .fastest: summary(fastest, note: "Minimum travel time"),
-                .offRoute: summary(off, note: "Different roads, longer ride"),
-                .scenic: summary(scenic, note: "Passes lakes, parks and viewpoints"),
+                .offRoute: summary(offFinal, note: "Different roads, longer ride"),
+                .scenic: summary(scenicFinal, note: "Passes lakes, parks and viewpoints"),
             ]
             state = .ready
         } catch {
@@ -118,7 +138,7 @@ final class RoutePlanner {
 
     // MARK: Scenic spots
 
-    private struct Spot { var coordinate: CLLocationCoordinate2D; var weight: Double }
+    fileprivate struct Spot { var coordinate: CLLocationCoordinate2D; var weight: Double }
 
     private func scenicPlaces(around path: [CLLocationCoordinate2D]) async -> [Spot] {
         guard let region = Self.region(for: path, padding: 1.35) else { return [] }
@@ -143,16 +163,19 @@ final class RoutePlanner {
     private static func pickFastest(_ c: [Candidate]) -> Candidate { c.min { $0.time < $1.time }! }
 
     /// Off-route — detour scoring: reward geometric difference from the fastest route, require a sufficiently longer ride.
-    private static func pickOffRoute(_ c: [Candidate], fastest: Candidate) -> Candidate {
-        let pool = c.filter { $0.distance >= fastest.distance * 1.05 && $0.time <= fastest.time * 2.2 && $0.coords.count > 1 }
+    private static func pickOffRoute(_ c: [Candidate], fastest: Candidate) -> Candidate? {
+        let pool = c.filter {
+            $0.coords.count > 1 && $0.distance >= fastest.distance * 1.04 && $0.time <= fastest.time * 2.5
+                && !similar($0, fastest)
+        }
         func score(_ x: Candidate) -> Double {
             deviation(of: x.coords, from: fastest.coords) / 1000 + 0.15 * (x.distance - fastest.distance) / 1000
         }
-        return pool.max { score($0) < score($1) } ?? c.filter { $0.distance > fastest.distance }.max { $0.distance < $1.distance } ?? fastest
+        return pool.max { score($0) < score($1) }
     }
 
     /// Scenic — weighted scoring: points for lakes/parks/viewpoints near the line, minus a penalty for extra minutes.
-    private static func pickScenic(_ c: [Candidate], fastest: Candidate, off: Candidate, spots: [Spot]) -> Candidate {
+    private static func pickScenic(_ c: [Candidate], avoiding: [Candidate], fastest: Candidate, spots: [Spot]) -> Candidate? {
         func score(_ x: Candidate) -> Double {
             let pts = sample(x.coords, every: 6)
             var s = 0.0
@@ -163,21 +186,24 @@ final class RoutePlanner {
             let extraMinutes = max(0, x.time - fastest.time) / 60
             return s - 0.04 * extraMinutes
         }
-        let distinct = c.filter { $0.time <= fastest.time * 2.4 }
-        let best = distinct.max { score($0) < score($1) } ?? off
-        // keep the three options visibly different when scores tie
-        if best.coords.count == fastest.coords.count && best.distance == fastest.distance { return off }
-        return best
+        let pool = c.filter { x in x.time <= fastest.time * 2.6 && !avoiding.contains(where: { similar(x, $0) }) }
+        return pool.max { score($0) < score($1) }
+    }
+
+    /// Two routes are "the same road" when, on average, they stay within ~350 m of each other both ways.
+    private static func similar(_ a: Candidate, _ b: Candidate) -> Bool {
+        deviation(of: a.coords, from: b.coords) < 350 && deviation(of: b.coords, from: a.coords) < 350
     }
 
     // MARK: Geometry helpers
 
-    private func detourWaypoints(for path: [CLLocationCoordinate2D]) -> [CLLocationCoordinate2D] {
+    private func detourWaypoints(for path: [CLLocationCoordinate2D], scale: Double = 1,
+                                 sides: [(Double, Double)] = [(0.5, 1.0), (0.5, -1.0), (0.35, 1.0), (0.65, -1.0)]) -> [CLLocationCoordinate2D] {
         guard path.count > 8, let a = path.first, let b = path.last else { return [] }
         let total = CLLocation(latitude: a.latitude, longitude: a.longitude).distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
-        let offset = min(max(total * 0.16, 2500), 25_000)
+        let offset = min(max(total * 0.16 * scale, 2500), 40_000)
         var out: [CLLocationCoordinate2D] = []
-        for (f, side) in [(0.5, 1.0), (0.5, -1.0), (0.35, 1.0), (0.65, -1.0)] {
+        for (f, side) in sides {
             let i = Int(Double(path.count - 1) * f)
             let p = path[i], q = path[min(i + 3, path.count - 1)], r = path[max(i - 3, 0)]
             let dx = q.longitude - r.longitude, dy = q.latitude - r.latitude

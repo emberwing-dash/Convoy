@@ -21,8 +21,10 @@ struct PlanRoutesView: View {
                 HStack(spacing: 10) { ProgressView().tint(CV.cream); Text("Finding routes…").cvText(14, .semibold, inter: true) }
                     .padding(.horizontal, 16).frame(height: 40).background(navPanelFill, in: Capsule()).frame(width: 393).at(0, 72)
             } else if failed {
-                Text("Offline · showing sample routes").cvText(13, .semibold, inter: true)
-                    .padding(.horizontal, 14).frame(height: 36).background(navPanelFill, in: Capsule()).frame(width: 393).at(0, 72)
+                Button { Task { app.planner.reset(); await app.findRoutes(); fit() } } label: {
+                    HStack(spacing: 8) { Image(systemName: "arrow.clockwise"); Text("Couldn’t load routes · Retry").cvText(13, .semibold, inter: true) }
+                        .padding(.horizontal, 14).frame(height: 36).background(navPanelFill, in: Capsule())
+                }.buttonStyle(.plain).frame(width: 393).at(0, 72)
             }
             sheet.at(0, 368)
         }
@@ -61,7 +63,7 @@ struct PlanRoutesView: View {
                 ForEach(RouteStyle.allCases) { s in
                     if let r = routes[s], r.coords.count > 4 {
                         Annotation("", coordinate: r.coords[r.coords.count * (s == .fastest ? 2 : s == .offRoute ? 3 : 4) / 6].cl) {
-                            Button { app.draft.style = s } label: { MapCallout(text: app.draft.durationText(s), selected: app.draft.style == s) }.buttonStyle(.plain)
+                            Button { app.draft.style = s } label: { MapCallout(text: "\(s.rawValue) · \(app.draft.durationText(s))", selected: app.draft.style == s) }.buttonStyle(.plain)
                         }
                     }
                 }

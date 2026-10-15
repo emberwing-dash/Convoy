@@ -131,7 +131,8 @@ struct DesignCanvas<Background: View, Content: View>: View {
 
 extension DesignCanvas where Background == Color {
     init(background: Color = CV.bg, @ViewBuilder content: () -> Content) {
-        self.init(background: background, content: content)
+        self.background = background
+        self.content = content()
     }
 }
 

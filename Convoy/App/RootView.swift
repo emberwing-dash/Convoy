@@ -31,3 +31,9 @@ struct OnboardingFlow: View {
     }
     private func pop() { if !path.isEmpty { path.removeLast() } }
 }
+
+#Preview("Full app") {
+    RootView()
+        .environment(AppState())
+        .preferredColorScheme(.dark)
+}

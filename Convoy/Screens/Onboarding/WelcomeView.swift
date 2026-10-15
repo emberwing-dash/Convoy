@@ -65,3 +65,9 @@ struct WelcomeView: View {
         .frame(width: 353, alignment: .leading)
     }
 }
+
+#Preview {
+    NavigationStack { WelcomeView(onSlid: {}) }
+        .environment(AppState())
+        .preferredColorScheme(.dark)
+}
