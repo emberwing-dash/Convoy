@@ -1,38 +1,64 @@
 import SwiftUI
 
-/// PR02 · Profile.
+/// PR02 · Profile — displays actual user avatar, stats, and completed ride history from SwiftData.
 struct ProfileView: View {
     @Environment(AppState.self) private var app
+
+    private var totalRides: Int { app.completedRides.count }
+    private var totalKm: String {
+        let km = app.completedRides.compactMap { r in
+            Double(r.distance.components(separatedBy: " ").first ?? "0")
+        }.reduce(0, +)
+        return km > 0 ? "\(Int(km))" : "0"
+    }
+    private var totalPlaces: Int {
+        Set(app.completedRides.map { $0.place }).count
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
             ContourBackdrop()
             ScrollView {
                 VStack(spacing: 0) {
-                    ZStack {
-                        Image("profile_rika").resizable().scaledToFill().frame(width: 96, height: 96).clipShape(Circle())
-                            .overlay(Circle().strokeBorder(CV.red, lineWidth: 3))
-                    }.padding(.top, 62)
-                    Text("\(app.displayName) Sharma").cvText(24, .bold, tracking: -0.24, inter: true).padding(.top, 14)
-                    Text("Bengaluru · Riding since 2021").cvText(14, color: CV.cream.opacity(0.55), inter: true).padding(.top, 3)
-                    Button {} label: {
-                        Text("Edit profile").cvText(13, .semibold, inter: true).frame(width: 121, height: 34)
-                            .background(Color.white.opacity(0.08), in: Capsule()).overlay(Capsule().strokeBorder(CV.glassStroke, lineWidth: 1))
-                    }.buttonStyle(.plain).padding(.top, 13)
+                    // Profile Avatar (Photo / Emoji / Initial)
+                    avatarView
+                        .padding(.top, 62)
 
-                    HStack(spacing: 0) {
-                        stat("38", "rides"); divider; stat("2,140", "km ridden"); divider; stat("12", "places")
+                    Text(app.displayName)
+                        .cvText(24, .bold, tracking: -0.24, inter: true)
+                        .padding(.top, 14)
+
+                    if !app.handle.isEmpty {
+                        Text("@\(app.handle)")
+                            .cvText(14, color: CV.cream.opacity(0.55), inter: true)
+                            .padding(.top, 3)
                     }
-                    .frame(height: 76).background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+                    // Real stats from SwiftData completed rides
+                    HStack(spacing: 0) {
+                        stat("\(totalRides)", "rides completed")
+                        divider
+                        stat(totalKm.isEmpty ? "0" : totalKm, "km ridden")
+                        divider
+                        stat("\(totalPlaces)", "destinations")
+                    }
+                    .frame(height: 76)
+                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
                     .padding(.top, 20)
 
+                    // Recent Rides & History Section
+                    sectionTitle("RECENT RIDES & HISTORY").padding(.top, 26)
+                    recentRidesSection
+                        .padding(.top, 8)
+
+                    // Garage Section
                     sectionTitle("GARAGE").padding(.top, 24)
                     Button { app.push(.garage) } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("Royal Enfield Classic 350").cvText(15, .semibold, inter: true)
-                                Text("KA 01 RK 3500  ·  Service in 340 km").cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                                Text("Add your motorcycle").cvText(15, .semibold, inter: true)
+                                Text("Track mileage, service and more").cvText(12, color: CV.cream.opacity(0.5), inter: true)
                             }
                             Spacer()
                             Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(CV.cream.opacity(0.5))
@@ -42,30 +68,17 @@ struct ProfileView: View {
                         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                     }.buttonStyle(.plain).padding(.top, 7)
 
+                    // Settings Section
                     sectionTitle("SETTINGS").padding(.top, 24)
                     VStack(spacing: 0) {
-                        row("phone", "Emergency contacts", "2 added", first: true)
-                        row("point.topleft.down.to.point.bottomright.curvepath", "Saved routes", "7")
+                        row("phone", "Emergency contacts", nil, first: true)
+                        row("point.topleft.down.to.point.bottomright.curvepath", "Saved routes", "\(app.savedRoutes.count)")
                         row("bell", "Notifications", nil)
                         row("exclamationmark", "Help & privacy", nil)
                     }
                     .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                     .padding(.top, 7)
-
-                    HStack(spacing: 14) {
-                        Image(systemName: "person.2.badge.gearshape").font(.system(size: 17)).frame(width: 22)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Demo: rider with a crew").cvText(15, .medium, inter: true)
-                            Text("Switches between the two Figma flows").cvText(12, color: CV.cream.opacity(0.5), inter: true)
-                        }
-                        Spacer()
-                        Toggle("", isOn: Binding(get: { app.hasCrew }, set: { app.setHasCrew($0); app.tab = .ride })).labelsHidden().tint(CV.green)
-                    }
-                    .padding(.horizontal, 16).frame(height: 64)
-                    .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-                    .padding(.top, 14)
 
                     Button { app.phase = .onboarding; app.path.removeAll() } label: {
                         Text("Sign out").cvText(15, .semibold, color: CV.red, inter: true)
@@ -74,6 +87,8 @@ struct ProfileView: View {
                 .padding(.horizontal, 20)
             }
             .scrollIndicators(.hidden)
+
+            // Top Bar
             ZStack {
                 Text("Profile").cvText(17, .semibold, inter: true)
                 HStack { CircleBackButton { app.pop() }; Spacer() }.padding(.horizontal, 20)
@@ -81,6 +96,99 @@ struct ProfileView: View {
         }
         .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
+        .onAppear {
+            app.completedRides = StorageService.shared.loadCompletedRides()
+        }
+    }
+
+    // MARK: - Avatar View
+    private var avatarView: some View {
+        ZStack {
+            if let data = app.avatarImageData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 96, height: 96)
+                    .clipShape(Circle())
+                    .overlay(Circle().strokeBorder(CV.red, lineWidth: 3))
+            } else if !app.avatarName.isEmpty && app.avatarName.count <= 2 && app.avatarName != "avatar_a" {
+                Circle()
+                    .fill(Color(hex: 0x222226))
+                    .frame(width: 96, height: 96)
+                    .overlay(
+                        Text(app.avatarName)
+                            .font(.system(size: 46))
+                    )
+                    .overlay(Circle().strokeBorder(CV.red, lineWidth: 3))
+            } else {
+                Circle()
+                    .fill(LinearGradient(colors: [CV.red.opacity(0.8), CV.red], startPoint: .top, endPoint: .bottom))
+                    .frame(width: 96, height: 96)
+                    .overlay(
+                        Text(String(app.displayName.prefix(1)).uppercased())
+                            .cvText(38, .bold, color: .white, inter: true)
+                    )
+                    .overlay(Circle().strokeBorder(CV.red, lineWidth: 3))
+            }
+        }
+        .shadow(color: CV.red.opacity(0.35), radius: 12)
+    }
+
+    // MARK: - Recent Rides Section
+    private var recentRidesSection: some View {
+        Group {
+            if app.completedRides.isEmpty {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle().fill(Color.white.opacity(0.06)).frame(width: 44, height: 44)
+                        Image(systemName: "flag.checkered")
+                            .font(.system(size: 18))
+                            .foregroundStyle(CV.cream.opacity(0.45))
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("No completed rides yet").cvText(15, .semibold, inter: true)
+                        Text("End a ride to see your distance, route & stats here").cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(app.completedRides, id: \.id) { r in
+                        Button {
+                            app.push(.rideSummary)
+                        } label: {
+                            HStack(spacing: 14) {
+                                ZStack {
+                                    Circle().fill(CV.green.opacity(0.18)).frame(width: 44, height: 44)
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(CV.green)
+                                }
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(r.title).cvText(15, .bold, color: CV.cream, inter: true).lineLimit(1)
+                                    Text("\(r.place) · \(r.displayDate)").cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 3) {
+                                    Text(r.distance).cvText(14, .bold, color: CV.cream, inter: true)
+                                    Text(r.duration).cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(CV.cream.opacity(0.4))
+                            }
+                            .padding(.horizontal, 16).frame(height: 68)
+                            .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 
     private var divider: some View { Rectangle().fill(Color.white.opacity(0.09)).frame(width: 1, height: 36) }

@@ -4,7 +4,7 @@ import SwiftUI
 struct CrewDetailView: View {
     @Environment(AppState.self) private var app
     let crewID: UUID
-    private var crew: CrewGroup { app.crews.first { $0.id == crewID } ?? app.crews[0] }
+    private var crew: CrewGroup { app.crews.first { $0.id == crewID } ?? app.crews.first ?? CrewGroup.solo() }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -138,7 +138,7 @@ struct NewCrewView: View {
 
     private func create() {
         let n = name.trimmingCharacters(in: .whitespaces)
-        var crew = app.hasCrew ? CrewGroup.coffee(name: n.isEmpty ? "Coffee Crew" : n) : CrewGroup.solo(name: n.isEmpty ? "My crew" : n)
+        var crew = app.hasCrew ? CrewGroup.coffee(name: n.isEmpty ? "Coffee Crew" : n) : CrewGroup.solo(name: n.isEmpty ? "Sunday Riders" : n)
         if app.hasCrew {
             let chosen = FriendEntry.all.filter { picked.contains($0.id) }
             crew.members = [CrewMember(name: "Rika Sharma (you)", detail: "Admin", photo: "profile_rika")]
@@ -147,7 +147,11 @@ struct NewCrewView: View {
             crew.avatars = crew.members.prefix(3).compactMap(\.photo)
         }
         app.crews.append(crew)
+        app.selectedCrew = crew.id
+        let cameFromPlan = app.path.contains(.planWho)
         app.pop()
-        if !app.hasCrew { app.push(.crewDetail(crew.id)) }
+        if !app.hasCrew && !cameFromPlan {
+            app.push(.crewDetail(crew.id))
+        }
     }
 }

@@ -6,7 +6,7 @@ struct CrewInviteView: View {
     let crewID: UUID
     @State private var copied = false
     @State private var added: Set<String> = ["dev"]
-    private var crew: CrewGroup { app.crews.first { $0.id == crewID } ?? app.crews[0] }
+    private var crew: CrewGroup { app.crews.first { $0.id == crewID } ?? app.crews.first ?? CrewGroup.solo() }
 
     var body: some View {
         ZStack(alignment: .top) {

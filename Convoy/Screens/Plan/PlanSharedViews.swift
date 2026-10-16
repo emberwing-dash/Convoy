@@ -6,18 +6,24 @@ struct FieldLabel: View {
     var body: some View { Text(text).cvText(14, .semibold, color: CV.cream.opacity(0.6), inter: true) }
 }
 
-/// From → (stops) → To summary card used on P03 / P04. Laid out on Figma's 46pt row grid.
+/// From → (stops) → To summary card. Laid out on the 46pt row grid.
 struct RouteSummaryCard: View {
     let draft: PlanDraft
-    /// P03 numbers the stops ("Stop 1"); P04 just says "Stop".
     var numberedStops = true
 
     private enum Kind { case start, stop, end }
+
     private var rows: [(Kind, String, String)] {
-        var r: [(Kind, String, String)] = [(.start, draft.from, "Start")]
-        for (i, s) in draft.stops.enumerated() { r.append((.stop, s, numberedStops ? "Stop \(i + 1)" : "Stop")) }
-        r.append((.end, draft.to, "End"))
+        var r: [(Kind, String, String)] = [(.start, short(draft.from), "Start")]
+        for (i, s) in draft.stops.enumerated() {
+            r.append((.stop, s, numberedStops ? "Stop \(i + 1)" : "Stop"))
+        }
+        r.append((.end, short(draft.to), "End"))
         return r
+    }
+
+    private func short(_ s: String) -> String {
+        s.components(separatedBy: ",").first ?? s
     }
 
     var body: some View {
@@ -26,8 +32,8 @@ struct RouteSummaryCard: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
                 let y = CGFloat(14 + 46 * i)
                 marker(row.0).frame(width: 14, height: 14).offset(x: 16, y: y + 2)
-                Text(row.1).cvText(16, .semibold, inter: true).lineLimit(1).frame(width: 236, alignment: .leading)
-                    .offset(x: 44, y: y)
+                Text(row.1).cvText(16, .semibold, inter: true).lineLimit(1)
+                    .frame(width: 236, alignment: .leading).offset(x: 44, y: y)
                 Text(row.2).cvText(13, color: CV.cream.opacity(0.4), inter: true)
                     .frame(width: 60, alignment: .trailing).offset(x: 277, y: y + 1)
                 if i < rows.count - 1 {
@@ -45,8 +51,8 @@ struct RouteSummaryCard: View {
     @ViewBuilder private func marker(_ k: Kind) -> some View {
         switch k {
         case .start: Circle().strokeBorder(CV.cream, lineWidth: 3)
-        case .stop: RoundedRectangle(cornerRadius: 3).strokeBorder(CV.cream, lineWidth: 2).padding(1)
-        case .end: ZStack { Circle().fill(CV.red); Circle().fill(.white).frame(width: 4, height: 4) }
+        case .stop:  RoundedRectangle(cornerRadius: 3).strokeBorder(CV.cream, lineWidth: 2).padding(1)
+        case .end:   ZStack { Circle().fill(CV.red); Circle().fill(.white).frame(width: 4, height: 4) }
         }
     }
 }
@@ -62,12 +68,14 @@ struct MapCallout: View {
     }
 }
 
-/// Blue "you are here" halo + red dot.
+/// Blue "you are here" halo + red dot — Apple Maps style.
 struct YouMarker: View {
     var body: some View {
         ZStack {
-            Circle().fill(Color(hex: 0x0A84FF, opacity: 0.35)).frame(width: 44, height: 44)
-            Circle().fill(CV.red).frame(width: 18, height: 18).overlay(Circle().strokeBorder(.white, lineWidth: 3))
+            Circle().fill(Color(hex: 0x0A84FF, opacity: 0.25)).frame(width: 44, height: 44)
+            Circle().fill(Color(hex: 0x0A84FF)).frame(width: 18, height: 18)
+                .overlay(Circle().strokeBorder(.white, lineWidth: 3))
+                .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
         }
     }
 }

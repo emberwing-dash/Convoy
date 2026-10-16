@@ -32,13 +32,28 @@ struct HomeView: View {
             }
             Spacer()
             Button { app.push(.profile) } label: {
-                Text(String(app.displayName.prefix(1)).uppercased())
-                    .cvText(17, .semibold, tracking: -0.17, lineHeight: 22, inter: true)
-                    .frame(width: 44, height: 44)
-                    .background(Color(hex: 0x1C1C1F), in: Circle())
-                    .overlay(Circle().strokeBorder(CV.cream, lineWidth: 1.5))
-            }
-            .buttonStyle(.plain)
+                            ZStack {
+                                if let data = app.avatarImageData, let uiImage = UIImage(data: data) {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 44, height: 44)
+                                        .clipShape(Circle())
+                                } else if app.avatarName.count <= 2 && !app.avatarName.isEmpty && app.avatarName != "avatar_a" {
+                                    Text(app.avatarName)
+                                        .font(.system(size: 22))
+                                        .frame(width: 44, height: 44)
+                                        .background(Color(hex: 0x1C1C1F), in: Circle())
+                                } else {
+                                    Text(String(app.displayName.prefix(1)).uppercased())
+                                        .cvText(17, .semibold, tracking: -0.17, lineHeight: 22, inter: true)
+                                        .frame(width: 44, height: 44)
+                                        .background(Color(hex: 0x1C1C1F), in: Circle())
+                                }
+                            }
+                            .overlay(Circle().strokeBorder(CV.cream, lineWidth: 1.5))
+                        }
+                        .buttonStyle(.plain)
         }
         .frame(height: 44)
     }

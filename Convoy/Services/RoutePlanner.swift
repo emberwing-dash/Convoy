@@ -1,93 +1,135 @@
 import MapKit
 import CoreLocation
 
-/// Picks the three Convoy routes from the candidates Apple Maps provides.
-///
-/// - **Fastest**: minimum expected travel time among the candidates (MKDirections).
-/// - **Off-route**: detour scoring — a route that is sufficiently longer than the fastest one and follows
-///   different roads (MKDirections through offset waypoints, plus Apple's own alternates).
-/// - **Scenic**: weighted scoring — candidates earn points for passing near lakes, parks and viewpoints found with
-///   MKLocalSearch, minus a penalty for extra travel time.
-///
-/// These rules *rank* what MapKit returns; Apple supplies the candidate roads.
+/// Computes real routes from Apple MapKit (MKDirections), extracting accurate polylines, distances, travel times, and navigation maneuver steps.
 @MainActor @Observable
 final class RoutePlanner {
-    enum State: Equatable { case idle, loading, ready, failed(String) }
+    enum State: Equatable {
+        case idle
+        case loading
+        case ready
+        case failed(String)
+    }
+
     private(set) var state: State = .idle
     private(set) var routes: [RouteStyle: RouteSummary] = [:]
     private(set) var start: Coord?
     private(set) var end: Coord?
     private(set) var scenicSpots: [Coord] = []
-    /// What the current result was computed for (so we only recompute when the plan changes).
     private(set) var key = ""
-
-    private let bengaluru = MKCoordinateRegion(center: .init(latitude: 12.97, longitude: 77.59),
-                                               span: .init(latitudeDelta: 2, longitudeDelta: 2))
 
     fileprivate struct Candidate {
         var coords: [CLLocationCoordinate2D]
         var distance: Double      // metres
         var time: Double          // seconds
         var kind: Kind
+        var steps: [NavStep]
         enum Kind { case apple, detour, poi }
     }
 
-    func reset() { state = .idle; routes = [:]; key = "" }
+    func reset() {
+        state = .idle
+        routes = [:]
+        key = ""
+    }
 
-    func plan(from: String, to: String, stops: [String]) async {
-        let k = ([from, to] + stops).joined(separator: "|")
+    /// Plans route with real coordinates and queries.
+    func plan(
+        from: String,
+        to: String,
+        stops: [String] = [],
+        fromCoord: CLLocationCoordinate2D? = nil,
+        toCoord: CLLocationCoordinate2D? = nil,
+        stopCoords: [CLLocationCoordinate2D] = []
+    ) async {
+        let k = ([from, to] + stops).joined(separator: "|") + "\(fromCoord?.latitude ?? 0),\(toCoord?.latitude ?? 0)"
         if k == key, state == .ready { return }
-        state = .loading; routes = [:]; key = k
+
+        state = .loading
+        routes = [:]
+        key = k
+
         do {
-            guard let a = try await geocode(from), let b = try await geocode(to) else { throw PlanError.place }
+            // Resolve start coordinate
+            let a: CLLocationCoordinate2D
+            if let fc = fromCoord {
+                a = fc
+            } else if let resolvedA = try await geocode(from) {
+                a = resolvedA
+            } else {
+                throw PlanError.place(from.isEmpty ? "Starting location" : from)
+            }
+
+            // Resolve destination coordinate
+            let b: CLLocationCoordinate2D
+            if let tc = toCoord {
+                b = tc
+            } else if let resolvedB = try await geocode(to) {
+                b = resolvedB
+            } else {
+                throw PlanError.place(to.isEmpty ? "Destination" : to)
+            }
+
+            // Resolve stops
             var via: [CLLocationCoordinate2D] = []
-            for s in stops { if let c = try await geocode(s) { via.append(c) } }
-            start = Coord(a); end = Coord(b)
+            for (idx, s) in stops.enumerated() {
+                if idx < stopCoords.count {
+                    via.append(stopCoords[idx])
+                } else if let resolvedS = try await geocode(s) {
+                    via.append(resolvedS)
+                }
+            }
+
+            start = Coord(a)
+            end = Coord(b)
             let points = [a] + via + [b]
 
-            // 1. Apple's own candidates.
+            // 1. Apple's own candidates via MKDirections
             var candidates = try await appleCandidates(points)
-            guard let base = candidates.min(by: { $0.time < $1.time }) else { throw PlanError.none }
-
-            // 2. Detour candidates through offset waypoints (feeds off-route).
-            for wp in detourWaypoints(for: base.coords) {
-                if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) { candidates.append(c) }
+            guard let base = candidates.min(by: { $0.time < $1.time }) else {
+                throw PlanError.none
             }
-            // 3. Scenic spots near the corridor (feeds scenic).
+
+            // 2. Detour candidates for alternate off-route option if available
+            for wp in detourWaypoints(for: base.coords) {
+                if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) {
+                    candidates.append(c)
+                }
+            }
+
+            // 3. Scenic spots along the corridor
             let spots = await scenicPlaces(around: base.coords)
             scenicSpots = spots.map { Coord($0.coordinate) }
             for spot in spots.sorted(by: { $0.weight > $1.weight }).prefix(2) {
-                if let c = try? await candidate(points: [a] + via + [spot.coordinate, b], kind: .poi) { candidates.append(c) }
+                if let c = try? await candidate(points: [a] + via + [spot.coordinate, b], kind: .poi) {
+                    candidates.append(c)
+                }
             }
 
             let fastest = Self.pickFastest(candidates)
 
-            // Off-route: needs a route that differs from the fastest. Widen the detour until we find one.
+            // Off-route: distinct road
             var off = Self.pickOffRoute(candidates, fastest: fastest)
             var scale = 1.0
-            while off == nil && scale < 3 {
-                scale *= 1.6
+            while off == nil && scale < 2.5 {
+                scale *= 1.5
                 for wp in detourWaypoints(for: base.coords, scale: scale) {
-                    if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) { candidates.append(c) }
+                    if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) {
+                        candidates.append(c)
+                    }
                 }
                 off = Self.pickOffRoute(candidates, fastest: fastest)
             }
 
-            // Scenic: best weighted score that is distinct from both of the others.
-            var scenic = Self.pickScenic(candidates, avoiding: [fastest] + (off.map { [$0] } ?? []), fastest: fastest, spots: spots)
-            if scenic == nil {
-                for (i, wp) in detourWaypoints(for: base.coords, scale: 1.3, sides: [(0.45, -1), (0.55, 1), (0.3, -1), (0.7, 1)]).enumerated() {
-                    if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) { candidates.append(c) }
-                    if i >= 1, let s2 = Self.pickScenic(candidates, avoiding: [fastest] + (off.map { [$0] } ?? []), fastest: fastest, spots: spots) { scenic = s2; break }
-                }
-            }
-            guard let offFinal = off ?? scenic else { throw PlanError.none }
-            let scenicFinal = scenic ?? Self.pickScenic(candidates, avoiding: [fastest], fastest: fastest, spots: spots) ?? offFinal
+            // Scenic: best weighted score
+            let scenic = Self.pickScenic(candidates, avoiding: [fastest] + (off.map { [$0] } ?? []), fastest: fastest, spots: spots)
+            let offFinal = off ?? fastest
+            let scenicFinal = scenic ?? (candidates.count > 1 ? candidates[1] : fastest)
 
             routes = [
                 .fastest: summary(fastest, note: "Minimum travel time"),
-                .offRoute: summary(offFinal, note: "Different roads, longer ride"),
-                .scenic: summary(scenicFinal, note: "Passes lakes, parks and viewpoints"),
+                .offRoute: summary(offFinal, note: "Alternative roads with open riding"),
+                .scenic: summary(scenicFinal, note: "Passes viewpoints and points of interest"),
             ]
             state = .ready
         } catch {
@@ -96,16 +138,40 @@ final class RoutePlanner {
     }
 
     enum PlanError: LocalizedError {
-        case place, none
-        var errorDescription: String? { self == .place ? "Couldn't find one of those places." : "No route found." }
+        case place(String)
+        case none
+        case locationUnavailable
+
+        var errorDescription: String? {
+            switch self {
+            case .place(let p):
+                return "Could not find '\(p)'. Please check the spelling or select a location."
+            case .none:
+                return "No driving route found between these locations. Make sure both points are accessible by road."
+            case .locationUnavailable:
+                return "Current location is unavailable. Please check location permissions."
+            }
+        }
     }
 
-    // MARK: MapKit requests
-
+    // MARK: - MapKit requests
     private func geocode(_ text: String) async throws -> CLLocationCoordinate2D? {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return nil }
+
+        let lower = clean.lowercased()
+        if lower == "current location" || lower == "your location" || lower == "my location" {
+            if let loc = LocationService.shared.currentLocation {
+                return loc.coordinate
+            }
+            throw PlanError.locationUnavailable
+        }
+
         let req = MKLocalSearch.Request()
-        req.naturalLanguageQuery = text
-        req.region = bengaluru
+        req.naturalLanguageQuery = clean
+        if let loc = LocationService.shared.currentLocation {
+            req.region = MKCoordinateRegion(center: loc.coordinate, span: .init(latitudeDelta: 1.5, longitudeDelta: 1.5))
+        }
         let res = try await MKLocalSearch(request: req).start()
         return res.mapItems.first?.placemark.coordinate
     }
@@ -113,10 +179,31 @@ final class RoutePlanner {
     private func appleCandidates(_ points: [CLLocationCoordinate2D]) async throws -> [Candidate] {
         if points.count == 2 {
             let req = MKDirections.Request()
-            req.source = Self.item(points[0]); req.destination = Self.item(points[1])
-            req.transportType = .automobile; req.requestsAlternateRoutes = true
+            req.source = Self.item(points[0])
+            req.destination = Self.item(points[1])
+            req.transportType = .automobile
+            req.requestsAlternateRoutes = true
             let res = try await MKDirections(request: req).calculate()
-            return res.routes.map { Candidate(coords: $0.polyline.coords, distance: $0.distance, time: $0.expectedTravelTime, kind: .apple) }
+            return res.routes.map { r in
+                let steps = r.steps.compactMap { step -> NavStep? in
+                    let inst = step.instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !inst.isEmpty else { return nil }
+                    return NavStep(
+                        instructions: inst,
+                        notice: step.notice,
+                        distance: step.distance,
+                        coordinate: Coord(step.polyline.coordinate),
+                        symbol: Self.symbolForInstruction(inst)
+                    )
+                }
+                return Candidate(
+                    coords: r.polyline.coords,
+                    distance: r.distance,
+                    time: r.expectedTravelTime,
+                    kind: .apple,
+                    steps: steps
+                )
+            }
         }
         return [try await candidate(points: points, kind: .apple)]
     }
@@ -124,20 +211,55 @@ final class RoutePlanner {
     /// Chains one MKDirections request per leg.
     private func candidate(points: [CLLocationCoordinate2D], kind: Candidate.Kind) async throws -> Candidate {
         var coords: [CLLocationCoordinate2D] = [], dist = 0.0, time = 0.0
+        var allSteps: [NavStep] = []
+
         for i in 0..<(points.count - 1) {
             let req = MKDirections.Request()
-            req.source = Self.item(points[i]); req.destination = Self.item(points[i + 1]); req.transportType = .automobile
+            req.source = Self.item(points[i])
+            req.destination = Self.item(points[i + 1])
+            req.transportType = .automobile
             let res = try await MKDirections(request: req).calculate()
             guard let r = res.routes.first else { throw PlanError.none }
-            coords += r.polyline.coords; dist += r.distance; time += r.expectedTravelTime
+
+            coords += r.polyline.coords
+            dist += r.distance
+            time += r.expectedTravelTime
+
+            for step in r.steps {
+                let inst = step.instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !inst.isEmpty {
+                    allSteps.append(NavStep(
+                        instructions: inst,
+                        notice: step.notice,
+                        distance: step.distance,
+                        coordinate: Coord(step.polyline.coordinate),
+                        symbol: Self.symbolForInstruction(inst)
+                    ))
+                }
+            }
         }
-        return Candidate(coords: coords, distance: dist, time: time, kind: kind)
+        return Candidate(coords: coords, distance: dist, time: time, kind: kind, steps: allSteps)
     }
 
-    private static func item(_ c: CLLocationCoordinate2D) -> MKMapItem { MKMapItem(placemark: MKPlacemark(coordinate: c)) }
+    static func symbolForInstruction(_ text: String) -> String {
+        let lower = text.lowercased()
+        if lower.contains("u-turn") || lower.contains("uturn") { return "arrow.uturn.backward" }
+        if lower.contains("slight left") || lower.contains("keep left") || lower.contains("bear left") { return "arrow.up.left" }
+        if lower.contains("slight right") || lower.contains("keep right") || lower.contains("bear right") { return "arrow.up.right" }
+        if lower.contains("sharp left") { return "arrow.turn.left.up" }
+        if lower.contains("sharp right") { return "arrow.turn.right.up" }
+        if lower.contains("turn left") || lower.contains("left") { return "arrow.turn.up.left" }
+        if lower.contains("turn right") || lower.contains("right") { return "arrow.turn.up.right" }
+        if lower.contains("roundabout") || lower.contains("rotary") { return "arrow.triangle.2.circlepath" }
+        if lower.contains("arrive") || lower.contains("destination") { return "flag.checkered" }
+        return "arrow.up"
+    }
 
-    // MARK: Scenic spots
+    private static func item(_ c: CLLocationCoordinate2D) -> MKMapItem {
+        MKMapItem(placemark: MKPlacemark(coordinate: c))
+    }
 
+    // MARK: - Scenic spots
     fileprivate struct Spot { var coordinate: CLLocationCoordinate2D; var weight: Double }
 
     private func scenicPlaces(around path: [CLLocationCoordinate2D]) async -> [Spot] {
@@ -145,7 +267,9 @@ final class RoutePlanner {
         var spots: [Spot] = []
         for (q, w) in [("lake", 3.0), ("viewpoint", 3.0), ("waterfall", 3.0), ("park", 2.0), ("garden", 1.5)] {
             let req = MKLocalSearch.Request()
-            req.naturalLanguageQuery = q; req.region = region; req.resultTypes = .pointOfInterest
+            req.naturalLanguageQuery = q
+            req.region = region
+            req.resultTypes = .pointOfInterest
             guard let res = try? await MKLocalSearch(request: req).start() else { continue }
             for m in res.mapItems.prefix(8) {
                 let c = m.placemark.coordinate
@@ -157,12 +281,11 @@ final class RoutePlanner {
         return spots
     }
 
-    // MARK: Selection rules (the "algorithms")
+    // MARK: - Selection rules
+    private static func pickFastest(_ c: [Candidate]) -> Candidate {
+        c.min { $0.time < $1.time }!
+    }
 
-    /// Fastest — minimum-time selection.
-    private static func pickFastest(_ c: [Candidate]) -> Candidate { c.min { $0.time < $1.time }! }
-
-    /// Off-route — detour scoring: reward geometric difference from the fastest route, require a sufficiently longer ride.
     private static func pickOffRoute(_ c: [Candidate], fastest: Candidate) -> Candidate? {
         let pool = c.filter {
             $0.coords.count > 1 && $0.distance >= fastest.distance * 1.04 && $0.time <= fastest.time * 2.5
@@ -174,14 +297,15 @@ final class RoutePlanner {
         return pool.max { score($0) < score($1) }
     }
 
-    /// Scenic — weighted scoring: points for lakes/parks/viewpoints near the line, minus a penalty for extra minutes.
     private static func pickScenic(_ c: [Candidate], avoiding: [Candidate], fastest: Candidate, spots: [Spot]) -> Candidate? {
         func score(_ x: Candidate) -> Double {
             let pts = sample(x.coords, every: 6)
             var s = 0.0
             for spot in spots {
                 let loc = CLLocation(latitude: spot.coordinate.latitude, longitude: spot.coordinate.longitude)
-                if pts.contains(where: { CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: loc) < 1500 }) { s += spot.weight }
+                if pts.contains(where: { CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: loc) < 1500 }) {
+                    s += spot.weight
+                }
             }
             let extraMinutes = max(0, x.time - fastest.time) / 60
             return s - 0.04 * extraMinutes
@@ -190,15 +314,16 @@ final class RoutePlanner {
         return pool.max { score($0) < score($1) }
     }
 
-    /// Two routes are "the same road" when, on average, they stay within ~350 m of each other both ways.
     private static func similar(_ a: Candidate, _ b: Candidate) -> Bool {
         deviation(of: a.coords, from: b.coords) < 350 && deviation(of: b.coords, from: a.coords) < 350
     }
 
-    // MARK: Geometry helpers
-
-    private func detourWaypoints(for path: [CLLocationCoordinate2D], scale: Double = 1,
-                                 sides: [(Double, Double)] = [(0.5, 1.0), (0.5, -1.0), (0.35, 1.0), (0.65, -1.0)]) -> [CLLocationCoordinate2D] {
+    // MARK: - Geometry helpers
+    private func detourWaypoints(
+        for path: [CLLocationCoordinate2D],
+        scale: Double = 1,
+        sides: [(Double, Double)] = [(0.5, 1.0), (0.5, -1.0), (0.35, 1.0), (0.65, -1.0)]
+    ) -> [CLLocationCoordinate2D] {
         guard path.count > 8, let a = path.first, let b = path.last else { return [] }
         let total = CLLocation(latitude: a.latitude, longitude: a.longitude).distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
         let offset = min(max(total * 0.16 * scale, 2500), 40_000)
@@ -208,7 +333,6 @@ final class RoutePlanner {
             let p = path[i], q = path[min(i + 3, path.count - 1)], r = path[max(i - 3, 0)]
             let dx = q.longitude - r.longitude, dy = q.latitude - r.latitude
             let len = max((dx * dx + dy * dy).squareRoot(), 1e-9)
-            // perpendicular unit vector in degrees; ≈111 km per degree of latitude
             let nx = -dy / len, ny = dx / len
             let deg = offset / 111_000
             out.append(.init(latitude: p.latitude + ny * deg * side, longitude: p.longitude + nx * deg * side / max(cos(p.latitude * .pi / 180), 0.2)))
@@ -220,7 +344,6 @@ final class RoutePlanner {
         stride(from: 0, to: c.count, by: max(n, 1)).map { c[$0] }
     }
 
-    /// Mean distance (m) between a route and the fastest one.
     private static func deviation(of a: [CLLocationCoordinate2D], from b: [CLLocationCoordinate2D]) -> Double {
         let pa = sample(a, every: 8), pb = sample(b, every: 4).map { CLLocation(latitude: $0.latitude, longitude: $0.longitude) }
         guard !pa.isEmpty, !pb.isEmpty else { return 0 }
@@ -234,15 +357,30 @@ final class RoutePlanner {
     static func region(for path: [CLLocationCoordinate2D], padding: Double) -> MKCoordinateRegion? {
         guard let first = path.first else { return nil }
         var minLat = first.latitude, maxLat = first.latitude, minLon = first.longitude, maxLon = first.longitude
-        for c in path { minLat = min(minLat, c.latitude); maxLat = max(maxLat, c.latitude); minLon = min(minLon, c.longitude); maxLon = max(maxLon, c.longitude) }
-        return MKCoordinateRegion(center: .init(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2),
-                                  span: .init(latitudeDelta: max((maxLat - minLat) * padding, 0.02), longitudeDelta: max((maxLon - minLon) * padding, 0.02)))
+        for c in path {
+            minLat = min(minLat, c.latitude)
+            maxLat = max(maxLat, c.latitude)
+            minLon = min(minLon, c.longitude)
+            maxLon = max(maxLon, c.longitude)
+        }
+        return MKCoordinateRegion(
+            center: .init(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2),
+            span: .init(latitudeDelta: max((maxLat - minLat) * padding, 0.02), longitudeDelta: max((maxLon - minLon) * padding, 0.02))
+        )
     }
 
     private func summary(_ c: Candidate, note: String) -> RouteSummary {
         let simplified = Self.sample(c.coords, every: max(1, c.coords.count / 240))
         let last = c.coords.last.map { [$0] } ?? []
-        return RouteSummary(km: c.distance / 1000, minutes: Int((c.time / 60).rounded()), coords: (simplified + last).map(Coord.init), note: note)
+        return RouteSummary(
+            km: c.distance / 1000,
+            minutes: Int((c.time / 60).rounded()),
+            coords: (simplified + last).map(Coord.init),
+            note: note,
+            steps: c.steps,
+            rawDistance: c.distance,
+            rawTime: c.time
+        )
     }
 }
 
