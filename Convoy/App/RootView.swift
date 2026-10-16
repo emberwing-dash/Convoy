@@ -4,9 +4,17 @@ struct RootView: View {
     @Environment(AppState.self) private var app
 
     var body: some View {
-        switch app.phase {
-        case .onboarding: OnboardingFlow()
-        case .main: MainShell()
+        if !app.hasCompletedPermissions {
+            PermissionLaunchView {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    app.hasCompletedPermissions = true
+                }
+            }
+        } else {
+            switch app.phase {
+            case .onboarding: OnboardingFlow()
+            case .main: MainShell()
+            }
         }
     }
 }
@@ -24,7 +32,9 @@ struct OnboardingFlow: View {
                     switch route {
                     case .signIn: SignInView(onBack: pop) { path.append(.profile) }
                     case .profile: ProfileSetupView(onBack: pop) { path.append(.inConvoy) }
-                    case .inConvoy: InConvoyView { app.phase = .main }
+                    case .inConvoy: InConvoyView {
+                        app.completeOnboarding(name: app.displayName, handle: app.handle, avatar: app.avatarName)
+                    }
                     }
                 }
         }

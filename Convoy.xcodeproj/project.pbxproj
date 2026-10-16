@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 110;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXFileReference section */
@@ -21,8 +21,10 @@
 /* Begin PBXFrameworksBuildPhase section */
 		567FF9E930800B73007FC40B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -55,6 +57,8 @@
 				567FF9EA30800B73007FC40B /* Resources */,
 			);
 			buildRules = (
+			);
+			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
 				567FF9EE30800B73007FC40B /* Convoy */,
@@ -101,21 +105,25 @@
 /* Begin PBXResourcesBuildPhase section */
 		567FF9EA30800B73007FC40B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		567FF9E830800B73007FC40B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		567FF9F730800B75007FC40B /* Debug configuration for PBXProject "Convoy" */ = {
+		567FF9F730800B75007FC40B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -179,7 +187,7 @@
 			};
 			name = Debug;
 		};
-		567FF9F830800B75007FC40B /* Release configuration for PBXProject "Convoy" */ = {
+		567FF9F830800B75007FC40B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -236,28 +244,29 @@
 			};
 			name = Release;
 		};
-		567FF9FA30800B75007FC40B /* Debug configuration for PBXNativeTarget "Convoy" */ = {
+		567FF9FA30800B75007FC40B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 7XVL7L68YT;
+				DEVELOPMENT_TEAM = HF9BJNMGMK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Convoy uses your location to plan routes from where you are and provide turn-by-turn navigation along your convoy ride.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.rika.Convoy;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joydip.Convoy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -269,28 +278,29 @@
 			};
 			name = Debug;
 		};
-		567FF9FB30800B75007FC40B /* Release configuration for PBXNativeTarget "Convoy" */ = {
+		567FF9FB30800B75007FC40B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 7XVL7L68YT;
+				DEVELOPMENT_TEAM = HF9BJNMGMK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Convoy uses your location to plan routes from where you are and provide turn-by-turn navigation along your convoy ride.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.rika.Convoy;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joydip.Convoy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -308,21 +318,22 @@
 		567FF9E730800B73007FC40B /* Build configuration list for PBXProject "Convoy" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				567FF9F730800B75007FC40B /* Debug configuration for PBXProject "Convoy" */,
-				567FF9F830800B75007FC40B /* Release configuration for PBXProject "Convoy" */,
+				567FF9F730800B75007FC40B /* Debug */,
+				567FF9F830800B75007FC40B /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		567FF9F930800B75007FC40B /* Build configuration list for PBXNativeTarget "Convoy" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				567FF9FA30800B75007FC40B /* Debug configuration for PBXNativeTarget "Convoy" */,
-				567FF9FB30800B75007FC40B /* Release configuration for PBXNativeTarget "Convoy" */,
+				567FF9FA30800B75007FC40B /* Debug */,
+				567FF9FB30800B75007FC40B /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
 	rootObject = 567FF9E430800B73007FC40B /* Project object */;
-	validationLevel = 1;
 }

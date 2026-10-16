@@ -9,8 +9,8 @@ struct InConvoyView: View {
             ContourBackdrop()
             Image("center_glow").resizable().frame(width: 600, height: 600).offset(y: -20)
                 .allowsHitTesting(false)
-            VStack(spacing: 18) {
-                Image("brand_mark").resizable().frame(width: 100.8, height: 100.8)
+            VStack(spacing: 20) {
+                MotorbikeLogoView(size: 96, animated: true)
                 Text("convoy").cvText(52, .semibold, tracking: -2.08, lineHeight: 56)
                 HStack(spacing: 8) {
                     Image("dot_green").resizable().frame(width: 6, height: 6)

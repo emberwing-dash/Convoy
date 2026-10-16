@@ -44,9 +44,9 @@ struct WelcomeView: View {
     }
 
     private var wordmark: some View {
-        HStack(spacing: 6) {
-            Image("dot_red").resizable().frame(width: 8, height: 8)
-            Text("convoy").cvText(18, .semibold, tracking: -0.36, lineHeight: 24)
+        HStack(spacing: 8) {
+            MotorbikeLogoView(size: 26)
+            Text("convoy").cvText(20, .semibold, tracking: -0.36, lineHeight: 24)
         }
         .frame(width: 393)
     }

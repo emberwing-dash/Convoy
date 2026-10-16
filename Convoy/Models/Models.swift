@@ -29,6 +29,7 @@ struct Ride: Identifiable, Hashable {
     var lockText = "Start ride opens 5:30 AM Sunday"
     var ridersGoing = 6
     var listMeta = ""            // My rides second line, e.g. "265 km · Bengaluru → Madikeri"
+    var media: [RideMediaItem] = []
 
     /// Short shareable code, e.g. "NDH6AM" (destination consonants + start hour).
     var code: String {
@@ -39,6 +40,39 @@ struct Ride: Identifiable, Hashable {
     }
     var daysAway: Int { max(0, Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: .now), to: Calendar.current.startOfDay(for: departs)).day ?? 0) }
     var isSolo: Bool { riders.count <= 1 }
+}
+
+enum RideMediaType: String, Codable, Hashable {
+    case photo
+    case video
+}
+
+struct RideMediaItem: Identifiable, Hashable {
+    let id: UUID
+    var rideId: UUID?
+    var type: RideMediaType
+    var photoData: Data?
+    var videoURL: URL?
+    var createdDate: Date
+    var caption: String?
+
+    init(
+        id: UUID = UUID(),
+        rideId: UUID? = nil,
+        type: RideMediaType,
+        photoData: Data? = nil,
+        videoURL: URL? = nil,
+        createdDate: Date = Date(),
+        caption: String? = nil
+    ) {
+        self.id = id
+        self.rideId = rideId
+        self.type = type
+        self.photoData = photoData
+        self.videoURL = videoURL
+        self.createdDate = createdDate
+        self.caption = caption
+    }
 }
 
 extension Ride {

@@ -16,6 +16,8 @@ struct CrewGroup: Identifiable, Hashable {
     var accent: Color
     var members: [CrewMember]
     var avatars: [String]
+    var customPhoto: String? = nil
+    var photo: String? { customPhoto ?? avatars.first }
     var more: Int
     var last: String              // "Last: Nandi Hills, 12 Oct"
     var since = "since Mar 2025"
@@ -34,7 +36,7 @@ struct CrewGroup: Identifiable, Hashable {
                             CrewMember(name: "Meera Iyer", detail: "Joined Apr 2025", photo: "friend_meera"),
                             CrewMember(name: "Ananya Rao", detail: "Joined Jun 2025", photo: "friend_ananya"),
                             CrewMember(name: "Dev Kapoor", detail: "Invited · waiting to join", photo: "friend_dev", pending: true)],
-                  avatars: ["profile_rika", "friend_arjun", "friend_kabir", "friend_meera"], more: 2, last: "Last: Nandi Hills, 12 Oct")
+                  avatars: ["profile_rika", "friend_arjun", "friend_kabir", "friend_meera"], customPhoto: "crew_wolves", more: 2, last: "Last: Nandi Hills, 12 Oct")
     }
     static func office() -> CrewGroup {
         CrewGroup(name: "Office Riders", detail: "4 riders · weekday evenings", accent: Color(hex: 0xFFB020),
