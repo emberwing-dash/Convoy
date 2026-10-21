@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Convoy uses your location to show routes near you, plan checkpoints, and give turn-by-turn navigation with live convoy tracking.</string>
+
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Convoy needs background location during a ride so your crew stays on the live map even when the app is in the background.</string>
+
+    <key>NSCameraUsageDescription</key>
+    <string>Capture photos and videos of your ride to preserve memories.</string>
+
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Record audio with ride videos.</string>
+
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Choose a profile photo and save ride memories.</string>
+
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Save ride photos and share cards to your library.</string>
+
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>location</string>
+        <string>audio</string>
+    </array>
+</dict>
+</plist>

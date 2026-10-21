@@ -2,7 +2,7 @@
 import SwiftUI
 import UIKit
 
-/// Interactive circular avatar cropper with pinch zoom and drag positioning.
+// Interactive circular avatar cropper with pinch zoom and drag positioning.
 struct ImageCropAdjustView: View {
     let originalImage: UIImage
     var onCrop: (UIImage, Data) -> Void

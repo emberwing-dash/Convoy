@@ -1,9 +1,12 @@
+// RoutePlanner.swift
 import MapKit
 import CoreLocation
 
-/// Computes real routes from Apple MapKit (MKDirections), extracting accurate polylines, distances, travel times, and navigation maneuver steps.
+/// Computes real routes from Apple MapKit (MKDirections), extracting accurate polylines,
+/// distances, travel times, and navigation maneuver steps.
 @MainActor @Observable
 final class RoutePlanner {
+
     enum State: Equatable {
         case idle
         case loading
@@ -18,6 +21,9 @@ final class RoutePlanner {
     private(set) var scenicSpots: [Coord] = []
     private(set) var key = ""
 
+    /// Cached POI results keyed by the coarse region, so repeat plans are instant.
+    private var scenicCache: [String: [Spot]] = [:]
+
     fileprivate struct Candidate {
         var coords: [CLLocationCoordinate2D]
         var distance: Double      // metres
@@ -27,13 +33,18 @@ final class RoutePlanner {
         enum Kind { case apple, detour, poi }
     }
 
+    fileprivate struct Spot {
+        var coordinate: CLLocationCoordinate2D
+        var weight: Double
+    }
+
     func reset() {
         state = .idle
         routes = [:]
         key = ""
     }
 
-    /// Plans route with real coordinates and queries.
+    /// Plans routes with real coordinates and queries.
     func plan(
         from: String,
         to: String,
@@ -42,7 +53,8 @@ final class RoutePlanner {
         toCoord: CLLocationCoordinate2D? = nil,
         stopCoords: [CLLocationCoordinate2D] = []
     ) async {
-        let k = ([from, to] + stops).joined(separator: "|") + "\(fromCoord?.latitude ?? 0),\(toCoord?.latitude ?? 0)"
+        let k = ([from, to] + stops).joined(separator: "|")
+              + "\(fromCoord?.latitude ?? 0),\(toCoord?.latitude ?? 0)"
         if k == key, state == .ready { return }
 
         state = .loading
@@ -50,7 +62,7 @@ final class RoutePlanner {
         key = k
 
         do {
-            // Resolve start coordinate
+            // ── Resolve start coordinate ───────────────────────────────
             let a: CLLocationCoordinate2D
             if let fc = fromCoord {
                 a = fc
@@ -60,7 +72,7 @@ final class RoutePlanner {
                 throw PlanError.place(from.isEmpty ? "Starting location" : from)
             }
 
-            // Resolve destination coordinate
+            // ── Resolve destination coordinate ────────────────────────
             let b: CLLocationCoordinate2D
             if let tc = toCoord {
                 b = tc
@@ -70,7 +82,7 @@ final class RoutePlanner {
                 throw PlanError.place(to.isEmpty ? "Destination" : to)
             }
 
-            // Resolve stops
+            // ── Resolve intermediate stops ────────────────────────────
             var via: [CLLocationCoordinate2D] = []
             for (idx, s) in stops.enumerated() {
                 if idx < stopCoords.count {
@@ -84,21 +96,21 @@ final class RoutePlanner {
             end = Coord(b)
             let points = [a] + via + [b]
 
-            // 1. Apple's own candidates via MKDirections
+            // ── 1. Apple's own candidates via MKDirections ─────────────
             var candidates = try await appleCandidates(points)
             guard let base = candidates.min(by: { $0.time < $1.time }) else {
                 throw PlanError.none
             }
 
-            // 2. Detour candidates for alternate off-route option if available
+            // ── 2. Detour candidates for an alternate off-route option ─
             for wp in detourWaypoints(for: base.coords) {
                 if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) {
                     candidates.append(c)
                 }
             }
 
-            // 3. Scenic spots along the corridor
-            let spots = await scenicPlaces(around: base.coords)
+            // ── 3. Scenic spots along the corridor (cached) ────────────
+            let spots = await cachedScenicPlaces(around: base.coords)
             scenicSpots = spots.map { Coord($0.coordinate) }
             for spot in spots.sorted(by: { $0.weight > $1.weight }).prefix(2) {
                 if let c = try? await candidate(points: [a] + via + [spot.coordinate, b], kind: .poi) {
@@ -108,10 +120,12 @@ final class RoutePlanner {
 
             let fastest = Self.pickFastest(candidates)
 
-            // Off-route: distinct road
+            // ── 4. Off-route: distinct road, capped attempts ───────────
             var off = Self.pickOffRoute(candidates, fastest: fastest)
             var scale = 1.0
-            while off == nil && scale < 2.5 {
+            var attempts = 0
+            while off == nil && scale < 2.5 && attempts < 2 {
+                attempts += 1
                 scale *= 1.5
                 for wp in detourWaypoints(for: base.coords, scale: scale) {
                     if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) {
@@ -121,8 +135,13 @@ final class RoutePlanner {
                 off = Self.pickOffRoute(candidates, fastest: fastest)
             }
 
-            // Scenic: best weighted score
-            let scenic = Self.pickScenic(candidates, avoiding: [fastest] + (off.map { [$0] } ?? []), fastest: fastest, spots: spots)
+            // ── 5. Scenic: best weighted score ────────────────────────
+            let scenic = Self.pickScenic(
+                candidates,
+                avoiding: [fastest] + (off.map { [$0] } ?? []),
+                fastest: fastest,
+                spots: spots
+            )
             let offFinal = off ?? fastest
             let scenicFinal = scenic ?? (candidates.count > 1 ? candidates[1] : fastest)
 
@@ -170,7 +189,10 @@ final class RoutePlanner {
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = clean
         if let loc = LocationService.shared.currentLocation {
-            req.region = MKCoordinateRegion(center: loc.coordinate, span: .init(latitudeDelta: 1.5, longitudeDelta: 1.5))
+            req.region = MKCoordinateRegion(
+                center: loc.coordinate,
+                span: .init(latitudeDelta: 1.5, longitudeDelta: 1.5)
+            )
         }
         let res = try await MKLocalSearch(request: req).start()
         return res.mapItems.first?.placemark.coordinate
@@ -210,7 +232,9 @@ final class RoutePlanner {
 
     /// Chains one MKDirections request per leg.
     private func candidate(points: [CLLocationCoordinate2D], kind: Candidate.Kind) async throws -> Candidate {
-        var coords: [CLLocationCoordinate2D] = [], dist = 0.0, time = 0.0
+        var coords: [CLLocationCoordinate2D] = []
+        var dist = 0.0
+        var time = 0.0
         var allSteps: [NavStep] = []
 
         for i in 0..<(points.count - 1) {
@@ -259,8 +283,21 @@ final class RoutePlanner {
         MKMapItem(placemark: MKPlacemark(coordinate: c))
     }
 
-    // MARK: - Scenic spots
-    fileprivate struct Spot { var coordinate: CLLocationCoordinate2D; var weight: Double }
+    // MARK: - Scenic places (cached)
+    private func cachedScenicPlaces(around path: [CLLocationCoordinate2D]) async -> [Spot] {
+        guard let region = Self.region(for: path, padding: 1.35) else { return [] }
+        let cacheKey = String(
+            format: "%.1f|%.1f|%.1f|%.1f",
+            region.center.latitude,
+            region.center.longitude,
+            region.span.latitudeDelta,
+            region.span.longitudeDelta
+        )
+        if let hit = scenicCache[cacheKey] { return hit }
+        let spots = await scenicPlaces(around: path)
+        scenicCache[cacheKey] = spots
+        return spots
+    }
 
     private func scenicPlaces(around path: [CLLocationCoordinate2D]) async -> [Spot] {
         guard let region = Self.region(for: path, padding: 1.35) else { return [] }
@@ -273,7 +310,10 @@ final class RoutePlanner {
             guard let res = try? await MKLocalSearch(request: req).start() else { continue }
             for m in res.mapItems.prefix(8) {
                 let c = m.placemark.coordinate
-                if !spots.contains(where: { abs($0.coordinate.latitude - c.latitude) < 0.002 && abs($0.coordinate.longitude - c.longitude) < 0.002 }) {
+                if !spots.contains(where: {
+                    abs($0.coordinate.latitude - c.latitude) < 0.002 &&
+                    abs($0.coordinate.longitude - c.longitude) < 0.002
+                }) {
                     spots.append(Spot(coordinate: c, weight: w))
                 }
             }
@@ -288,34 +328,49 @@ final class RoutePlanner {
 
     private static func pickOffRoute(_ c: [Candidate], fastest: Candidate) -> Candidate? {
         let pool = c.filter {
-            $0.coords.count > 1 && $0.distance >= fastest.distance * 1.04 && $0.time <= fastest.time * 2.5
-                && !similar($0, fastest)
+            $0.coords.count > 1 &&
+            $0.distance >= fastest.distance * 1.04 &&
+            $0.time <= fastest.time * 2.5 &&
+            !similar($0, fastest)
         }
         func score(_ x: Candidate) -> Double {
-            deviation(of: x.coords, from: fastest.coords) / 1000 + 0.15 * (x.distance - fastest.distance) / 1000
+            deviation(of: x.coords, from: fastest.coords) / 1000
+                + 0.15 * (x.distance - fastest.distance) / 1000
         }
         return pool.max { score($0) < score($1) }
     }
 
-    private static func pickScenic(_ c: [Candidate], avoiding: [Candidate], fastest: Candidate, spots: [Spot]) -> Candidate? {
+    private static func pickScenic(
+        _ c: [Candidate],
+        avoiding: [Candidate],
+        fastest: Candidate,
+        spots: [Spot]
+    ) -> Candidate? {
         func score(_ x: Candidate) -> Double {
             let pts = sample(x.coords, every: 6)
             var s = 0.0
             for spot in spots {
-                let loc = CLLocation(latitude: spot.coordinate.latitude, longitude: spot.coordinate.longitude)
-                if pts.contains(where: { CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: loc) < 1500 }) {
+                let loc = CLLocation(latitude: spot.coordinate.latitude,
+                                     longitude: spot.coordinate.longitude)
+                if pts.contains(where: {
+                    CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: loc) < 1500
+                }) {
                     s += spot.weight
                 }
             }
             let extraMinutes = max(0, x.time - fastest.time) / 60
             return s - 0.04 * extraMinutes
         }
-        let pool = c.filter { x in x.time <= fastest.time * 2.6 && !avoiding.contains(where: { similar(x, $0) }) }
+        let pool = c.filter { x in
+            x.time <= fastest.time * 2.6 &&
+            !avoiding.contains(where: { similar(x, $0) })
+        }
         return pool.max { score($0) < score($1) }
     }
 
     private static func similar(_ a: Candidate, _ b: Candidate) -> Bool {
-        deviation(of: a.coords, from: b.coords) < 350 && deviation(of: b.coords, from: a.coords) < 350
+        deviation(of: a.coords, from: b.coords) < 350
+            && deviation(of: b.coords, from: a.coords) < 350
     }
 
     // MARK: - Geometry helpers
@@ -325,17 +380,25 @@ final class RoutePlanner {
         sides: [(Double, Double)] = [(0.5, 1.0), (0.5, -1.0), (0.35, 1.0), (0.65, -1.0)]
     ) -> [CLLocationCoordinate2D] {
         guard path.count > 8, let a = path.first, let b = path.last else { return [] }
-        let total = CLLocation(latitude: a.latitude, longitude: a.longitude).distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
+        let total = CLLocation(latitude: a.latitude, longitude: a.longitude)
+            .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
         let offset = min(max(total * 0.16 * scale, 2500), 40_000)
         var out: [CLLocationCoordinate2D] = []
         for (f, side) in sides {
             let i = Int(Double(path.count - 1) * f)
-            let p = path[i], q = path[min(i + 3, path.count - 1)], r = path[max(i - 3, 0)]
-            let dx = q.longitude - r.longitude, dy = q.latitude - r.latitude
+            let p = path[i]
+            let q = path[min(i + 3, path.count - 1)]
+            let r = path[max(i - 3, 0)]
+            let dx = q.longitude - r.longitude
+            let dy = q.latitude - r.latitude
             let len = max((dx * dx + dy * dy).squareRoot(), 1e-9)
-            let nx = -dy / len, ny = dx / len
+            let nx = -dy / len
+            let ny = dx / len
             let deg = offset / 111_000
-            out.append(.init(latitude: p.latitude + ny * deg * side, longitude: p.longitude + nx * deg * side / max(cos(p.latitude * .pi / 180), 0.2)))
+            out.append(.init(
+                latitude: p.latitude + ny * deg * side,
+                longitude: p.longitude + nx * deg * side / max(cos(p.latitude * .pi / 180), 0.2)
+            ))
         }
         return out
     }
@@ -345,7 +408,10 @@ final class RoutePlanner {
     }
 
     private static func deviation(of a: [CLLocationCoordinate2D], from b: [CLLocationCoordinate2D]) -> Double {
-        let pa = sample(a, every: 8), pb = sample(b, every: 4).map { CLLocation(latitude: $0.latitude, longitude: $0.longitude) }
+        let pa = sample(a, every: 8)
+        let pb = sample(b, every: 4).map {
+            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+        }
         guard !pa.isEmpty, !pb.isEmpty else { return 0 }
         let total = pa.reduce(0.0) { acc, c in
             let l = CLLocation(latitude: c.latitude, longitude: c.longitude)
@@ -356,7 +422,8 @@ final class RoutePlanner {
 
     static func region(for path: [CLLocationCoordinate2D], padding: Double) -> MKCoordinateRegion? {
         guard let first = path.first else { return nil }
-        var minLat = first.latitude, maxLat = first.latitude, minLon = first.longitude, maxLon = first.longitude
+        var minLat = first.latitude, maxLat = first.latitude
+        var minLon = first.longitude, maxLon = first.longitude
         for c in path {
             minLat = min(minLat, c.latitude)
             maxLat = max(maxLat, c.latitude)
@@ -364,8 +431,10 @@ final class RoutePlanner {
             maxLon = max(maxLon, c.longitude)
         }
         return MKCoordinateRegion(
-            center: .init(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2),
-            span: .init(latitudeDelta: max((maxLat - minLat) * padding, 0.02), longitudeDelta: max((maxLon - minLon) * padding, 0.02))
+            center: .init(latitude: (minLat + maxLat) / 2,
+                          longitude: (minLon + maxLon) / 2),
+            span: .init(latitudeDelta: max((maxLat - minLat) * padding, 0.02),
+                        longitudeDelta: max((maxLon - minLon) * padding, 0.02))
         )
     }
 

@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// 01 · Welcome (+ 01b slid state)
 struct WelcomeView: View {
     var onSlid: () -> Void
 

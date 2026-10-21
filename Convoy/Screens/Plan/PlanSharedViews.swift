@@ -56,26 +56,3 @@ struct RouteSummaryCard: View {
         }
     }
 }
-
-/// Floating dark route label on the map ("1h 52m", "Stop 1", "Nandi Hills").
-struct MapCallout: View {
-    let text: String
-    var selected = false
-    var body: some View {
-        Text(text).cvText(13, .semibold, color: .white, inter: true)
-            .padding(.horizontal, 10).frame(height: 28)
-            .background(selected ? CV.red : Color(hex: 0x1A1A1D, opacity: 0.92), in: Capsule())
-    }
-}
-
-/// Blue "you are here" halo + red dot — Apple Maps style.
-struct YouMarker: View {
-    var body: some View {
-        ZStack {
-            Circle().fill(Color(hex: 0x0A84FF, opacity: 0.25)).frame(width: 44, height: 44)
-            Circle().fill(Color(hex: 0x0A84FF)).frame(width: 18, height: 18)
-                .overlay(Circle().strokeBorder(.white, lineWidth: 3))
-                .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-        }
-    }
-}

@@ -101,6 +101,8 @@ struct SwipeBackEnabler: UIViewControllerRepresentable {
 /// and is positioned from the true top-left of the display (it reads the safe-area insets instead of relying on
 /// `ignoresSafeArea`). Anything placed with `.at(x, y)` below y = 600 follows the bottom edge, so CTAs and tab bars
 /// stay on screen on every device height.
+// Components.swift — replace only the `DesignCanvas` struct
+
 struct DesignCanvas<Background: View, Content: View>: View {
     var background: Background
     @ViewBuilder var content: Content
@@ -115,17 +117,26 @@ struct DesignCanvas<Background: View, Content: View>: View {
             let ins = geo.safeAreaInsets
             let fullW = geo.size.width + ins.leading + ins.trailing
             let fullH = geo.size.height + ins.top + ins.bottom
-            let scale = fullW / 393
-            let virtualH = fullH / scale
+
+            // Guard against the zero-sized first layout pass.
+            // Without this, `fullW == 0` → `scale == 0` → `virtualH == .infinity`
+            // and SwiftUI logs "Invalid frame dimension (negative or non-finite)".
+            let safeW = max(fullW, 1)
+            let safeH = max(fullH, 1)
+            let scale = safeW / 393
+            let virtualH = safeH / scale
+
             ZStack(alignment: .topLeading) { content }
                 .frame(width: 393, height: virtualH, alignment: .topLeading)
                 .clipped()
                 .environment(\.canvasDelta, virtualH - 852)
                 .scaleEffect(scale, anchor: .topLeading)
-                .frame(width: fullW, height: fullH, alignment: .topLeading)
+                .frame(width: safeW, height: safeH, alignment: .topLeading)
                 .offset(x: -ins.leading, y: -ins.top)
         }
-        .background(alignment: .topLeading) { background.ignoresSafeArea() }
+        .background(alignment: .topLeading) {
+            background.ignoresSafeArea()
+        }
     }
 }
 

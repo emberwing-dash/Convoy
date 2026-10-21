@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 04 · In Convoy — splash that auto-advances (prototype: after-timeout → Home).
+// 04 · In Convoy — splash that auto-advances (prototype: after-timeout → Home).
 struct InConvoyView: View {
     var onFinish: () -> Void
 

@@ -1,12 +1,14 @@
+// PlanMapView.swift
 import SwiftUI
 import MapKit
 import CoreLocation
-import Combine
 
-/// P02 · Where from, where to — real MapKit search, real checkpoints, real route math.
+// NOTE: `FieldLabel` and `RouteSummaryCard` live in PlanSharedViews.swift.
+// Do NOT redeclare them here — that causes "Invalid redeclaration".
+
 struct PlanMapView: View {
     @Environment(AppState.self) private var app
-    @StateObject private var loc = MapLocationManager()
+    private let loc = LocationService.shared
 
     // Text fields
     @State private var fromText = ""
@@ -20,20 +22,21 @@ struct PlanMapView: View {
     @State private var activeStopIndex: Int? = nil
     @State private var showFromDropdown = false
     @State private var showToDropdown   = false
+    @State private var fromSearchTask: Task<Void, Never>?
+    @State private var toSearchTask: Task<Void, Never>?
+    @State private var stopSearchTasks: [Int: Task<Void, Never>] = [:]
+    @State private var noResults = false
 
     @FocusState private var focus: FocusedField?
     enum FocusedField: Hashable { case from, to, stop(Int) }
 
-    // Coordinates
     @State private var fromCoord: CLLocationCoordinate2D? = nil
     @State private var toCoord:   CLLocationCoordinate2D? = nil
     @State private var stopCoords: [CLLocationCoordinate2D?] = []
 
-    // Map
     @State private var camera: MapCameraPosition = .automatic
     @State private var isRecentered = true
 
-    // Route
     @State private var routeLine: [CLLocationCoordinate2D] = []
     @State private var distanceMeters: Double = 0
     @State private var durationSeconds: Double = 0
@@ -41,112 +44,178 @@ struct PlanMapView: View {
     @State private var calcTask: Task<Void, Never>? = nil
     @State private var errorMessage: String? = nil
 
+    // ✅ Added state for the full route generation loading screen
+    @State private var isGeneratingRoutes = false
+
     private let completer = SearchCompleter()
 
-    // MARK: - Body
-
     var body: some View {
-        DesignCanvas(background: liveMap) {
-            // Top scrim
-            LinearGradient(colors: [.black.opacity(0.55), .clear],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(width: 393, height: 130).allowsHitTesting(false)
+        ZStack {
+            DesignCanvas(background: liveMap) {
+                LinearGradient(colors: [.black.opacity(0.55), .clear],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(width: 393, height: 130).allowsHitTesting(false)
+                LinearGradient(stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: CV.bg, location: 0.75),
+                ], startPoint: .top, endPoint: .bottom)
+                    .frame(width: 393, height: 240).at(0, 612).allowsHitTesting(false)
 
-            // Bottom scrim
-            LinearGradient(stops: [
-                .init(color: .clear, location: 0),
-                .init(color: CV.bg,   location: 0.75)
-            ], startPoint: .top, endPoint: .bottom)
-                .frame(width: 393, height: 240).at(0, 612).allowsHitTesting(false)
+                RoundIconButton(symbol: "chevron.left") { app.pop() }.at(20, 58)
+                Text("Plan your route")
+                    .cvText(17, .semibold, tracking: -0.204, inter: true)
+                    .frame(width: 393).at(0, 69)
 
-            RoundIconButton(symbol: "chevron.left") { app.pop() }.at(20, 58)
-            Text("Plan your route")
-                .cvText(17, .semibold, tracking: -0.204, inter: true)
-                .frame(width: 393).at(0, 69)
+                searchCard.at(20, 114)
 
-            searchCard.at(20, 114)
+                // Dropdowns
+                if showFromDropdown {
+                    dropdown(results: fromResults).at(20, 220)
+                } else if let idx = activeStopIndex,
+                          idx < stopResults.count, !stopResults[idx].isEmpty {
+                    dropdown(results: stopResults[idx])
+                        .at(20, CGFloat(220 + (idx + 1) * 58))
+                } else if showToDropdown {
+                    dropdown(results: toResults)
+                        .at(20, CGFloat(220 + (stopTexts.count + 1) * 58))
+                } else if noResults {
+                    VStack(spacing: 8) {
+                        Text("No places found").cvText(14, .semibold, inter: true)
+                        Text("Try a different name or pick a checkpoint from the map.")
+                            .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(width: 353, height: 64)
+                    .background(Color(hex: 0x1A1A1D, opacity: 0.96),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                    .at(20, 220)
+                }
 
-            // Dropdowns
-            if showFromDropdown && !fromResults.isEmpty {
-                dropdown(results: fromResults).at(20, 220)
-            } else if let idx = activeStopIndex, !stopResults[safe: idx, default: []].isEmpty {
-                dropdown(results: stopResults[idx])
-                    .at(20, CGFloat(220 + (idx + 1) * 58))
-            } else if showToDropdown && !toResults.isEmpty {
-                dropdown(results: toResults)
-                    .at(20, CGFloat(220 + (stopTexts.count + 1) * 58))
+                if let locErr = loc.locationError {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(amberC)
+                            Text("Location unavailable")
+                                .cvText(13, .semibold, inter: true)
+                        }
+                        Text(locErr)
+                            .cvText(11, color: CV.cream.opacity(0.6), inter: true)
+                    }
+                    .padding(12)
+                    .frame(width: 353)
+                    .background(Color(hex: 0x1A1A1D, opacity: 0.96),
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(amberC.opacity(0.4), lineWidth: 1))
+                    .at(20, 640)
+                }
+
+                bottomPanel.at(20, 690)
+
+                if !isRecentered {
+                    Button {
+                        if let c = loc.currentLocation?.coordinate {
+                            withAnimation {
+                                camera = .region(MKCoordinateRegion(
+                                    center: c,
+                                    span: .init(latitudeDelta: 0.12, longitudeDelta: 0.12)))
+                                isRecentered = true
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color(hex: 0x1A1A1D, opacity: 0.95), in: Circle())
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                            .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .at(329, 600)
+                    .transition(.scale.combined(with: .opacity))
+                }
             }
-
-            // Bottom route / confirm panel
-            bottomPanel.at(20, 690)
-
-            // Recenter button
-            if !isRecentered {
-                Button {
-                    if let c = loc.lastLocation?.coordinate {
-                        withAnimation {
-                            camera = .region(MKCoordinateRegion(
-                                center: c,
-                                span: .init(latitudeDelta: 0.12, longitudeDelta: 0.12)))
-                            isRecentered = true
+            .navigationBarBackButtonHidden()
+            .toolbar(.hidden, for: .navigationBar)
+            .background(SwipeBackEnabler())
+            .onTapGesture {
+                focus = nil
+                showFromDropdown = false
+                showToDropdown = false
+                activeStopIndex = nil
+                noResults = false
+            }
+            .onAppear {
+                hydrateFromDraft()
+                loc.startTracking()
+            }
+            .onChange(of: loc.currentLocation) { _, newLoc in
+                guard let c = newLoc?.coordinate else { return }
+                if fromText.isEmpty, fromCoord == nil {
+                    fromCoord = c
+                    fromText  = "Current Location"
+                    recenter(to: c)
+                    scheduleRoute()
+                }
+            }
+            
+            // ✅ Full screen loading overlay when generating routes
+            if isGeneratingRoutes {
+                ZStack {
+                    Color.black.opacity(0.75).ignoresSafeArea()
+                    
+                    VStack(spacing: 24) {
+                        ZStack {
+                            Circle()
+                                .stroke(Color.white.opacity(0.08), lineWidth: 4)
+                                .frame(width: 64, height: 64)
+                            ProgressView()
+                                .tint(CV.red)
+                                .scaleEffect(1.3)
+                        }
+                        
+                        VStack(spacing: 8) {
+                            Text("Finding best routes...")
+                                .cvText(18, .bold, inter: true)
+                            Text("Analyzing roads, stops, and scenic options.")
+                                .cvText(13, color: CV.cream.opacity(0.6), inter: true)
+                                .multilineTextAlignment(.center)
                         }
                     }
-                } label: {
-                    Image(systemName: "location.fill")
-                        .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Color(hex: 0x1A1A1D, opacity: 0.95), in: Circle())
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 28)
+                    .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.6), radius: 24, y: 12)
                 }
-                .buttonStyle(.plain)
-                .at(329, 600)
-                .transition(.scale.combined(with: .opacity))
+                .transition(.opacity)
             }
         }
-        .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
-        .background(SwipeBackEnabler())
-        .onTapGesture {
-            focus = nil
-            showFromDropdown = false
-            showToDropdown = false
-            activeStopIndex = nil
-        }
-        .onAppear {
-            hydrateFromDraft()
-            loc.start()
-        }
-        .onChange(of: loc.lastLocation) { _, newLoc in
-            // Auto-fill "Current Location" the first time we get GPS and no start yet.
-            guard let c = newLoc?.coordinate else { return }
-            if fromText.isEmpty, fromCoord == nil {
-                fromCoord = c
-                fromText  = "Current Location"
-                recenter(to: c)
-                scheduleRoute()
-            }
-        }
+        .animation(.easeInOut(duration: 0.2), value: isGeneratingRoutes)
     }
 
     // MARK: - Map
 
     private var liveMap: some View {
         Map(position: $camera) {
-            if let c = loc.lastLocation?.coordinate {
+            if let c = loc.currentLocation?.coordinate {
                 Annotation("", coordinate: c) { YouMarker() }
             }
-
             if let c = fromCoord {
                 Annotation("Start", coordinate: c) {
                     ZStack {
                         Circle().fill(CV.red).frame(width: 20, height: 20)
                         Circle().strokeBorder(.white, lineWidth: 3).frame(width: 20, height: 20)
                         Image(systemName: "location.fill")
-                            .font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
                     }
                 }
             }
-
             ForEach(Array(stopCoords.enumerated()), id: \.offset) { i, c in
                 if let c {
                     Annotation("Stop \(i + 1)", coordinate: c) {
@@ -155,23 +224,23 @@ struct PlanMapView: View {
                                 .fill(amberC).frame(width: 30, height: 30)
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .strokeBorder(.white, lineWidth: 2).frame(width: 30, height: 30)
-                            Text("\(i + 1)").cvText(14, .bold, color: .black, inter: true)
+                            Text("\(i + 1)")
+                                .cvText(14, .bold, color: .black, inter: true)
                         }
                     }
                 }
             }
-
             if let c = toCoord {
                 Annotation("Destination", coordinate: c) {
                     ZStack {
                         Circle().fill(CV.red).frame(width: 34, height: 34)
                         Circle().strokeBorder(.white, lineWidth: 2.5).frame(width: 34, height: 34)
                         Image(systemName: "flag.checkered")
-                            .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
                     }
                 }
             }
-
             if routeLine.count > 1 {
                 MapPolyline(coordinates: routeLine)
                     .stroke(Color(hex: 0x0A84FF), lineWidth: 7)
@@ -191,36 +260,48 @@ struct PlanMapView: View {
 
     private var searchCard: some View {
         VStack(spacing: 0) {
-            // FROM
             row(marker: { startMarker }, label: "From") {
                 TextField("Starting point…", text: $fromText)
                     .focused($focus, equals: .from)
-                    .tint(CV.red).cvText(16, .semibold, inter: true)
+                    .tint(CV.red)
+                    .cvText(16, .semibold, inter: true)
                     .onChange(of: fromText) { _, v in
                         if v == "Current Location" { return }
                         fromCoord = nil
                         activeStopIndex = nil
-                        if v.isEmpty { fromResults = []; showFromDropdown = false; scheduleRoute(); return }
-                        completer.search(v) { results in
-                            self.fromResults = results
-                            self.showFromDropdown = true
-                            self.showToDropdown = false
+                        noResults = false
+                        fromSearchTask?.cancel()
+                        guard !v.isEmpty else {
+                            fromResults = []
+                            showFromDropdown = false
+                            return
+                        }
+                        fromSearchTask = Task {
+                            try? await Task.sleep(for: .milliseconds(300))
+                            guard !Task.isCancelled else { return }
+                            completer.search(v) { r in
+                                self.fromResults = r
+                                self.showFromDropdown = !r.isEmpty
+                                self.noResults = r.isEmpty
+                                self.showToDropdown = false
+                            }
                         }
                     }
                     .onTapGesture {
                         focus = .from
                         activeStopIndex = nil
-                        if !fromText.isEmpty && fromText != "Current Location" {
+                        if !fromText.isEmpty, fromText != "Current Location" {
                             completer.search(fromText) { r in
-                                self.fromResults = r; self.showFromDropdown = true
+                                self.fromResults = r
+                                self.showFromDropdown = !r.isEmpty
                             }
                         }
                     }
             } trailing: {
                 HStack(spacing: 6) {
-                    if loc.lastLocation != nil, fromText != "Current Location" {
+                    if loc.currentLocation != nil, fromText != "Current Location" {
                         Button {
-                            if let c = loc.lastLocation?.coordinate {
+                            if let c = loc.currentLocation?.coordinate {
                                 fromCoord = c
                                 fromText  = "Current Location"
                                 focus = nil
@@ -233,7 +314,8 @@ struct PlanMapView: View {
                                 .foregroundStyle(CV.red)
                                 .frame(width: 32, height: 32)
                                 .background(CV.red.opacity(0.12), in: Circle())
-                        }.buttonStyle(.plain)
+                        }
+                        .buttonStyle(.plain)
                     }
                     swapButton
                 }
@@ -241,7 +323,6 @@ struct PlanMapView: View {
 
             dotted
 
-            // CHECKPOINTS
             ForEach(Array(stopTexts.enumerated()), id: \.offset) { idx, _ in
                 row(marker: { stopMarker(idx) }, label: "Stop \(idx + 1)") {
                     TextField("Search checkpoint…", text: Binding(
@@ -253,17 +334,22 @@ struct PlanMapView: View {
                             activeStopIndex = idx
                             showFromDropdown = false
                             showToDropdown = false
-                            if newVal.isEmpty {
+                            noResults = false
+                            stopSearchTasks[idx]?.cancel()
+                            guard !newVal.isEmpty else {
                                 stopResults[idx] = []
                                 return
                             }
-                            completer.search(newVal) { r in
-                                self.stopResults[idx] = r
+                            stopSearchTasks[idx] = Task {
+                                try? await Task.sleep(for: .milliseconds(300))
+                                guard !Task.isCancelled else { return }
+                                completer.search(newVal) { r in self.stopResults[idx] = r }
                             }
                         }
                     ))
                     .focused($focus, equals: .stop(idx))
-                    .tint(CV.red).cvText(15, .semibold, inter: true)
+                    .tint(CV.red)
+                    .cvText(15, .semibold, inter: true)
                     .onTapGesture {
                         focus = .stop(idx)
                         activeStopIndex = idx
@@ -280,24 +366,36 @@ struct PlanMapView: View {
                             .font(.system(size: 16))
                             .foregroundStyle(CV.cream.opacity(0.45))
                             .frame(width: 30, height: 30)
-                    }.buttonStyle(.plain)
+                    }
+                    .buttonStyle(.plain)
                 }
                 dotted
             }
 
-            // TO
             row(marker: { endMarker }, label: "To") {
                 TextField("Destination…", text: $toText)
                     .focused($focus, equals: .to)
-                    .tint(CV.red).cvText(16, .semibold, inter: true)
+                    .tint(CV.red)
+                    .cvText(16, .semibold, inter: true)
                     .onChange(of: toText) { _, v in
                         toCoord = nil
                         activeStopIndex = nil
-                        if v.isEmpty { toResults = []; showToDropdown = false; scheduleRoute(); return }
-                        completer.search(v) { r in
-                            self.toResults = r
-                            self.showToDropdown = true
-                            self.showFromDropdown = false
+                        noResults = false
+                        toSearchTask?.cancel()
+                        guard !v.isEmpty else {
+                            toResults = []
+                            showToDropdown = false
+                            return
+                        }
+                        toSearchTask = Task {
+                            try? await Task.sleep(for: .milliseconds(300))
+                            guard !Task.isCancelled else { return }
+                            completer.search(v) { r in
+                                self.toResults = r
+                                self.showToDropdown = !r.isEmpty
+                                self.noResults = r.isEmpty
+                                self.showFromDropdown = false
+                            }
                         }
                     }
                     .onTapGesture {
@@ -305,7 +403,8 @@ struct PlanMapView: View {
                         activeStopIndex = nil
                         if !toText.isEmpty {
                             completer.search(toText) { r in
-                                self.toResults = r; self.showToDropdown = true
+                                self.toResults = r
+                                self.showToDropdown = !r.isEmpty
                             }
                         }
                     }
@@ -313,11 +412,8 @@ struct PlanMapView: View {
 
             Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
 
-            // ADD STOP
             Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                    addStop()
-                }
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { addStop() }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus").font(.system(size: 14, weight: .bold))
@@ -330,7 +426,8 @@ struct PlanMapView: View {
                     }
                 }
                 .foregroundStyle(CV.red)
-                .padding(.horizontal, 18).frame(height: 48)
+                .padding(.horizontal, 18)
+                .frame(height: 48)
             }
             .buttonStyle(.plain)
         }
@@ -342,8 +439,6 @@ struct PlanMapView: View {
         .shadow(color: .black.opacity(0.4), radius: 18, y: 8)
     }
 
-    // MARK: Card row builder
-
     @ViewBuilder
     private func row<Content: View, Trailing: View>(
         marker: () -> some View,
@@ -354,7 +449,8 @@ struct PlanMapView: View {
         HStack(alignment: .center, spacing: 12) {
             marker().frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
-                Text(label).cvText(10, .bold, color: CV.cream.opacity(0.55), inter: true)
+                Text(label)
+                    .cvText(10, .bold, color: CV.cream.opacity(0.55), inter: true)
                 content()
             }
             Spacer(minLength: 4)
@@ -368,13 +464,16 @@ struct PlanMapView: View {
         Circle().strokeBorder(CV.cream, lineWidth: 2.5).frame(width: 14, height: 14)
     }
     private var endMarker: some View {
-        ZStack { Circle().fill(CV.red).frame(width: 16, height: 16)
-                 Circle().fill(.white).frame(width: 5, height: 5) }
+        ZStack {
+            Circle().fill(CV.red).frame(width: 16, height: 16)
+            Circle().fill(.white).frame(width: 5, height: 5)
+        }
     }
     private func stopMarker(_ i: Int) -> some View {
         ZStack {
             Circle().fill(amberC).frame(width: 18, height: 18)
-            Text("\(i + 1)").cvText(10, .bold, color: .black, inter: true)
+            Text("\(i + 1)")
+                .cvText(10, .bold, color: .black, inter: true)
         }
     }
 
@@ -389,7 +488,8 @@ struct PlanMapView: View {
                 .foregroundStyle(CV.cream)
                 .frame(width: 32, height: 32)
                 .background(Color.white.opacity(0.08), in: Circle())
-        }.buttonStyle(.plain)
+        }
+        .buttonStyle(.plain)
     }
 
     private var dotted: some View {
@@ -414,20 +514,28 @@ struct PlanMapView: View {
                 Button { select(result: r) } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "mappin")
-                            .font(.system(size: 14)).foregroundStyle(CV.red).frame(width: 20)
+                            .font(.system(size: 14))
+                            .foregroundStyle(CV.red)
+                            .frame(width: 20)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(r.title).cvText(14, .semibold, inter: true).lineLimit(1)
+                            Text(r.title)
+                                .cvText(14, .semibold, inter: true)
+                                .lineLimit(1)
                             if !r.subtitle.isEmpty {
                                 Text(r.subtitle)
-                                    .cvText(12, color: CV.cream.opacity(0.5), inter: true).lineLimit(1)
+                                    .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                                    .lineLimit(1)
                             }
                         }
                         Spacer()
                     }
-                    .padding(.horizontal, 14).frame(height: 52)
-                }.buttonStyle(.plain)
+                    .padding(.horizontal, 14)
+                    .frame(height: 52)
+                }
+                .buttonStyle(.plain)
                 if i < min(results.count, 5) - 1 {
-                    Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1).padding(.leading, 46)
+                    Rectangle().fill(Color.white.opacity(0.07))
+                        .frame(height: 1).padding(.leading, 46)
                 }
             }
         }
@@ -443,27 +551,36 @@ struct PlanMapView: View {
         VStack(spacing: 10) {
             if let errorMessage {
                 HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(CV.red)
-                    Text(errorMessage).cvText(12, color: CV.cream.opacity(0.85), inter: true).lineLimit(2)
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(CV.red)
+                    Text(errorMessage)
+                        .cvText(12, color: CV.cream.opacity(0.85), inter: true)
+                        .lineLimit(2)
                     Spacer()
                 }
-                .padding(.horizontal, 12).frame(height: 40)
-                .background(CV.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.horizontal, 12)
+                .frame(height: 40)
+                .background(CV.red.opacity(0.15),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else if isCalculating {
                 HStack(spacing: 10) {
                     ProgressView().tint(CV.red)
-                    Text("Calculating route…").cvText(14, .semibold, inter: true)
+                    Text("Calculating route…")
+                        .cvText(14, .semibold, inter: true)
                     Spacer()
                 }
-                .padding(.horizontal, 12).frame(height: 52)
+                .padding(.horizontal, 12)
+                .frame(height: 52)
             } else if routeLine.count > 1 {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(shortDuration).cvText(22, .bold, inter: true)
-                            Text("(\(shortDistance))").cvText(14, color: CV.cream.opacity(0.65), inter: true)
+                            Text("(\(shortDistance))")
+                                .cvText(14, color: CV.cream.opacity(0.65), inter: true)
                         }
-                        Text(routeSubtitle).cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                        Text(routeSubtitle)
+                            .cvText(12, color: CV.cream.opacity(0.5), inter: true)
                     }
                     Spacer()
                     Button { confirm() } label: {
@@ -473,20 +590,25 @@ struct PlanMapView: View {
                                 .font(.system(size: 13, weight: .bold))
                         }
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 20).frame(height: 46)
+                        .padding(.horizontal, 20)
+                        .frame(height: 46)
                         .background(CV.red, in: Capsule())
                         .shadow(color: CV.red.opacity(0.4), radius: 8, y: 3)
-                    }.buttonStyle(.plain)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 16).frame(height: 64)
+                .padding(.horizontal, 16)
+                .frame(height: 64)
             } else {
                 HStack(spacing: 8) {
-                    Image(systemName: "map").foregroundStyle(CV.cream.opacity(0.6))
+                    Image(systemName: "map")
+                        .foregroundStyle(CV.cream.opacity(0.6))
                     Text(toText.isEmpty ? "Pick a destination" : "Loading route…")
                         .cvText(13, color: CV.cream.opacity(0.6), inter: true)
                     Spacer()
                 }
-                .padding(.horizontal, 12).frame(height: 50)
+                .padding(.horizontal, 12)
+                .frame(height: 50)
             }
         }
         .padding(10)
@@ -500,12 +622,13 @@ struct PlanMapView: View {
 
     private var routeSubtitle: String {
         let n = stopCoords.compactMap { $0 }.count
-        return n > 0 ? "Fastest route · \(n) stop\(n > 1 ? "s" : "")" : "Direct fastest route"
+        return n > 0 ? "Fastest route · \(n) stop\(n > 1 ? "s" : "")"
+                     : "Direct fastest route"
     }
-
     private var shortDistance: String {
-        distanceMeters < 1000 ? "\(Int(distanceMeters)) m"
-                              : String(format: "%.1f km", distanceMeters / 1000)
+        distanceMeters < 1000
+            ? "\(Int(distanceMeters)) m"
+            : String(format: "%.1f km", distanceMeters / 1000)
     }
     private var shortDuration: String {
         let m = Int(round(durationSeconds / 60))
@@ -524,8 +647,9 @@ struct PlanMapView: View {
         stopTexts = app.draft.stops
         stopCoords = app.draft.stopCoords.map { $0.cl }
         while stopCoords.count < stopTexts.count { stopCoords.append(nil) }
-        if fromText.isEmpty, let c = loc.lastLocation?.coordinate {
-            fromCoord = c; fromText = "Current Location"
+        if fromText.isEmpty, let c = loc.currentLocation?.coordinate {
+            fromCoord = c
+            fromText = "Current Location"
         }
         scheduleRoute()
     }
@@ -539,8 +663,12 @@ struct PlanMapView: View {
         app.draft.stopCoords = stopCoords.compactMap { $0.map(Coord.init) }
         app.draft.routeSet   = true
 
+        // ✅ Show loading overlay
+        isGeneratingRoutes = true
+        
         Task {
             await app.findRoutes()
+            isGeneratingRoutes = false
             app.push(.planRoutes)
         }
     }
@@ -555,7 +683,7 @@ struct PlanMapView: View {
         focus = .stop(idx)
         activeStopIndex = idx
         showFromDropdown = false
-        showToDropdown   = false
+        showToDropdown = false
     }
 
     private func removeStop(_ idx: Int) {
@@ -563,7 +691,12 @@ struct PlanMapView: View {
         stopTexts.remove(at: idx)
         if stopCoords.indices.contains(idx) { stopCoords.remove(at: idx) }
         if stopResults.indices.contains(idx) { stopResults.remove(at: idx) }
-        if activeStopIndex == idx { activeStopIndex = nil; focus = nil }
+        stopSearchTasks[idx]?.cancel()
+        stopSearchTasks.removeValue(forKey: idx)
+        if activeStopIndex == idx {
+            activeStopIndex = nil
+            focus = nil
+        }
         scheduleRoute()
     }
 
@@ -578,8 +711,11 @@ struct PlanMapView: View {
     private func select(result: MKLocalSearchCompletion) {
         let full = result.title + (result.subtitle.isEmpty ? "" : ", \(result.subtitle)")
         focus = nil
+        noResults = false
+        
         if showFromDropdown {
-            fromText = full; showFromDropdown = false
+            fromText = full
+            showFromDropdown = false
             geocode(full) { c in fromCoord = c; scheduleRoute() }
         } else if let idx = activeStopIndex {
             ensureStopCapacity(idx)
@@ -588,12 +724,14 @@ struct PlanMapView: View {
             activeStopIndex = nil
             geocode(full) { c in stopCoords[idx] = c; scheduleRoute() }
         } else if showToDropdown {
-            toText = full; showToDropdown = false
+            toText = full
+            showToDropdown = false
             geocode(full) { c in toCoord = c; scheduleRoute() }
         }
     }
 
-    private func geocode(_ query: String, completion: @escaping (CLLocationCoordinate2D?) -> Void) {
+    private func geocode(_ query: String,
+                         completion: @escaping (CLLocationCoordinate2D?) -> Void) {
         Task {
             let req = MKLocalSearch.Request()
             req.naturalLanguageQuery = query
@@ -615,13 +753,16 @@ struct PlanMapView: View {
     }
 
     private func calculate() async {
-        guard let s = fromCoord ?? loc.lastLocation?.coordinate else { return }
+        guard let s = fromCoord ?? loc.currentLocation?.coordinate else { return }
         guard let e = toCoord else {
-            await MainActor.run { routeLine = []; distanceMeters = 0; durationSeconds = 0 }
+            await MainActor.run {
+                routeLine = []
+                distanceMeters = 0
+                durationSeconds = 0
+            }
             return
         }
 
-        // Build waypoints
         var points: [CLLocationCoordinate2D] = [s]
         for (i, c) in stopCoords.enumerated() {
             if let c { points.append(c) }
@@ -637,25 +778,21 @@ struct PlanMapView: View {
         points.append(e)
 
         await MainActor.run { isCalculating = true; errorMessage = nil }
-
         do {
             var poly: [CLLocationCoordinate2D] = []
             var dist = 0.0
             var time = 0.0
-
             for i in 0..<(points.count - 1) {
                 let req = MKDirections.Request()
                 req.source      = MKMapItem(placemark: MKPlacemark(coordinate: points[i]))
                 req.destination = MKMapItem(placemark: MKPlacemark(coordinate: points[i + 1]))
                 req.transportType = .automobile
-
                 let res = try await MKDirections(request: req).calculate()
                 guard let r = res.routes.first else { throw URLError(.badServerResponse) }
                 poly += r.polyline.coords
                 dist += r.distance
                 time += r.expectedTravelTime
             }
-
             await MainActor.run {
                 self.routeLine       = poly
                 self.distanceMeters  = dist
@@ -669,7 +806,7 @@ struct PlanMapView: View {
                 self.distanceMeters = 0
                 self.durationSeconds = 0
                 self.isCalculating = false
-                self.errorMessage = error.localizedDescription
+                self.errorMessage = "Couldn't build that route. Check the start and end are reachable by road."
             }
         }
     }
@@ -685,7 +822,8 @@ struct PlanMapView: View {
 
     private func fitRoute() {
         guard !routeLine.isEmpty else { return }
-        let lats = routeLine.map(\.latitude), lons = routeLine.map(\.longitude)
+        let lats = routeLine.map(\.latitude)
+        let lons = routeLine.map(\.longitude)
         guard let minLat = lats.min(), let maxLat = lats.max(),
               let minLon = lons.min(), let maxLon = lons.max() else { return }
         var region = MKCoordinateRegion(
@@ -700,56 +838,11 @@ struct PlanMapView: View {
     }
 }
 
-// MARK: - Safe subscript
-
-private extension Array {
-    subscript(safe i: Int) -> Element? {
-        (i >= 0 && i < count) ? self[i] : nil
-    }
-    subscript(safe i: Int, default def: Element) -> Element {
-        (i >= 0 && i < count) ? self[i] : def
-    }
-}
-
-// MARK: - Location manager (real GPS)
-
-@MainActor
-final class MapLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
-    private let manager = CLLocationManager()
-    @Published var lastLocation: CLLocation?
-    @Published var isAuthorized = false
-
-    override init() {
-        super.init()
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.distanceFilter = 5
-    }
-
-    func start() {
-        manager.requestWhenInUseAuthorization()
-        manager.startUpdatingLocation()
-    }
-
-    nonisolated func locationManager(_ manager: CLLocationManager,
-                                     didUpdateLocations locations: [CLLocation]) {
-        guard let loc = locations.last else { return }
-        Task { @MainActor in self.lastLocation = loc }
-    }
-
-    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        let status = manager.authorizationStatus
-        Task { @MainActor in
-            self.isAuthorized = (status == .authorizedWhenInUse || status == .authorizedAlways)
-            if self.isAuthorized { manager.startUpdatingLocation() }
-        }
-    }
-}
-
-// MARK: - SearchCompleter (real MapKit autocomplete)
+// MARK: - SearchCompleter (debounced, ignores stale results)
 
 final class SearchCompleter: NSObject, MKLocalSearchCompleterDelegate {
     private let completer = MKLocalSearchCompleter()
+    private var currentQuery: String = ""
     private var onResults: (([MKLocalSearchCompletion]) -> Void)?
 
     override init() {
@@ -759,15 +852,18 @@ final class SearchCompleter: NSObject, MKLocalSearchCompleterDelegate {
     }
 
     func search(_ query: String, completion: @escaping ([MKLocalSearchCompletion]) -> Void) {
+        currentQuery = query
         onResults = completion
         completer.queryFragment = query
     }
 
     func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        guard completer.queryFragment == currentQuery else { return }
         DispatchQueue.main.async { self.onResults?(completer.results) }
     }
 
     func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
+        guard completer.queryFragment == currentQuery else { return }
         DispatchQueue.main.async { self.onResults?([]) }
     }
 }

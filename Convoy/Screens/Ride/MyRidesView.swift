@@ -1,6 +1,6 @@
+// MyRidesView.swift
 import SwiftUI
 
-/// M01 / M02 · My rides — Upcoming and Past.
 struct MyRidesView: View {
     @Environment(AppState.self) private var app
     @State private var tab: Tab = .upcoming
@@ -29,11 +29,13 @@ struct MyRidesView: View {
     private var tabs: some View {
         HStack(spacing: 4) {
             tabButton("Upcoming", "\(app.rides.count)", .upcoming)
-            tabButton("Past", "38", .past)
+            tabButton("Past", "\(app.completedRides.count)", .past)
         }
         .padding(4).frame(height: 44)
-        .background(CV.glassFill, in: Capsule()).overlay(Capsule().strokeBorder(CV.glassStroke, lineWidth: 1))
+        .background(CV.glassFill, in: Capsule())
+        .overlay(Capsule().strokeBorder(CV.glassStroke, lineWidth: 1))
     }
+
     private func tabButton(_ t: String, _ count: String, _ v: Tab) -> some View {
         let on = tab == v
         return Button { withAnimation(.snappy(duration: 0.2)) { tab = v } } label: {
@@ -46,19 +48,22 @@ struct MyRidesView: View {
         }.buttonStyle(.plain)
     }
 
-    // MARK: upcoming
+    // MARK: - Upcoming (all rides, sorted by date)
     private var upcoming: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(app.rides.enumerated()), id: \.element.id) { i, r in
-                if i == 0 { header("THIS WEEK").padding(.top, 20) }
-                if i == 1 { header("LATER").padding(.top, 16) }
-                upcomingCard(r).padding(.top, i == 0 ? 7 : 12)
+        VStack(alignment: .leading, spacing: 12) {
+            if app.rides.isEmpty {
+                emptyState(icon: "calendar", title: "No upcoming rides",
+                           subtitle: "Plan a ride from the Home tab to see it here.")
+                    .padding(.top, 20)
+            } else {
+                ForEach(app.sortedRides) { r in
+                    upcomingCard(r)
+                }
+                .padding(.top, 20)
             }
         }
     }
-    private func header(_ t: String) -> some View {
-        Text(t).cvText(12, .semibold, color: CV.cream.opacity(0.5), tracking: 1, inter: true)
-    }
+
     private func upcomingCard(_ r: Ride) -> some View {
         let invited: Bool = { if case .invited = r.rsvp { return true } else { return false } }()
         let tag: (String, Color) = {
@@ -70,23 +75,30 @@ struct MyRidesView: View {
         }()
         return Button { app.push(.rideDetails(r.id)) } label: {
             HStack(spacing: 0) {
-                Image(r.photo).resizable().scaledToFill().frame(width: 110).clipped()
+                if let s = r.plan.selected {
+                    RouteSnapshotView(coords: s.coords, size: CGSize(width: 110, height: invited ? 204 : 162))
+                        .frame(width: 110).clipped()
+                } else {
+                    LinearGradient(colors: [CV.red.opacity(0.35), Color(hex: 0x1A1A1D)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                        .frame(width: 110)
+                }
                 VStack(alignment: .leading, spacing: 0) {
                     Text(tag.0).cvText(12, .semibold, color: tag.1, inter: true)
-                        .padding(.horizontal, 10).frame(height: 24).background(tag.1.opacity(0.18), in: Capsule())
+                        .padding(.horizontal, 10).frame(height: 24)
+                        .background(tag.1.opacity(0.18), in: Capsule())
                     Text(r.title).cvText(17, .semibold, inter: true).padding(.top, 10)
                     Spacer(minLength: 8)
                     HStack(spacing: 6) {
                         Image(systemName: "calendar").font(.system(size: 13))
-                        Text("\(r.displayDate) · \(r.displayTime)").cvText(13, .medium, color: CV.cream.opacity(0.8), inter: true)
+                        Text("\(r.displayDate) · \(r.displayTime)")
+                            .cvText(13, .medium, color: CV.cream.opacity(0.8), inter: true)
                     }
                     Text(r.listMeta).cvText(12, color: CV.cream.opacity(0.5), inter: true).padding(.top, 4)
-                    HStack(spacing: -8) {
-                        ForEach(Array(r.riders.prefix(3).enumerated()), id: \.offset) { _, rd in
-                            Avatar(photo: rd.avatar, size: 24).overlay(Circle().strokeBorder(Color(hex: 0x1A1A1D), lineWidth: 1.5))
+                    HStack(spacing: 6) {
+                        ForEach(r.riders.prefix(3)) { rd in
+                            AvatarChip(data: rd.avatarData, name: rd.name, size: 24)
                         }
-                        Text("+\(max(1, r.ridersGoing - 3))").cvText(11, .semibold, inter: true)
-                            .frame(width: 24, height: 24).background(Color(hex: 0x2A2A2D), in: Circle())
                     }.padding(.top, 8)
                     if invited {
                         HStack(spacing: 8) {
@@ -102,77 +114,64 @@ struct MyRidesView: View {
             .frame(height: invited ? 204 : 162)
             .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
         }.buttonStyle(.plain)
     }
 
-    // MARK: past
+    // MARK: - Past
     private var past: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 0) {
-                seasonStat("38", "rides"); seasonStat("2,140 km", "ridden"); seasonStat("12", "places")
-            }
-            .padding(.vertical, 12).padding(.horizontal, 16).frame(height: 64)
-            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
-            .padding(.top, 14)
-            ForEach(Array(app.pastRides.enumerated()), id: \.element.id) { i, p in
-                if i == 0 { header("OCTOBER").padding(.top, 16) }
-                if i == 2 { header("SEPTEMBER").padding(.top, 14) }
-                pastCard(p).padding(.top, i == 0 ? 7 : 12)
+        VStack(alignment: .leading, spacing: 12) {
+            if app.completedRides.isEmpty {
+                emptyState(icon: "checkmark.circle", title: "No past rides yet",
+                           subtitle: "Complete a ride and it will appear here.")
+                    .padding(.top, 20)
+            } else {
+                ForEach(app.completedRides, id: \.id) { p in
+                    pastCard(p)
+                }
+                .padding(.top, 20)
             }
         }
     }
-    private func seasonStat(_ v: String, _ l: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(v).cvText(18, .bold, inter: true)
-            Text(l).cvText(12, color: CV.cream.opacity(0.45), inter: true)
-        }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-    @ViewBuilder private func pastCard(_ p: PastRide) -> some View {
+
+    private func pastCard(_ p: PersistedRideEntity) -> some View {
         Button { app.push(.pastRide(p.id)) } label: {
-            if let map = p.mapImage {
-                VStack(alignment: .leading, spacing: 0) {
-                    ZStack(alignment: .topLeading) {
-                        Image(map).resizable().frame(width: 353, height: 112)
-                        if let b = p.badge {
-                            Text(b).cvText(11, .semibold, color: Color(hex: 0xFFB020), inter: true)
-                                .padding(.horizontal, 10).frame(height: 24).background(CV.bg.opacity(0.7), in: Capsule()).padding(12)
-                        }
-                    }.frame(width: 353, height: 112).clipped()
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(p.title).cvText(17, .semibold, inter: true)
-                        Text(p.listDate).cvText(12, color: CV.cream.opacity(0.5), inter: true)
-                        HStack {
-                            Text(p.listMeta.replacingOccurrences(of: " · ", with: "  ·  ")).cvText(13, .semibold, inter: true)
-                            Spacer()
-                            HStack(spacing: -8) {
-                                ForEach(Array(p.riders.prefix(3).enumerated()), id: \.offset) { _, rd in
-                                    Avatar(photo: rd.2, size: 26).overlay(Circle().strokeBorder(Color(hex: 0x1A1A1D), lineWidth: 1.5))
-                                }
-                                Text(p.moreCount).cvText(11, .semibold, inter: true).frame(width: 26, height: 26).background(Color(hex: 0x2A2A2D), in: Circle())
-                            }
-                        }.padding(.top, 10)
-                    }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 16)
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 22)).foregroundStyle(CV.green)
+                    .frame(width: 52, height: 52)
+                    .background(CV.green.opacity(0.15), in: Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(p.title).cvText(15, .semibold, inter: true)
+                    Text(p.displayDate).cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                    Text("\(p.distance) · \(p.duration)")
+                        .cvText(12, .semibold, color: CV.cream.opacity(0.7), inter: true)
                 }
-                .frame(width: 353)
-                .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-            } else {
-                HStack(spacing: 12) {
-                    if let t = p.thumb { Image(t).resizable().scaledToFill().frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous)) }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(p.title).cvText(15, .semibold, inter: true)
-                        Text(p.listDate).cvText(12, color: CV.cream.opacity(0.5), inter: true)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(CV.cream.opacity(0.5))
-                }
-                .padding(8).padding(.trailing, 8).frame(width: 353, height: 68)
-                .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(CV.cream.opacity(0.4))
             }
+            .padding(12).frame(width: 353, height: 76)
+            .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
         }.buttonStyle(.plain)
+    }
+
+    private func emptyState(icon: String, title: String, subtitle: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon).font(.system(size: 22))
+                .foregroundStyle(CV.cream.opacity(0.5))
+                .frame(width: 52, height: 52)
+                .background(Color.white.opacity(0.06), in: Circle())
+            Text(title).cvText(16, .semibold, inter: true)
+            Text(subtitle).cvText(13, color: CV.cream.opacity(0.5), inter: true)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity).padding(28)
+        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 }

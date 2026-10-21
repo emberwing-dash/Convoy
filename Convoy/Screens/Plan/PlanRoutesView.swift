@@ -1,14 +1,22 @@
+// PlanRoutesView.swift
 import SwiftUI
 import MapKit
+
+enum MapStyleType { case standard, hybrid, satellite }
 
 /// P03 · Pick a route style — real MapKit routes (Fastest / Scenic / Off-route).
 struct PlanRoutesView: View {
     @Environment(AppState.self) private var app
     @State private var camera: MapCameraPosition = .automatic
+    @State private var mapStyleType: MapStyleType = .standard // ✅ Added state for layers
 
     private var routes: [RouteStyle: RouteSummary] { app.draft.routes }
-    private var loading: Bool { app.planner.state == .loading || app.planner.state == .idle }
-    private var failed: Bool { if case .failed = app.planner.state { return true } else { return false } }
+    private var loading: Bool {
+        app.planner.state == .loading || app.planner.state == .idle
+    }
+    private var failed: Bool {
+        if case .failed = app.planner.state { return true } else { return false }
+    }
 
     var body: some View {
         DesignCanvas(background: background) {
@@ -17,7 +25,21 @@ struct PlanRoutesView: View {
                 .frame(width: 393, height: 130).allowsHitTesting(false)
 
             RoundIconButton(symbol: "chevron.left") { app.pop() }.at(20, 58)
-            RoundIconButton(symbol: "square.3.layers.3d") {}.at(329, 58)
+            
+            Menu {
+                Button { mapStyleType = .standard } label: { Label("Standard", systemImage: "map") }
+                Button { mapStyleType = .hybrid } label: { Label("Hybrid", systemImage: "map.fill") }
+                Button { mapStyleType = .satellite } label: { Label("Satellite", systemImage: "globe.americas.fill") }
+            } label: {
+                Image(systemName: "square.3.layers.3d")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(CV.cream)
+                    .frame(width: 44, height: 44)
+                    .background(Color(hex: 0x1A1A1D, opacity: 0.82), in: Circle())
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.4), radius: 9, y: 6)
+            }
+            .at(329, 58)
 
             if loading {
                 HStack(spacing: 10) {
@@ -28,15 +50,26 @@ struct PlanRoutesView: View {
                 .background(navPanelFill, in: Capsule())
                 .frame(width: 393).at(0, 72)
             } else if failed {
-                Button { Task { app.planner.reset(); await app.findRoutes(); fit() } } label: {
+                Button {
+                    Task {
+                        app.planner.reset()
+                        await app.findRoutes()
+                        fit()
+                    }
+                } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "arrow.clockwise")
-                        Text("Couldn’t load routes · Retry").cvText(13, .semibold, inter: true)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Couldn't load routes").cvText(13, .semibold, inter: true)
+                            if case .failed(let msg) = app.planner.state {
+                                Text(msg).cvText(10, color: CV.cream.opacity(0.55), inter: true).lineLimit(1)
+                            }
+                        }
                     }
-                    .padding(.horizontal, 14).frame(height: 36)
+                    .padding(.horizontal, 14).frame(height: 44)
                     .background(navPanelFill, in: Capsule())
                 }
-                .buttonStyle(.plain).frame(width: 393).at(0, 72)
+                .buttonStyle(.plain).frame(width: 393).at(0, 68)
             }
 
             sheet.at(0, 368)
@@ -52,7 +85,6 @@ struct PlanRoutesView: View {
     private var navPanelFill: Color { Color(hex: 0x1A1A1D, opacity: 0.92) }
 
     // MARK: - Map
-
     @ViewBuilder private var background: some View {
         Map(position: $camera) {
             ForEach(RouteStyle.allCases.filter { $0 != app.draft.style }) { s in
@@ -93,26 +125,44 @@ struct PlanRoutesView: View {
                     let idx = r.coords.count * (s == .fastest ? 2 : s == .offRoute ? 3 : 4) / 6
                     Annotation("", coordinate: r.coords[idx].cl) {
                         Button { app.draft.style = s } label: {
-                            MapCallout(text: "\(s.rawValue) · \(app.draft.durationText(s))",
-                                       selected: app.draft.style == s)
+                            MapCallout(
+                                text: "\(s.rawValue) · \(app.draft.durationText(s))",
+                                selected: app.draft.style == s
+                            )
                         }.buttonStyle(.plain)
                     }
                 }
             }
         }
-        .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+        // ✅ Apply selected map style
+        .mapStyle(mapStyleType == .standard ? .standard(elevation: .flat, pointsOfInterest: .excludingAll) :
+                  mapStyleType == .hybrid ? .hybrid(elevation: .flat, pointsOfInterest: .excludingAll) :
+                  .imagery(elevation: .flat))
         .ignoresSafeArea()
     }
 
     private func fit() {
         let pts = routes.values.flatMap { $0.coords.map(\.cl) }
-        guard var region = RoutePlanner.region(for: pts, padding: 2.4) else { return }
-        region.center.latitude -= region.span.latitudeDelta * 0.22
+
+        if var region = RoutePlanner.region(for: pts, padding: 2.4) {
+            region.center.latitude -= region.span.latitudeDelta * 0.22
+            withAnimation(.easeInOut(duration: 0.6)) { camera = .region(region) }
+            return
+        }
+
+        guard let a = app.draft.startCoord?.cl,
+              let b = app.draft.endCoord?.cl else { return }
+        let latDelta = max(abs(a.latitude - b.latitude) * 1.8, 0.05)
+        let lonDelta = max(abs(a.longitude - b.longitude) * 1.8, 0.05)
+        let region = MKCoordinateRegion(
+            center: .init(latitude: (a.latitude + b.latitude) / 2,
+                          longitude: (a.longitude + b.longitude) / 2),
+            span: .init(latitudeDelta: latDelta, longitudeDelta: lonDelta)
+        )
         withAnimation(.easeInOut(duration: 0.6)) { camera = .region(region) }
     }
 
     // MARK: - Sheet
-
     private var sheetShape: UnevenRoundedRectangle {
         UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
     }

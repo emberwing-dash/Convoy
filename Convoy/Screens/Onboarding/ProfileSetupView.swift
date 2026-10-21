@@ -1,7 +1,7 @@
+// ProfileSetupView.swift
 import SwiftUI
 import PhotosUI
 
-/// 03 · Profile setup — name, handle, and avatar selection from Photos with cropping & adjustment.
 struct ProfileSetupView: View {
     @Environment(AppState.self) private var app
     var onBack: () -> Void
@@ -23,14 +23,7 @@ struct ProfileSetupView: View {
 
     @ViewBuilder
     private var avatarPreview: some View {
-        if let img = avatarImage {
-            img
-                .resizable()
-                .scaledToFill()
-                .frame(width: 96, height: 96)
-                .clipShape(Circle())
-        } else if let data = app.avatarImageData,
-                  let uiImage = UIImage(data: data) {
+        if let data = app.avatarImageData, let uiImage = UIImage(data: data) {
             Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFill()
@@ -60,7 +53,6 @@ struct ProfileSetupView: View {
                             .cvText(17, color: CV.muted, tracking: -0.17, lineHeight: 24)
                     }
 
-                    // Avatar picker & adjustments
                     VStack(alignment: .leading, spacing: 16) {
                         HStack(spacing: 18) {
                             Button {
@@ -107,7 +99,6 @@ struct ProfileSetupView: View {
                             Spacer(minLength: 0)
                         }
 
-                        // Adjust crop button if image already exists
                         if let data = app.avatarImageData, let uiImage = UIImage(data: data) {
                             Button {
                                 imageToCrop = uiImage
@@ -134,7 +125,6 @@ struct ProfileSetupView: View {
                     .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
 
-                    // Name & handle fields
                     VStack(alignment: .leading, spacing: 12) {
                         TextField("Your name", text: $app.displayName)
                             .cvText(17, tracking: -0.17)
@@ -147,7 +137,12 @@ struct ProfileSetupView: View {
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
                                 .cvText(17, tracking: -0.17)
-                            if !app.handle.isEmpty { Image("check_green").resizable().frame(width: 24, height: 24) }
+                            if !app.handle.isEmpty {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .resizable()
+                                    .frame(width: 24, height: 24)
+                                    .foregroundStyle(CV.green)
+                            }
                         }
                         .padding(.horizontal, 18).frame(height: 60)
                         .glassRounded(18)
@@ -167,13 +162,8 @@ struct ProfileSetupView: View {
             CircleBackButton(action: onBack).padding(.leading, 20).padding(.top, 4)
         }
         .safeAreaInset(edge: .bottom) {
+            // ✅ Only advance the flow; InConvoyView's onFinish persists the profile
             PrimaryButton(title: "Continue") {
-                app.completeOnboarding(
-                    name: app.displayName,
-                    handle: app.handle,
-                    avatar: app.avatarName,
-                    imageData: app.avatarImageData
-                )
                 onContinue()
             }
             .opacity(canContinue ? 1 : 0.4)
@@ -181,7 +171,6 @@ struct ProfileSetupView: View {
             .padding(.horizontal, 20).padding(.bottom, 16)
         }
         .photosPicker(isPresented: $showPhotosPicker, selection: $selectedPhotoItem, matching: .images)
-        
         .sheet(isPresented: $showCropView) {
             if let imageToCrop {
                 ImageCropAdjustView(
@@ -189,13 +178,9 @@ struct ProfileSetupView: View {
                     onCrop: { croppedImage, data in
                         avatarImage = Image(uiImage: croppedImage)
                         app.avatarImageData = data
-                        app.avatarName = "custom_photo"
-
                         showCropView = false
                     },
-                    onCancel: {
-                        showCropView = false
-                    }
+                    onCancel: { showCropView = false }
                 )
             }
         }

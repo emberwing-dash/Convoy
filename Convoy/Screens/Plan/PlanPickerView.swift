@@ -31,10 +31,12 @@ struct PlanPickerView: View {
                         let on = app.selectedCrew == c.id
                         Button { app.selectedCrew = on ? nil : c.id } label: {
                             HStack(spacing: 12) {
-                                Avatar(photo: c.photo, size: 40)
+                                CrewAvatar(data: c.avatarData, name: c.name, size: 40)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(c.name).cvText(16, .semibold, tracking: -0.16, lineHeight: 20, inter: true)
-                                    Text(c.detail).cvText(13, color: CV.muted, lineHeight: 16, inter: true)
+                                    Text(c.name)
+                                        .cvText(16, .semibold, tracking: -0.16, lineHeight: 20, inter: true)
+                                    Text(c.detail)
+                                        .cvText(13, color: CV.muted, lineHeight: 16, inter: true)
                                 }
                                 Spacer()
                                 SelectDot(on: on)
@@ -47,17 +49,19 @@ struct PlanPickerView: View {
                         }
                     }
                 case .friends:
-                    let items = app.friends
-                    ForEach(Array(items.enumerated()), id: \.element.id) { i, p in
-                        PersonRow(person: p, selected: app.selectedFriends.contains(p.id)) {
-                            if app.selectedFriends.contains(p.id) { app.selectedFriends.remove(p.id) }
-                            else { app.selectedFriends.insert(p.id) }
-                        }
-                        if i < items.count - 1 {
-                            Rectangle().fill(Color.white.opacity(0.07))
-                                .frame(height: 1).padding(.leading, 67)
-                        }
+                    VStack(spacing: 8) {
+                        Image(systemName: "person.3")
+                            .font(.system(size: 26))
+                            .foregroundStyle(CV.cream.opacity(0.5))
+                            .frame(width: 60, height: 60)
+                            .background(Color.white.opacity(0.06), in: Circle())
+                        Text("No friends yet")
+                            .cvText(15, .semibold, inter: true)
+                        Text("Invite the people you ride with from the Crew tab.")
+                            .cvText(13, color: CV.muted, inter: true)
+                            .multilineTextAlignment(.center)
                     }
+                    .padding(28)
                 }
             }
             .frame(width: 353)

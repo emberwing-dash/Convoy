@@ -1,81 +1,70 @@
+// CrewModels.swift
 import SwiftUI
 
 struct CrewMember: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var name: String
     var detail: String
-    var photo: String?
-    var initials: String? = nil
-    var pending = false
+    var avatarData: Data?
+    var pending: Bool = false
+
+    init(id: UUID = UUID(), name: String, detail: String, avatarData: Data? = nil, pending: Bool = false) {
+        self.id = id; self.name = name; self.detail = detail
+        self.avatarData = avatarData; self.pending = pending
+    }
 }
 
 struct CrewGroup: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var name: String
-    var detail: String            // "6 riders · Sunday mornings"
-    var accent: Color
+    var detail: String
+    var accentHex: UInt32
+    var avatarData: Data?
     var members: [CrewMember]
-    var avatars: [String]
-    var customPhoto: String? = nil
-    var photo: String? { customPhoto ?? avatars.first }
-    var more: Int
-    var last: String              // "Last: Nandi Hills, 12 Oct"
-    var since = "since Mar 2025"
-    var rides = 14
-    var km = "1,020"
-    var next = "Sat 18 Oct"
-    var code = "WLF7K2"
+    var since: Date
+    var code: String
 
-    var riderCount: Int { members.count }
+    var accent: Color { Color(hex: accentHex) }
+    var memberCount: Int { members.count }
 
-    static func wolves() -> CrewGroup {
-        CrewGroup(name: "Weekend Wolves", detail: "6 riders · Sunday mornings", accent: CV.red,
-                  members: [CrewMember(name: "Rika Sharma (you)", detail: "Admin", photo: "profile_rika"),
-                            CrewMember(name: "Arjun Rao", detail: "Admin · leads most rides", photo: "friend_arjun"),
-                            CrewMember(name: "Kabir Mehta", detail: "Joined Apr 2025", photo: "friend_kabir"),
-                            CrewMember(name: "Meera Iyer", detail: "Joined Apr 2025", photo: "friend_meera"),
-                            CrewMember(name: "Ananya Rao", detail: "Joined Jun 2025", photo: "friend_ananya"),
-                            CrewMember(name: "Dev Kapoor", detail: "Invited · waiting to join", photo: "friend_dev", pending: true)],
-                  avatars: ["profile_rika", "friend_arjun", "friend_kabir", "friend_meera"], customPhoto: "crew_wolves", more: 2, last: "Last: Nandi Hills, 12 Oct")
+    init(id: UUID = UUID(), name: String, detail: String, accentHex: UInt32,
+         avatarData: Data?, members: [CrewMember], since: Date, code: String) {
+        self.id = id; self.name = name; self.detail = detail
+        self.accentHex = accentHex; self.avatarData = avatarData
+        self.members = members; self.since = since; self.code = code
     }
-    static func office() -> CrewGroup {
-        CrewGroup(name: "Office Riders", detail: "4 riders · weekday evenings", accent: Color(hex: 0xFFB020),
-                  members: [CrewMember(name: "Rika Sharma (you)", detail: "Admin", photo: "profile_rika"),
-                            CrewMember(name: "Dev Kapoor", detail: "Admin", photo: "friend_dev"),
-                            CrewMember(name: "Ananya Rao", detail: "Joined Jun 2025", photo: "friend_ananya"),
-                            CrewMember(name: "Kabir Mehta", detail: "Joined Jul 2025", photo: "friend_kabir")],
-                  avatars: ["profile_rika", "friend_dev", "friend_ananya"], more: 1, last: "Last: ECR run, 5 Oct",
-                  since: "since Jun 2025", rides: 6, km: "480", next: "Not set", code: "OFC9R1")
+
+    /// Deterministic 6-char code from the crew name + id.
+    static func makeCode(name: String) -> String {
+        let letters = name.uppercased().filter { $0.isLetter }
+        let prefix = letters.prefix(3)
+        let n = Int.random(in: 100...999)
+        return String(prefix) + "\(n)".prefix(3)
     }
-    static func coffee(name: String = "Coffee Crew") -> CrewGroup {
-        CrewGroup(name: name, detail: "3 riders · cafe runs", accent: CV.green,
-                  members: [CrewMember(name: "Rika Sharma (you)", detail: "Admin", photo: "profile_rika"),
-                            CrewMember(name: "Meera Iyer", detail: "Joined today", photo: "friend_meera"),
-                            CrewMember(name: "Ananya Rao", detail: "Joined today", photo: "friend_ananya")],
-                  avatars: ["profile_rika", "friend_meera", "friend_ananya"], more: 0, last: "No rides yet",
-                  since: "since today", rides: 0, km: "0", next: "Not set", code: "CFE4M2")
-    }
-    static func solo(name: String = "My crew") -> CrewGroup {
-        CrewGroup(name: name, detail: "1 rider · just you", accent: CV.red,
-                  members: [CrewMember(name: "Rika Sharma (you)", detail: "Admin", photo: "profile_rika")],
-                  avatars: ["profile_rika"], more: 0, last: "Invite riders to fill it",
-                  since: "created today", rides: 0, km: "0", next: "Not set", code: "RKA4M9")
+
+    /// Build from a SwiftData entity.
+    static func from(_ e: CrewEntity) -> CrewGroup {
+        var members: [CrewMember] = []
+        if let data = e.membersJSON.data(using: .utf8),
+           let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] {
+            members = arr.map { m in
+                CrewMember(name: m["name"] ?? "Rider",
+                           detail: m["detail"] ?? "")
+            }
+        }
+        return CrewGroup(
+            id: e.id, name: e.name, detail: e.detail,
+            accentHex: e.accentHex, avatarData: e.avatarData,
+            members: members, since: e.since, code: e.code
+        )
     }
 }
 
-struct FriendEntry: Identifiable, Hashable {
+/// A person representation kept for contact/invite rows.
+/// There is no friend system yet, so this type has no static mock data.
+struct Person: Identifiable, Hashable {
     let id: String
     var name: String
-    var detail: String
-    var photo: String?
-    var initials: String? = nil
-
-    static let all = [
-        FriendEntry(id: "arjun", name: "Arjun Rao", detail: "Weekend Wolves · 14 rides together", photo: "friend_arjun"),
-        FriendEntry(id: "kabir", name: "Kabir Mehta", detail: "Weekend Wolves · 9 rides", photo: "friend_kabir"),
-        FriendEntry(id: "meera", name: "Meera Iyer", detail: "2 crews · 11 rides", photo: "friend_meera"),
-        FriendEntry(id: "ananya", name: "Ananya Rao", detail: "2 crews · 6 rides", photo: "friend_ananya"),
-        FriendEntry(id: "dev", name: "Dev Kapoor", detail: "Office Riders · 4 rides", photo: "friend_dev"),
-        FriendEntry(id: "sana", name: "Sana Khan", detail: "No crew yet", photo: nil, initials: "SK"),
-    ]
+    var handle: String
+    var avatarData: Data?
 }

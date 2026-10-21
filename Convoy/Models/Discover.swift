@@ -1,11 +1,17 @@
+// Discover.swift
 import SwiftUI
+import MapKit
+import CoreLocation
 
 enum RouteCategory: String, CaseIterable, Identifiable {
-    case nearYou = "Near you", popular = "Popular", scenic = "Scenic", longDistance = "Long distance"
+    case nearYou = "Near you"
+    case scenic = "Scenic"
+    case popular = "Popular"
+    case longDistance = "Long distance"
     var id: String { rawValue }
 }
 
-/// A suggested route in Discover.
+/// A Discover route built from a real MapKit POI near the user's location.
 struct DiscoverRoute: Identifiable, Hashable {
     let id: String
     var title: String
@@ -13,44 +19,149 @@ struct DiscoverRoute: Identifiable, Hashable {
     var from: String
     var to: String
     var km: Int
-    var time: String            // "1h 40m" / "2 days"
-    var style: String           // "Scenic"
-    var photo: String
-    var categories: Set<RouteCategory>
+    var time: String
+    var style: String
     var blurb: String
     var startPlace: String
     var finishPlace: String
     var stops: Int
-    var awayKm = 18
+    var startCoord: Coord
+    var endCoord: Coord
+    var coords: [Coord] // ✅ Added to store the real road path
+    var categories: Set<RouteCategory>
+}
 
-    var kmText: String { "\(km) km" }
-    var summary: String { "\(kmText) · \(time)" }
+/// Builds Discover routes on demand from MapKit, around the user's current location.
+@MainActor @Observable
+final class DiscoverService {
+    static let shared = DiscoverService()
 
-    static let all: [DiscoverRoute] = [
-        DiscoverRoute(id: "nandi", title: "Nandi Hills sunrise run", tag: "Sunrise · Scenic", from: "Bengaluru", to: "Nandi Hills", km: 62, time: "1h 40m",
-                      style: "Scenic", photo: "disc_nandi", categories: [.nearYou, .scenic, .popular],
-                      blurb: "Leave the city before dawn and climb 40 hairpins to the summit in time for sunrise above the clouds. Smooth tarmac, cool air, breakfast at the top.",
-                      startPlace: "Hebbal flyover, Bengaluru", finishPlace: "Nandi Hills summit", stops: 2),
-        DiscoverRoute(id: "coorg", title: "Into Coorg", tag: "Coffee country", from: "Bengaluru", to: "Madikeri", km: 265, time: "5h 30m",
-                      style: "Coffee country", photo: "hero_coorg", categories: [.nearYou, .scenic],
-                      blurb: "Rolling coffee estates, misty ghats and a long breakfast stop in Kushalnagar. The classic weekend escape from Bengaluru.",
-                      startPlace: "Mysuru Road, Bengaluru", finishPlace: "Madikeri, Coorg", stops: 2, awayKm: 22),
-        DiscoverRoute(id: "manali", title: "Manali to Leh", tag: "Long distance", from: "Manali", to: "Leh", km: 428, time: "2 days",
-                      style: "Long distance", photo: "thumb_manali", categories: [.popular, .longDistance],
-                      blurb: "The high-altitude classic. Rohtang, Baralacha La and the Moore plains across two big days in the saddle.",
-                      startPlace: "Manali", finishPlace: "Leh", stops: 4, awayKm: 2100),
-        DiscoverRoute(id: "hampi", title: "Hampi heritage run", tag: "Heritage", from: "Bengaluru", to: "Hampi", km: 340, time: "6h 20m",
-                      style: "Heritage", photo: "thumb_hampi", categories: [.popular, .scenic],
-                      blurb: "Straight NH 48 into boulder country, ending among the ruins of Vijayanagara.",
-                      startPlace: "Yelahanka, Bengaluru", finishPlace: "Hampi", stops: 3, awayKm: 340),
-        DiscoverRoute(id: "kolli", title: "Kolli Hills 70 bends", tag: "Hairpins", from: "Namakkal", to: "Kolli Hills", km: 46, time: "1h 30m",
-                      style: "Twisties", photo: "trip_kolli", categories: [.scenic],
-                      blurb: "Seventy numbered hairpins up the Kolli ghat. Short, steep and a lot of fun.",
-                      startPlace: "Namakkal", finishPlace: "Kolli Hills viewpoint", stops: 1, awayKm: 350),
-        DiscoverRoute(id: "spiti", title: "Spiti via Kunzum", tag: "Long distance", from: "Manali", to: "Kaza", km: 200, time: "2 days",
-                      style: "Long distance", photo: "thumb_manali", categories: [.longDistance],
-                      blurb: "Over Kunzum La into the cold desert valley of Spiti.",
-                      startPlace: "Manali", finishPlace: "Kaza", stops: 3, awayKm: 2000),
+    private(set) var suggestions: [DiscoverRoute] = []
+    private(set) var isLoading = false
+    private(set) var lastLoadedLocation: CLLocation?
+
+    private let poiQueries: [(String, RouteCategory)] = [
+        ("viewpoint", .scenic),
+        ("waterfall", .scenic),
+        ("lake", .scenic),
+        ("hill station", .scenic),
+        ("national park", .scenic),
+        ("fort", .scenic),
+        ("temple", .scenic),
+        ("beach", .nearYou),
     ]
-    static func find(_ id: String) -> DiscoverRoute { all.first { $0.id == id } ?? all[0] }
+
+    func refresh(near location: CLLocation) async {
+        if let last = lastLoadedLocation, last.distance(from: location) < 5000, !suggestions.isEmpty {
+            return
+        }
+        isLoading = true
+        defer { isLoading = false }
+
+        let region = MKCoordinateRegion(
+            center: location.coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 2.0, longitudeDelta: 2.0))
+
+        var results: [DiscoverRoute] = []
+        var seen: Set<String> = []
+
+        for (query, category) in poiQueries {
+            let req = MKLocalSearch.Request()
+            req.naturalLanguageQuery = query
+            req.region = region
+            req.resultTypes = .pointOfInterest
+            guard let res = try? await MKLocalSearch(request: req).start() else { continue }
+
+            for item in res.mapItems.prefix(4) {
+                let coord = item.placemark.coordinate
+                let key = String(format: "%.3f_%.3f", coord.latitude, coord.longitude)
+                guard !seen.contains(key) else { continue }
+                seen.insert(key)
+
+                let name = item.name ?? query.capitalized
+                let distanceKm = location.distance(
+                    from: CLLocation(latitude: coord.latitude, longitude: coord.longitude)) / 1000
+                let driveMinutes = Int(round(distanceKm / 45.0 * 60))
+                let timeStr = driveMinutes < 60
+                    ? "\(max(1, driveMinutes))m"
+                    : "\(driveMinutes / 60)h \(driveMinutes % 60)m"
+
+                var cats: Set<RouteCategory> = [category]
+                if distanceKm < 40 { cats.insert(.nearYou) }
+                if distanceKm > 100 { cats.insert(.longDistance) }
+
+                let style = query.capitalized
+
+                results.append(DiscoverRoute(
+                    id: key,
+                    title: name,
+                    tag: style,
+                    from: "Your location",
+                    to: name,
+                    km: Int(round(distanceKm)),
+                    time: timeStr,
+                    style: style,
+                    blurb: item.placemark.title ?? "",
+                    startPlace: "Current location",
+                    finishPlace: item.placemark.title ?? name,
+                    stops: 1,
+                    startCoord: Coord(location.coordinate),
+                    endCoord: Coord(coord),
+                    coords: [Coord(location.coordinate), Coord(coord)], // Placeholder path
+                    categories: cats))
+            }
+        }
+
+        // Popular = closest 4 across all categories
+        let popular = results.sorted { $0.km < $1.km }.prefix(4)
+        for p in popular {
+            if let idx = results.firstIndex(where: { $0.id == p.id }) {
+                results[idx].categories.insert(.popular)
+            }
+        }
+
+        // ✅ Fetch actual road paths for the top 12 closest routes to avoid overloading the network
+        let sortedResults = results.sorted { $0.km < $1.km }
+        var fetchedResults: [DiscoverRoute] = []
+        
+        await withTaskGroup(of: (String, [Coord]).self) { group in
+            for (idx, route) in sortedResults.enumerated() {
+                if idx < 12 {
+                    group.addTask {
+                        let req = MKDirections.Request()
+                        req.source = MKMapItem(placemark: MKPlacemark(coordinate: route.startCoord.cl))
+                        req.destination = MKMapItem(placemark: MKPlacemark(coordinate: route.endCoord.cl))
+                        req.transportType = .automobile
+                        
+                        if let res = try? await MKDirections(request: req).calculate(),
+                           let r = res.routes.first {
+                            return (route.id, r.polyline.coords.map(Coord.init))
+                        }
+                        // Fallback to straight line if routing fails
+                        return (route.id, [route.startCoord, route.endCoord])
+                    }
+                }
+            }
+            
+            var paths: [String: [Coord]] = [:]
+            for await (id, path) in group {
+                paths[id] = path
+            }
+            
+            for route in sortedResults {
+                var r = route
+                r.coords = paths[route.id] ?? [route.startCoord, route.endCoord]
+                fetchedResults.append(r)
+            }
+        }
+
+        suggestions = fetchedResults
+        lastLoadedLocation = location
+    }
+
+    /// Force a rebuild from the current location.
+    func refreshNow(near location: CLLocation) async {
+        lastLoadedLocation = nil
+        await refresh(near: location)
+    }
 }
