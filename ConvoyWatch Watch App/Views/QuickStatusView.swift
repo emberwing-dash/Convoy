@@ -13,16 +13,28 @@ import SwiftUI
 
 public struct QuickStatusView: View {
     @ObservedObject var rideManager: RideManager = .shared
+    public var isEmbedded: Bool = false
     
-    public init() {}
+    public init(isEmbedded: Bool = false) {
+        self.isEmbedded = isEmbedded
+    }
     
     public var body: some View {
-        ScrollView {
-            VStack(spacing: 8) {
-                // Header
-                HStack(spacing: 5) {
-                    Image(systemName: "bolt.badge.clock.fill")
-                        .font(.system(size: 11, weight: .bold))
+        if isEmbedded {
+            content
+        } else {
+            ScrollView {
+                content
+            }
+        }
+    }
+    
+    private var content: some View {
+        VStack(spacing: 8) {
+            // Header
+            HStack(spacing: 5) {
+                Image(systemName: "bolt.badge.clock.fill")
+                    .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(W.amber)
                     Text("QUICK ALERTS")
                         .font(.system(size: 11, weight: .bold))
@@ -88,7 +100,6 @@ public struct QuickStatusView: View {
             .padding(.horizontal, 4)
             .padding(.bottom, 12)
         }
-    }
     
     private func quickStatusButton(
         type: QuickStatusType,

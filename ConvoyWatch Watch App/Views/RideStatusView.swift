@@ -10,52 +10,62 @@ import SwiftUI
 public struct RideStatusView: View {
     @ObservedObject var rideManager: RideManager = .shared
     @ObservedObject var connectivity: WatchConnectivityManager = .shared
+    public var isEmbedded: Bool = false
     
-    public init() {}
+    public init(isEmbedded: Bool = false) {
+        self.isEmbedded = isEmbedded
+    }
     
     public var body: some View {
-        ScrollView {
-            VStack(spacing: 8) {
-                // MARK: - Header: Ride Name & Live Connection Pill
-                VStack(spacing: 3) {
-                    HStack(spacing: 6) {
-                        AppIcon(size: 16)
-                        Text(rideManager.session.routeName.uppercased())
-                            .font(.system(size: 12, weight: .bold))
-                            .tracking(0.3)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                        Spacer()
-                    }
-                    
-                    // Connection Status Pill
-                    Button {
-                        rideManager.playHaptic(.click)
-                        let msg = connectivity.isReachable ? "Synced with Convoy iPhone" : "Convoy Phone Paired"
-                        rideManager.displayToast(message: msg)
-                    } label: {
-                        HStack(spacing: 6) {
-                            PulsingDot(
-                                color: rideManager.session.connectionStatus.color,
-                                size: 7
-                            )
-                            
-                            Text("\(rideManager.riders.count) RIDERS CONNECTED")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(rideManager.session.connectionStatus.color)
-                            
-                            Spacer()
-                            
-                            Image(systemName: connectivity.isReachable ? "iphone.radiowaves.left.and.right" : "iphone.slash")
-                                .font(.system(size: 11))
-                                .foregroundStyle(connectivity.isReachable ? W.green : W.secondary)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(W.card, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
+        if isEmbedded {
+            content
+        } else {
+            ScrollView {
+                content
+            }
+        }
+    }
+    
+    private var content: some View {
+        VStack(spacing: 8) {
+            // MARK: - Header: Ride Name & Live Connection Pill
+            VStack(spacing: 3) {
+                HStack(spacing: 6) {
+                    AppIcon(size: 16)
+                    Text(rideManager.session.routeName.uppercased())
+                        .font(.system(size: 12, weight: .bold))
+                        .tracking(0.3)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Spacer()
                 }
+                
+                // Connection Status Pill
+                Button {
+                    rideManager.syncWithIPhone()
+                } label: {
+                    HStack(spacing: 6) {
+                        PulsingDot(
+                            color: connectivity.isReachable ? W.green : W.amber,
+                            size: 7
+                        )
+                        
+                        Text(connectivity.isReachable ? "SYNCED WITH IPHONE" : "IPHONE STANDALONE")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(connectivity.isReachable ? W.green : W.amber)
+                        
+                        Spacer()
+                        
+                        Image(systemName: connectivity.isReachable ? "iphone.radiowaves.left.and.right" : "iphone.slash")
+                            .font(.system(size: 10))
+                            .foregroundStyle(connectivity.isReachable ? W.green : W.secondary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(W.card, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
                 .padding(.top, 2)
                 
                 // MARK: - Big Glanceable Speed & Formation Banner
@@ -146,7 +156,6 @@ public struct RideStatusView: View {
             .padding(.horizontal, 6)
             .padding(.bottom, 12)
         }
-    }
     
     private func telemetryCard(title: String, value: String, unit: String) -> some View {
         VStack(spacing: 2) {

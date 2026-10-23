@@ -10,24 +10,36 @@ import SwiftUI
 
 public struct CrewMapView: View {
     @ObservedObject var rideManager: RideManager = .shared
+    public var isEmbedded: Bool = false
     
     // Zoom range: 500m or 1500m max scale
     @State private var maxRangeMeters: Double = 1000.0
     @State private var selectedRider: CrewRider? = nil
     
-    public init() {}
+    public init(isEmbedded: Bool = false) {
+        self.isEmbedded = isEmbedded
+    }
     
     public var body: some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                // MARK: - Header & Scale Control
-                HStack {
-                    HStack(spacing: 5) {
-                        Image(systemName: "person.3.sequence.fill")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(W.amber)
-                        Text("CREW RADAR")
-                            .font(.system(size: 11, weight: .bold))
+        if isEmbedded {
+            content
+        } else {
+            ScrollView {
+                content
+            }
+        }
+    }
+    
+    private var content: some View {
+        VStack(spacing: 10) {
+            // MARK: - Header & Scale Control
+            HStack {
+                HStack(spacing: 5) {
+                    Image(systemName: "person.3.sequence.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(W.amber)
+                    Text("CREW RADAR")
+                        .font(.system(size: 11, weight: .bold))
                             .tracking(0.3)
                             .foregroundStyle(.white)
                     }
@@ -94,7 +106,6 @@ public struct CrewMapView: View {
             .padding(.horizontal, 4)
             .padding(.bottom, 12)
         }
-    }
     
     // MARK: - Radar Canvas
     

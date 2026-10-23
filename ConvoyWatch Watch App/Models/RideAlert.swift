@@ -29,6 +29,10 @@ public enum AlertKind: String, Codable {
     case fuelStop = "Fuel Stop"
     case traffic = "Traffic Ahead"
     case needHelp = "Need Help"
+    case breakdown = "Breakdown"
+    case lostRoute = "Lost Route"
+    case leadPing = "Lead Ping"
+    case medical = "Medical SOS"
     case stopAdded = "Stop Added"
     case general = "Ride Update"
     
@@ -42,8 +46,14 @@ public enum AlertKind: String, Codable {
             return "fuelpump.fill"
         case .traffic:
             return "car.2.fill"
-        case .needHelp:
+        case .needHelp, .medical:
             return "sos.circle.fill"
+        case .breakdown:
+            return "wrench.and.screwdriver.fill"
+        case .lostRoute:
+            return "location.slash.fill"
+        case .leadPing:
+            return "antenna.radiowaves.left.and.right"
         case .stopAdded:
             return "mappin.and.ellipse"
         case .general:
@@ -55,13 +65,13 @@ public enum AlertKind: String, Codable {
         switch self {
         case .fallingBehind:
             return .directionDown
-        case .separated:
+        case .separated, .breakdown:
             return .failure
-        case .needHelp:
+        case .needHelp, .medical:
             return .retry
-        case .fuelStop, .stopAdded:
+        case .fuelStop, .stopAdded, .leadPing:
             return .notification
-        case .traffic, .general:
+        case .traffic, .lostRoute, .general:
             return .click
         }
     }

@@ -69,29 +69,15 @@ public struct ActiveAlertModalView: View {
                 
                 // Glanceable Action Buttons
                 VStack(spacing: 6) {
-                    if alert.actions.count > 1 {
-                        ActionButton(
-                            title: alert.actions[0],
-                            style: alert.severity == .critical ? .red : .amber,
-                            height: 34
-                        ) {
-                            rideManager.respondToAlert(action: alert.actions[0])
-                        }
-                        
-                        ActionButton(
-                            title: alert.actions[1],
-                            style: .dark,
-                            height: 32
-                        ) {
-                            rideManager.respondToAlert(action: alert.actions[1])
-                        }
-                    } else if let singleAction = alert.actions.first {
-                        ActionButton(
-                            title: singleAction,
-                            style: .white,
-                            height: 36
-                        ) {
-                            rideManager.respondToAlert(action: singleAction)
+                    if !alert.actions.isEmpty {
+                        ForEach(Array(alert.actions.enumerated()), id: \.offset) { index, actionText in
+                            ActionButton(
+                                title: actionText,
+                                style: index == 0 ? (alert.severity == .critical ? .red : .amber) : .dark,
+                                height: 34
+                            ) {
+                                rideManager.respondToAlert(action: actionText)
+                            }
                         }
                     } else {
                         ActionButton(

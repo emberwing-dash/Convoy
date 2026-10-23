@@ -29,6 +29,7 @@ public final class RideManager: ObservableObject {
     @Published public var isRideFinished: Bool = false
     @Published public var isSimulating: Bool = false
     @Published public var hasConnectedToRide: Bool = false
+    @Published public var isSyncing: Bool = false
     @Published public var connectionStep: PhoneConnectionStep = .searching
     
     private var toastTimer: AnyCancellable?
@@ -106,27 +107,34 @@ public final class RideManager: ObservableObject {
             )
         ]
         
-        self.activeAlert = nil
+        self.activeAlert = RideAlert(
+            kind: .fallingBehind,
+            title: "Meera is drifting",
+            detail: "800 m back · 28 km/h",
+            severity: .warning,
+            timestamp: Date(),
+            riderName: "Meera",
+            riderAvatar: "avatar_meera",
+            actions: ["Wait for her", "Keep going"]
+        )
         self.alertHistory = [
             RideAlert(
                 kind: .fallingBehind,
-                title: "Meera is 800 m back",
-                detail: "We’ve asked if she’s okay.",
+                title: "Meera is drifting",
+                detail: "800 m back · 28 km/h",
                 severity: .warning,
-                timestamp: Date().addingTimeInterval(-180),
+                timestamp: Date().addingTimeInterval(-60),
                 riderName: "Meera",
                 riderAvatar: "avatar_meera",
                 actions: ["Wait for her", "Keep going"]
             ),
             RideAlert(
-                kind: .stopAdded,
-                title: "Rika added a stop",
-                detail: "HP Petrol Bunk · 1.2 km ahead · +2 min",
+                kind: .fuelStop,
+                title: "Fuel stop in 2.1 km",
+                detail: "HP Petrol Bunk · on your left",
                 severity: .info,
-                timestamp: Date().addingTimeInterval(-600),
-                riderName: "Rika",
-                riderAvatar: "avatar_rika",
-                actions: ["Got it"]
+                timestamp: Date().addingTimeInterval(-300),
+                actions: ["Stop here", "Skip"]
             )
         ]
         
@@ -147,13 +155,31 @@ public final class RideManager: ObservableObject {
             guard let self = self else { return }
             let title = payload["title"] as? String ?? "Alert"
             let detail = payload["detail"] as? String ?? ""
+            let kindStr = payload["kind"] as? String ?? "general"
+            let kind = AlertKind(rawValue: kindStr) ?? .general
             let alert = RideAlert(
-                kind: .general,
+                kind: kind,
                 title: title,
                 detail: detail,
-                severity: .warning
+                severity: kind == .medical ? .critical : .warning
             )
             self.presentAlert(alert)
+        }
+        
+        connectivity.onRideSyncReceived = { [weak self] payload in
+            guard let self = self else { return }
+            if let speed = payload["speed"] as? Int {
+                self.session.currentSpeedKmh = speed
+            }
+            if let dist = payload["distance"] as? Double {
+                self.session.distanceCoveredKm = dist
+            }
+            if let route = payload["routeName"] as? String {
+                self.session.routeName = route
+            }
+            self.session.isPhoneReachable = true
+            self.session.connectionStatus = .connected
+            self.displayToast(message: "Synced with iPhone alone")
         }
     }
     
@@ -240,8 +266,167 @@ public final class RideManager: ObservableObject {
     public func respondToAlert(action: String) {
         playHaptic(.success)
         connectivity.sendRideAction("Responded: \(action)")
-        displayToast(message: "Crew notified: \(action)")
-        dismissActiveAlert()
+        displayToast(message: "Notified crew: \(action)")
+        
+        if activeAlert?.title == "Meera is drifting" && action == "Wait for her" {
+            // Meera responds back as shown in Figma flow N04c
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                let replyAlert = RideAlert(
+                    kind: .fallingBehind,
+                    title: "Meera replied",
+                    detail: "“Stopped for a break - go ahead, I’ll catch up.”",
+                    severity: .info,
+                    riderName: "Meera",
+                    riderAvatar: "avatar_meera",
+                    actions: ["Call Meera", "Got it, keep going"]
+                )
+                self.presentAlert(replyAlert)
+            }
+        } else {
+            dismissActiveAlert()
+        }
+    }
+    
+    // MARK: - Tap Reasons (Fuel, Traffic, Rest)
+    
+    public func reportReason(_ type: QuickStatusType) {
+        playHaptic(type.hapticType)
+        connectivity.sendQuickStatus(type: type, riderName: "You")
+        displayToast(message: "Sent: \(type.title)")
+        
+        switch type {
+        case .fuelStop:
+            let alert = RideAlert(
+                kind: .fuelStop,
+                title: "Fuel stop in 2.1 km",
+                detail: "HP Petrol Bunk on your left. All 6 riders were told.",
+                severity: .warning,
+                actions: ["Stop here", "Skip"]
+            )
+            presentAlert(alert)
+        case .traffic:
+            let alert = RideAlert(
+                kind: .traffic,
+                title: "Heavy Traffic Ahead",
+                detail: "Reported jam · Slow down to 40 km/h.",
+                severity: .warning,
+                actions: ["Got it"]
+            )
+            presentAlert(alert)
+        case .breakStop:
+            let alert = RideAlert(
+                kind: .general,
+                title: "Rest Break Requested",
+                detail: "Next chai stop at 1.2 km.",
+                severity: .info,
+                actions: ["Got it"]
+            )
+            presentAlert(alert)
+        case .needHelp:
+            broadcastEmergencySOS()
+        }
+    }
+    
+    // MARK: - Rider Help & SOS Broadcasts
+    
+    public func broadcastEmergencySOS() {
+        playHaptic(.retry)
+        connectivity.sendHelpAlert(kind: "medical", title: "EMERGENCY SOS", detail: "Rider requested immediate emergency SOS")
+        displayToast(message: "🚨 SOS Broadcasted to iPhone Alone")
+        
+        let alert = RideAlert(
+            kind: .medical,
+            title: "🚨 SOS Broadcast Sent",
+            detail: "Emergency alert sent to Lead Rider Arjun & Convoy iPhone.",
+            severity: .critical,
+            actions: ["Call Lead Rider", "I'm Safe (Cancel SOS)"]
+        )
+        presentAlert(alert)
+    }
+    
+    public func broadcastBreakdownHelp() {
+        playHaptic(.failure)
+        connectivity.sendHelpAlert(kind: "breakdown", title: "Mechanical Breakdown", detail: "Flat tyre / mechanical issue reported")
+        displayToast(message: "Sent: Breakdown Assistance")
+        
+        let alert = RideAlert(
+            kind: .breakdown,
+            title: "Breakdown Reported",
+            detail: "Mechanical alert broadcasted. Pack asked to regroup at nearest pullout.",
+            severity: .warning,
+            actions: ["Regroup", "Cancel Alert"]
+        )
+        presentAlert(alert)
+    }
+    
+    public func broadcastFallingBehindHelp() {
+        playHaptic(.directionDown)
+        connectivity.sendHelpAlert(kind: "fallingBehind", title: "Falling Behind", detail: "Requesting pack to slow down or wait")
+        displayToast(message: "Sent: Wait for Me")
+        
+        let alert = RideAlert(
+            kind: .fallingBehind,
+            title: "Wait for Me Sent",
+            detail: "Asked crew to ease pace or wait at next junction.",
+            severity: .warning,
+            actions: ["Wait for Me", "Dismiss"]
+        )
+        presentAlert(alert)
+    }
+    
+    public func broadcastLostHelp() {
+        playHaptic(.click)
+        connectivity.sendHelpAlert(kind: "lostRoute", title: "Lost Route", detail: "Missed turn or separated from convoy")
+        displayToast(message: "Sent: Need Regroup")
+        
+        let alert = RideAlert(
+            kind: .lostRoute,
+            title: "Missed Exit / Lost Route",
+            detail: "Lead rider notified. Regroup coordinates requested.",
+            severity: .warning,
+            actions: ["Request Route", "Dismiss"]
+        )
+        presentAlert(alert)
+    }
+    
+    public func pingLeadRider() {
+        playHaptic(.notification)
+        connectivity.sendRideAction("Pinged Lead Rider Arjun")
+        displayToast(message: "Pinged Lead Rider Arjun")
+        
+        let alert = RideAlert(
+            kind: .leadPing,
+            title: "Pinged Lead Rider (Arjun)",
+            detail: "Direct check-in ping sent to Arjun on Convoy iPhone.",
+            severity: .info,
+            actions: ["OK"]
+        )
+        alertHistory.insert(alert, at: 0)
+    }
+    
+    public func syncWithIPhone() {
+        isSyncing = true
+        playHaptic(.click)
+        connectivity.sendSyncPing()
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                self.isSyncing = false
+                self.hasConnectedToRide = true
+                self.session.isPhoneReachable = true
+                self.session.connectionStatus = .connected
+            }
+            self.playHaptic(.notification)
+            self.displayToast(message: "Connected to Convoy iPhone")
+        }
+    }
+    
+    public func disconnectFromIPhone() {
+        playHaptic(.click)
+        withAnimation(.easeInOut(duration: 0.25)) {
+            self.hasConnectedToRide = false
+            self.session.isPhoneReachable = false
+        }
     }
     
     // MARK: - Alert Simulations (For Demo & Testing)

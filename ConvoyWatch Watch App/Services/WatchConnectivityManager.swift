@@ -22,6 +22,7 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, WCSessi
     // Callback closures for RideManager to handle incoming events
     public var onQuickStatusReceived: ((String, String) -> Void)?
     public var onAlertReceived: (([String: Any]) -> Void)?
+    public var onRideSyncReceived: (([String: Any]) -> Void)?
     
     private override init() {
         super.init()
@@ -46,6 +47,27 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, WCSessi
             "timestamp": Date().timeIntervalSince1970
         ]
         send(payload: payload, actionLabel: "Broadcast \(type.title)")
+    }
+    
+    public func sendHelpAlert(kind: String, title: String, detail: String) {
+        let payload: [String: Any] = [
+            "type": "help_alert",
+            "kind": kind,
+            "title": title,
+            "detail": detail,
+            "rider": "You",
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        send(payload: payload, actionLabel: "Help: \(title)")
+    }
+    
+    public func sendSyncPing() {
+        let payload: [String: Any] = [
+            "type": "sync_ping",
+            "client": "ConvoyWatch",
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        send(payload: payload, actionLabel: "Sync with iPhone")
     }
     
     public func sendRideAction(_ action: String) {
@@ -109,8 +131,10 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, WCSessi
                    let status = payload["status"] as? String,
                    let rider = payload["rider"] as? String {
                     self.onQuickStatusReceived?(status, rider)
-                } else if type == "alert" {
+                } else if type == "alert" || type == "help_alert" {
                     self.onAlertReceived?(payload)
+                } else if type == "ride_sync" || type == "sync_ack" {
+                    self.onRideSyncReceived?(payload)
                 }
             }
         }
