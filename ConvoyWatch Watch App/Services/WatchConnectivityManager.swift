@@ -23,6 +23,7 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, WCSessi
     public var onQuickStatusReceived: ((String, String) -> Void)?
     public var onAlertReceived: (([String: Any]) -> Void)?
     public var onRideSyncReceived: (([String: Any]) -> Void)?
+    public var onVoiceReplyReceived: ((String, String, String) -> Void)? // from, to, message
     
     private override init() {
         super.init()
@@ -135,6 +136,12 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, WCSessi
                     self.onAlertReceived?(payload)
                 } else if type == "ride_sync" || type == "sync_ack" {
                     self.onRideSyncReceived?(payload)
+                } else if type == "voice_reply",
+                          let from = payload["from"] as? String,
+                          let to = payload["to"] as? String,
+                          let message = payload["message"] as? String {
+                    // Incoming voice reply from another rider (relayed via iPhone)
+                    self.onVoiceReplyReceived?(from, to, message)
                 }
             }
         }

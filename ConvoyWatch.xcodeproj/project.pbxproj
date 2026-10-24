@@ -304,6 +304,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = ConvoyWatch;
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Convoy uses voice recognition so you can reply to riders hands-free while driving.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Convoy needs microphone access to record voice replies and commands while riding.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -337,6 +339,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = ConvoyWatch;
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Convoy uses voice recognition so you can reply to riders hands-free while driving.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Convoy needs microphone access to record voice replies and commands while riding.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
 				LD_RUNPATH_SEARCH_PATHS = (

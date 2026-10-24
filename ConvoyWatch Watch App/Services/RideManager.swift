@@ -31,6 +31,7 @@ public final class RideManager: ObservableObject {
     @Published public var hasConnectedToRide: Bool = false
     @Published public var isSyncing: Bool = false
     @Published public var connectionStep: PhoneConnectionStep = .searching
+    @Published public var showSyncPairingScreen: Bool = true
     
     private var toastTimer: AnyCancellable?
     private var telemetryTimer: AnyCancellable?
@@ -181,6 +182,20 @@ public final class RideManager: ObservableObject {
             self.session.connectionStatus = .connected
             self.displayToast(message: "Synced with iPhone alone")
         }
+        
+        connectivity.onVoiceReplyReceived = { [weak self] from, to, message in
+            guard let self = self else { return }
+            // Show a notification that another rider sent a voice reply
+            let alert = RideAlert(
+                kind: .general,
+                title: "\(from) replied",
+                detail: "\"\(message)\"",
+                severity: .info,
+                riderName: from,
+                actions: ["Got it", "Reply back"]
+            )
+            self.presentAlert(alert)
+        }
     }
     
     private func startLiveTimer() {
@@ -285,6 +300,37 @@ public final class RideManager: ObservableObject {
         } else {
             dismissActiveAlert()
         }
+    }
+    
+    // MARK: - Voice Reply (Siri Hands-Free)
+    
+    /// Called by SiriVoiceService when the rider dictates a reply to another rider.
+    /// The message is sent via WatchConnectivity to the iPhone which relays it to the crew.
+    public func sendVoiceReply(to riderName: String, message: String) {
+        playHaptic(.success)
+        
+        // Send via WatchConnectivity → iPhone → relay to crew
+        let payload: [String: Any] = [
+            "type": "voice_reply",
+            "to": riderName,
+            "message": message,
+            "from": "You",
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        connectivity.send(payload: payload, actionLabel: "Voice reply to \(riderName)")
+        
+        // Visual toast confirmation
+        displayToast(message: "✓ Sent to \(riderName)")
+        
+        // Log in alert history so rider can see what was sent
+        let alert = RideAlert(
+            kind: .general,
+            title: "You replied to \(riderName)",
+            detail: "\"\(message)\"",
+            severity: .info,
+            actions: ["OK"]
+        )
+        alertHistory.insert(alert, at: 0)
     }
     
     // MARK: - Tap Reasons (Fuel, Traffic, Rest)
