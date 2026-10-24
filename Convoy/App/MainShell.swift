@@ -56,6 +56,8 @@ struct MainShell: View {
                 case .planRoutes:         PlanRoutesView()
                 case .planReview:         PlanReviewView()
                 case .planCreated:        PlanCreatedView()
+                case .notifications:      NotificationView()
+                case .userSearch(let ctx): UserSearchView(context: ctx)
                 case .placeholder(let t): PlaceholderScreen(title: t, canPop: true)
                 }
             }

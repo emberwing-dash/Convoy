@@ -1,3 +1,4 @@
+// PlanModels.swift
 import SwiftUI
 import CoreLocation
 
@@ -6,32 +7,43 @@ enum RouteStyle: String, CaseIterable, Identifiable, Hashable {
     var id: String { rawValue }
 }
 
-struct Coord: Hashable {
+struct Coord: Hashable, Sendable {
     var lat: Double, lon: Double
-    init(lat: Double, lon: Double) { self.lat = lat; self.lon = lon }
-    nonisolated init(_ c: CLLocationCoordinate2D) { lat = c.latitude; lon = c.longitude }
-    var cl: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
+
+    nonisolated init(lat: Double, lon: Double) {
+        self.lat = lat
+        self.lon = lon
+    }
+
+    nonisolated init(_ c: CLLocationCoordinate2D) {
+        lat = c.latitude
+        lon = c.longitude
+    }
+
+    nonisolated var cl: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    }
 }
 
 /// A real navigation maneuver step extracted from Apple MapKit (MKRoute.Step).
-struct NavStep: Identifiable, Hashable {
+struct NavStep: Identifiable, Hashable, Sendable {
     var id = UUID()
     var instructions: String
     var notice: String? = nil
-    var distance: Double // in meters
+    var distance: Double
     var coordinate: Coord
     var symbol: String = "arrow.up"
 }
 
 /// One of the routes Convoy computes for a plan using real MapKit routing.
-struct RouteSummary: Hashable {
+struct RouteSummary: Hashable, Sendable {
     var km: Double
     var minutes: Int
     var coords: [Coord]
     var note: String = ""
     var steps: [NavStep] = []
-    var rawDistance: Double = 0 // in meters
-    var rawTime: Double = 0     // in seconds
+    var rawDistance: Double = 0
+    var rawTime: Double = 0
 }
 
 func durationText(_ minutes: Int) -> String {
@@ -88,9 +100,7 @@ struct PlanDraft: Hashable {
     }
 
     var effectiveName: String {
-        if !name.trimmingCharacters(in: .whitespaces).isEmpty {
-            return name
-        }
+        if !name.trimmingCharacters(in: .whitespaces).isEmpty { return name }
         if !to.trimmingCharacters(in: .whitespaces).isEmpty {
             let dest = to.components(separatedBy: ",")[0]
             return "Ride to \(dest)"
@@ -109,9 +119,7 @@ struct PlanDraft: Hashable {
 
     func distanceText(_ s: RouteStyle) -> String {
         if let r = routes[s], r.km > 0 {
-            if r.km < 1.0 {
-                return "\(Int(r.rawDistance)) m"
-            }
+            if r.km < 1.0 { return "\(Int(r.rawDistance)) m" }
             return String(format: "%.1f km", r.km)
         }
         return "-- km"
@@ -128,7 +136,9 @@ struct PlanDraft: Hashable {
 
     static func nextSunday6am() -> Date {
         let cal = Calendar.current
-        var comps = DateComponents(); comps.weekday = 1; comps.hour = 6; comps.minute = 0
-        return cal.nextDate(after: .now, matching: comps, matchingPolicy: .nextTime) ?? .now.addingTimeInterval(86400)
+        var comps = DateComponents()
+        comps.weekday = 1; comps.hour = 6; comps.minute = 0
+        return cal.nextDate(after: .now, matching: comps, matchingPolicy: .nextTime)
+            ?? .now.addingTimeInterval(86400)
     }
 }

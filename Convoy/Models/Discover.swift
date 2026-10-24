@@ -27,7 +27,7 @@ struct DiscoverRoute: Identifiable, Hashable {
     var stops: Int
     var startCoord: Coord
     var endCoord: Coord
-    var coords: [Coord] // ✅ Added to store the real road path
+    var coords: [Coord]
     var categories: Set<RouteCategory>
 }
 
@@ -107,12 +107,11 @@ final class DiscoverService {
                     stops: 1,
                     startCoord: Coord(location.coordinate),
                     endCoord: Coord(coord),
-                    coords: [Coord(location.coordinate), Coord(coord)], // Placeholder path
+                    coords: [Coord(location.coordinate), Coord(coord)],
                     categories: cats))
             }
         }
 
-        // Popular = closest 4 across all categories
         let popular = results.sorted { $0.km < $1.km }.prefix(4)
         for p in popular {
             if let idx = results.firstIndex(where: { $0.id == p.id }) {
@@ -120,34 +119,46 @@ final class DiscoverService {
             }
         }
 
-        // ✅ Fetch actual road paths for the top 12 closest routes to avoid overloading the network
         let sortedResults = results.sorted { $0.km < $1.km }
         var fetchedResults: [DiscoverRoute] = []
-        
+
         await withTaskGroup(of: (String, [Coord]).self) { group in
             for (idx, route) in sortedResults.enumerated() {
-                if idx < 12 {
-                    group.addTask {
-                        let req = MKDirections.Request()
-                        req.source = MKMapItem(placemark: MKPlacemark(coordinate: route.startCoord.cl))
-                        req.destination = MKMapItem(placemark: MKPlacemark(coordinate: route.endCoord.cl))
-                        req.transportType = .automobile
-                        
-                        if let res = try? await MKDirections(request: req).calculate(),
-                           let r = res.routes.first {
-                            return (route.id, r.polyline.coords.map(Coord.init))
-                        }
-                        // Fallback to straight line if routing fails
-                        return (route.id, [route.startCoord, route.endCoord])
+                guard idx < 12 else { continue }
+
+                // Extract primitives BEFORE entering the Sendable closure
+                // so we don't touch `Coord` (which is fine, but `cl` was
+                // the main actor-isolated access that broke).
+                let routeId = route.id
+                let startLat = route.startCoord.lat
+                let startLon = route.startCoord.lon
+                let endLat = route.endCoord.lat
+                let endLon = route.endCoord.lon
+                let fallbackStart = route.startCoord
+                let fallbackEnd = route.endCoord
+
+                group.addTask {
+                    let req = MKDirections.Request()
+                    req.source = MKMapItem(placemark: MKPlacemark(
+                        coordinate: CLLocationCoordinate2D(latitude: startLat, longitude: startLon)))
+                    req.destination = MKMapItem(placemark: MKPlacemark(
+                        coordinate: CLLocationCoordinate2D(latitude: endLat, longitude: endLon)))
+                    req.transportType = .automobile
+
+                    if let res = try? await MKDirections(request: req).calculate(),
+                       let r = res.routes.first {
+                        let coords = r.polyline.coords.map { Coord(lat: $0.latitude, lon: $0.longitude) }
+                        return (routeId, coords)
                     }
+                    return (routeId, [fallbackStart, fallbackEnd])
                 }
             }
-            
+
             var paths: [String: [Coord]] = [:]
             for await (id, path) in group {
                 paths[id] = path
             }
-            
+
             for route in sortedResults {
                 var r = route
                 r.coords = paths[route.id] ?? [route.startCoord, route.endCoord]

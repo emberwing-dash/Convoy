@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>SUPABASE_KEY</key>
+	<string>sb_publishable_4cTQxSHnQbUtxLE_n2Rz7A_YDCuQ5-0</string>
+	<key>SUPABASE_URL</key>
+	<string>https://avykoruhcgwpmvmddlta.supabase.co</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>audio</string>
+	</array>
+</dict>
+</plist>

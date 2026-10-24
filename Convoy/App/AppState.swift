@@ -7,6 +7,23 @@ enum CrewSegment { case crews, friends }
 enum RidePhase { case starting, navigating }
 enum AppTab: Hashable { case ride, discover, crew }
 
+enum NotificationType { case friendRequest, crewInvite }
+struct AppNotification: Identifiable {
+    let id: UUID
+    let type: NotificationType
+    let title: String
+    let subtitle: String
+    let avatarData: Data?
+    let date: Date
+    let requestId: UUID
+    let crewId: UUID?
+}
+
+enum SearchContext: Hashable {
+    case friends
+    case crew(UUID)
+}
+
 enum Route: Hashable {
     case profile, joinCode, joinFound, myRides, garage
     case document(String)
@@ -23,6 +40,9 @@ enum Route: Hashable {
     case rideDetails(UUID), pastRide(UUID)
     case shareCard, rideStart, rideNav, rideComplete
     case inviteCode
+    // New
+    case notifications
+    case userSearch(SearchContext)
     case placeholder(String)
 }
 
@@ -38,7 +58,20 @@ final class AppState {
     var displayName = "Rider"
     var handle = "rider"
     var avatarImageData: Data? = nil
-
+    var backendUserId: UUID? = nil {
+        didSet {
+            if let backendUserId {
+                UserDefaults.standard.set(backendUserId.uuidString, forKey: "backendUserId")
+            }
+        }
+    }
+    
+    // Friends & Notifications
+    var friends: [ProfileRow] = []
+    var notifications: [AppNotification] = []
+    var pendingFriendRequests: [FriendshipWithProfile] = []
+    var incomingCrewInvites: [CrewInviteWithDetails] = []
+    
     // Navigation
     var tab: AppTab = .ride
     var path: [Route] = []
@@ -67,50 +100,167 @@ final class AppState {
     // MARK: - Computed
     var upcomingRide: Ride? { rides.first }
     var sortedRides: [Ride] { rides.sorted { $0.departs < $1.departs } }
+    var hasUnreadNotifications: Bool { !notifications.isEmpty }
 
     init() {
-            if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
-                self.phase = .main
-                self.displayName = profile.displayName.isEmpty ? "Rider" : profile.displayName
-                self.handle = profile.handle.isEmpty ? "@rider" : profile.handle
-                self.avatarImageData = profile.avatarImageData
-            }
+        if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
+            self.phase = .main
+            self.displayName = profile.displayName.isEmpty ? "Rider" : profile.displayName
+            self.handle = profile.handle.isEmpty ? "@rider" : profile.handle
+            self.avatarImageData = profile.avatarImageData
+        }
 
-            let entities = StorageService.shared.loadActiveRides()
-            self.rides = entities
-                .map { $0.toRide(displayName: displayName, avatarData: avatarImageData) }
-                .sorted { $0.departs < $1.departs }
+        if let storedId = UserDefaults.standard.string(forKey: "backendUserId"), let uuid = UUID(uuidString: storedId) {
+            self.backendUserId = uuid
+        } else if let authId = SupabaseManager.shared.currentUserId {
+            self.backendUserId = authId
+        }
 
-            self.completedRides = StorageService.shared.loadCompletedRides()
-            self.crews = StorageService.shared.loadCrews().map(CrewGroup.from)
-            
-            // ✅ Load saved routes with their paths
-            self.savedRoutes = StorageService.shared.loadSavedRoutes().map { e in
-                var coords: [Coord] = []
-                if let data = e.coordsJSON.data(using: .utf8),
-                   let pairs = try? JSONSerialization.jsonObject(with: data) as? [[Double]] {
-                    coords = pairs.compactMap { pair in
-                        guard pair.count == 2 else { return nil }
-                        return Coord(lat: pair[0], lon: pair[1])
-                    }
+        let entities = StorageService.shared.loadActiveRides()
+        self.rides = entities
+            .map { $0.toRide(displayName: displayName, avatarData: avatarImageData) }
+            .sorted { $0.departs < $1.departs }
+
+        self.completedRides = StorageService.shared.loadCompletedRides()
+        self.crews = StorageService.shared.loadCrews().map(CrewGroup.from)
+        
+        self.savedRoutes = StorageService.shared.loadSavedRoutes().map { e in
+            var coords: [Coord] = []
+            if let data = e.coordsJSON.data(using: .utf8),
+               let pairs = try? JSONSerialization.jsonObject(with: data) as? [[Double]] {
+                coords = pairs.compactMap { pair in
+                    guard pair.count == 2 else { return nil }
+                    return Coord(lat: pair[0], lon: pair[1])
                 }
-                
-                let start = Coord(lat: e.startLat, lon: e.startLon)
-                let end = Coord(lat: e.endLat, lon: e.endLon)
-                if coords.isEmpty { coords = [start, end] }
-                
-                return DiscoverRoute(
-                    id: e.id, title: e.title, tag: e.tag,
-                    from: e.from, to: e.to, km: e.km, time: e.time,
-                    style: e.style, blurb: e.blurb,
-                    startPlace: e.startPlace, finishPlace: e.finishPlace,
-                    stops: e.stops,
-                    startCoord: start,
-                    endCoord: end,
-                    coords: coords,
-                    categories: Set(e.categoriesRaw.split(separator: ",").compactMap { RouteCategory(rawValue: String($0)) })
-                )
             }
+            
+            let start = Coord(lat: e.startLat, lon: e.startLon)
+            let end = Coord(lat: e.endLat, lon: e.endLon)
+            if coords.isEmpty { coords = [start, end] }
+            
+            return DiscoverRoute(
+                id: e.id, title: e.title, tag: e.tag,
+                from: e.from, to: e.to, km: e.km, time: e.time,
+                style: e.style, blurb: e.blurb,
+                startPlace: e.startPlace, finishPlace: e.finishPlace,
+                stops: e.stops,
+                startCoord: start,
+                endCoord: end,
+                coords: coords,
+                categories: Set(e.categoriesRaw.split(separator: ",").compactMap { RouteCategory(rawValue: String($0)) })
+            )
+        }
+    }
+    
+    // ✅ FIX: Updated to populate all three notification arrays
+    func refreshNotifications() async {
+        guard let userId = backendUserId else { return }
+        await loadFriends()
+        await loadCrews()
+        do {
+            let friendReqs = try await SupabaseManager.shared.fetchPendingFriendRequests(for: userId)
+            let crewInvites = try await SupabaseManager.shared.fetchIncomingCrewInvites(for: userId)
+            
+            var notifs: [AppNotification] = []
+            
+            for req in friendReqs {
+                notifs.append(AppNotification(
+                    id: req.id,
+                    type: .friendRequest,
+                    title: "Friend Request",
+                    subtitle: "\(req.profiles.display_name) (@\(req.profiles.username)) wants to be friends.",
+                    avatarData: req.profiles.avatar_data.flatMap { Data(base64Encoded: $0) },
+                    date: Date(),
+                    requestId: req.id,
+                    crewId: nil
+                ))
+            }
+            
+            for invite in crewInvites {
+                let inviterName = invite.profiles?.display_name ?? "Someone"
+                notifs.append(AppNotification(
+                    id: invite.id,
+                    type: .crewInvite,
+                    title: "Crew Invite",
+                    subtitle: "\(inviterName) invited you to join \(invite.crews.name).",
+                    avatarData: invite.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
+                    date: Date(),
+                    requestId: invite.id,
+                    crewId: invite.crew_id
+                ))
+            }
+            
+            await MainActor.run {
+                self.notifications = notifs
+                self.pendingFriendRequests = friendReqs
+                self.incomingCrewInvites = crewInvites
+            }
+        } catch {
+            print("Error fetching notifications: \(error)")
+        }
+    }
+    
+    func acceptNotification(_ notif: AppNotification) async {
+        do {
+            if notif.type == .friendRequest {
+                try await SupabaseManager.shared.acceptFriendRequest(requestId: notif.requestId)
+                await loadFriends()
+            } else {
+                try await SupabaseManager.shared.acceptCrewInvite(memberId: notif.requestId)
+                await loadCrews()
+            }
+            await MainActor.run {
+                self.notifications.removeAll { $0.id == notif.id }
+                self.pendingFriendRequests.removeAll { $0.id == notif.requestId }
+                self.incomingCrewInvites.removeAll { $0.id == notif.requestId }
+            }
+        } catch {
+            print("Error accepting: \(error)")
+        }
+    }
+    
+    func declineNotification(_ notif: AppNotification) async {
+        do {
+            if notif.type == .crewInvite {
+                try await SupabaseManager.shared.declineCrewInvite(memberId: notif.requestId)
+            }
+            await MainActor.run {
+                self.notifications.removeAll { $0.id == notif.id }
+                self.pendingFriendRequests.removeAll { $0.id == notif.requestId }
+                self.incomingCrewInvites.removeAll { $0.id == notif.requestId }
+            }
+        } catch {
+            print("Error declining: \(error)")
+        }
+    }
+
+    func loadFriends() async {
+        guard let userId = backendUserId else { return }
+        do {
+            let fetched = try await SupabaseManager.shared.fetchFriends(for: userId)
+            await MainActor.run { self.friends = fetched }
+        } catch {
+            print("Error loading friends: \(error)")
+        }
+    }
+
+    func loadCrews() async {
+        guard let userId = backendUserId else { return }
+        do {
+            let hydrated = try await SupabaseManager.shared.fetchCrewsWithMembers(for: userId)
+            await MainActor.run { self.crews = hydrated }
+        } catch {
+            print("Error loading crews: \(error)")
+        }
+    }
+    
+    func generateUniqueHandle(base: String) -> String {
+        let clean = base.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "")
+            .filter { $0.isLetter || $0.isNumber }
+        let safeBase = clean.isEmpty ? "rider" : String(clean.prefix(12))
+        let suffix = Int.random(in: 100...999)
+        return "@\(safeBase)\(suffix)"
     }
 
     func completeOnboarding(name: String, handle: String, imageData: Data? = nil) {
@@ -136,7 +286,6 @@ final class AppState {
         }
     }
 
-    /// Turn the current draft into a ride and persist it.
     func finishPlan() {
         let ride = Ride(
             title: draft.effectiveName,
@@ -177,16 +326,6 @@ final class AppState {
         push(.pastRide(id))
     }
 
-    func updateRideDeparture(id: UUID, newDate: Date) {
-        guard let idx = rides.firstIndex(where: { $0.id == id }) else { return }
-        rides[idx].departs = newDate
-        rides[idx].displayDate = newDate.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
-        rides[idx].displayTime = newDate.formatted(.dateTime.hour().minute())
-        rides[idx].lockText = "Start ride opens \(newDate.formatted(.dateTime.hour().minute()))"
-        rides.sort { $0.departs < $1.departs }
-    }
-
-    // MARK: - Join
     func joinRideByCode(_ code: String) -> Bool {
         let clean = code.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return false }
@@ -199,7 +338,6 @@ final class AppState {
         return true
     }
 
-    // MARK: - Discover
     func startPlan(from route: DiscoverRoute, startAt: String) {
         draft = PlanDraft(name: route.title, from: startAt, to: route.finishPlace,
                           stops: [], routeSet: true, style: .scenic)
@@ -221,29 +359,52 @@ final class AppState {
     func isSaved(_ route: DiscoverRoute) -> Bool {
         savedRoutes.contains { $0.id == route.id }
     }
-
-    // MARK: - Crews
-    func createCrew(name: String, detail: String, avatarData: Data?) {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
-        let finalName = trimmed.isEmpty ? "My crew" : trimmed
-        let me = CrewMember(name: displayName, detail: "Admin", avatarData: avatarImageData)
-        let crew = CrewGroup(
-            name: finalName,
-            detail: detail.isEmpty ? "1 rider · just you" : detail,
-            accentHex: 0xFF3B30,
-            avatarData: avatarData,
-            members: [me],
-            since: Date(),
-            code: CrewGroup.makeCode(name: finalName)
-        )
-        crews.append(crew)
-        StorageService.shared.saveCrew(crew)
+    
+    func loadCrewInvites() async {
+        await refreshNotifications()
     }
 
-    func updateCrewAvatar(id: UUID, avatarData: Data) {
-        guard let idx = crews.firstIndex(where: { $0.id == id }) else { return }
-        crews[idx].avatarData = avatarData
-        StorageService.shared.updateCrewAvatar(id: id, avatarData: avatarData)
+    func loadFriendRequests() async {
+        await refreshNotifications()
+        await loadFriends()
+    }
+    
+    func acceptCrewInvite(memberId: UUID) async {
+        do {
+            try await SupabaseManager.shared.acceptCrewInvite(memberId: memberId)
+            await loadCrews()
+            await MainActor.run {
+                self.incomingCrewInvites.removeAll { $0.id == memberId }
+                self.notifications.removeAll { $0.requestId == memberId }
+            }
+        } catch {
+            print("Error accepting crew invite: \(error)")
+        }
+    }
+
+    func declineCrewInvite(memberId: UUID) async {
+        do {
+            try await SupabaseManager.shared.declineCrewInvite(memberId: memberId)
+            await MainActor.run {
+                self.incomingCrewInvites.removeAll { $0.id == memberId }
+                self.notifications.removeAll { $0.requestId == memberId }
+            }
+        } catch {
+            print("Error declining crew invite: \(error)")
+        }
+    }
+    
+    func acceptFriend(requestId: UUID) async {
+        do {
+            try await SupabaseManager.shared.acceptFriendRequest(requestId: requestId)
+            await loadFriends()
+            await MainActor.run {
+                self.pendingFriendRequests.removeAll { $0.id == requestId }
+                self.notifications.removeAll { $0.requestId == requestId }
+            }
+        } catch {
+            print("Error accepting friend request: \(error)")
+        }
     }
 
     // MARK: - Navigation helpers

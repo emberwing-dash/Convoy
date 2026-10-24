@@ -30,7 +30,15 @@ struct PlanWhoView: View {
                 .cvText(20, .semibold, tracking: -0.3, lineHeight: 25, inter: true)
                 .at(20, 386)
 
-            noFriendsCard.at(20, 420)
+            if app.friends.count > 1 {
+                seeAll { app.push(.pickFriends) }.at(326, 389)
+            }
+
+            if app.friends.isEmpty {
+                noFriendsCard.at(20, 420)
+            } else {
+                friendsRow.at(0, 420)
+            }
 
             LinearGradient(
                 stops: [
@@ -44,13 +52,17 @@ struct PlanWhoView: View {
             .at(0, 692)
             .allowsHitTesting(false)
 
-            if app.selectedCrew != nil {
+            if app.selectedCrew != nil || !app.selectedFriends.isEmpty {
                 summary.at(20, 714)
             }
 
             PrimaryButton(title: "Continue") { app.push(.planDetails) }
                 .frame(width: 353)
                 .at(20, 750)
+        }
+        .task {
+            await app.loadFriends()
+            await app.loadCrews()
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
@@ -209,13 +221,105 @@ struct PlanWhoView: View {
         .frame(width: 393, alignment: .leading)
     }
 
+    private var friendsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 14) {
+                ForEach(app.friends) { f in
+                    let on = app.selectedFriends.contains(f.username)
+                    Button {
+                        if on {
+                            app.selectedFriends.remove(f.username)
+                        } else {
+                            app.selectedFriends.insert(f.username)
+                        }
+                    } label: {
+                        VStack(spacing: 8) {
+                            ZStack(alignment: .bottomTrailing) {
+                                Circle()
+                                    .strokeBorder(on ? CV.red : Color.white.opacity(0.12),
+                                                  lineWidth: on ? 2.5 : 1.5)
+                                    .frame(width: 76, height: 76)
+                                AvatarChip(data: f.avatar_data.flatMap { Data(base64Encoded: $0) },
+                                           name: f.display_name,
+                                           size: 66)
+                                    .opacity(on ? 1 : 0.85)
+                                    .frame(width: 76, height: 76)
+                                if on {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 22, height: 22)
+                                        .background(CV.red, in: Circle())
+                                        .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
+                                        .offset(x: 2, y: 2)
+                                }
+                            }
+                            Text(f.display_name.isEmpty ? "@\(f.username)" : f.display_name)
+                                .cvText(13, on ? .semibold : .medium,
+                                        color: on ? CV.cream : CV.muted, inter: true)
+                                .lineLimit(1)
+                                .multilineTextAlignment(.center)
+                                .frame(width: 80)
+                        }
+                        .frame(width: 80)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button { app.push(.inviteFriends) } label: {
+                    VStack(spacing: 8) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.04))
+                                .frame(width: 76, height: 76)
+                            Circle()
+                                .strokeBorder(CV.red.opacity(0.6),
+                                              style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                                .frame(width: 76, height: 76)
+                            Image(systemName: "plus")
+                                .font(.system(size: 24, weight: .semibold))
+                                .foregroundStyle(CV.red)
+                        }
+                        Text("Add friend")
+                            .cvText(13, .medium, color: CV.muted, inter: true)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 80)
+                    }
+                    .frame(width: 80)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+        }
+        .frame(width: 393, alignment: .leading)
+    }
+
     private var summary: some View {
         let crew = app.crews.first { $0.id == app.selectedCrew }
-        let text = crew?.name ?? ""
+        let friendsCount = app.selectedFriends.count
+        
+        let text: String
+        if let c = crew, friendsCount > 0 {
+            text = "\(c.name) + \(friendsCount) friend\(friendsCount == 1 ? "" : "s")"
+        } else if let c = crew {
+            text = c.name
+        } else if friendsCount > 0 {
+            text = "\(friendsCount) friend\(friendsCount == 1 ? "" : "s") riding"
+        } else {
+            text = ""
+        }
+
         return HStack(spacing: 10) {
             if let c = crew {
                 CrewAvatar(data: c.avatarData, name: c.name, size: 28)
                     .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
+            } else if friendsCount > 0 {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(CV.cream)
+                    .frame(width: 28, height: 28)
+                    .background(CV.red, in: Circle())
             }
             Text(text)
                 .cvText(15, .medium, tracking: -0.15, lineHeight: 20, inter: true)
