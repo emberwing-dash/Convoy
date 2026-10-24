@@ -97,6 +97,11 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, WCSessi
             session.transferUserInfo(payload)
         }
     }
+    public var isPhonePaired: Bool {
+        guard WCSession.isSupported() else { return false }
+        let session = WCSession.default
+        return session.activationState == .activated || isReachable || isConnectedToPhone
+    }
     
     // MARK: - WCSessionDelegate
     
@@ -104,14 +109,16 @@ public final class WatchConnectivityManager: NSObject, ObservableObject, WCSessi
         DispatchQueue.main.async {
             self.activationState = activationState
             self.isReachable = session.isReachable
-            self.isConnectedToPhone = (activationState == .activated && session.isReachable)
+            self.isConnectedToPhone = (activationState == .activated)
         }
     }
     
     public func sessionReachabilityDidChange(_ session: WCSession) {
         DispatchQueue.main.async {
             self.isReachable = session.isReachable
-            self.isConnectedToPhone = session.isReachable
+            if session.isReachable {
+                self.isConnectedToPhone = true
+            }
         }
     }
     

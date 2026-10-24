@@ -300,12 +300,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 7XVL7L68YT;
+				DEVELOPMENT_TEAM = ZC8GP86N5T;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = ConvoyWatch;
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Convoy uses voice recognition so you can reply to riders hands-free while driving.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Convoy needs microphone access to record voice replies and commands while riding.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Convoy uses voice recognition so you can reply to riders hands-free while driving.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -335,12 +335,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 7XVL7L68YT;
+				DEVELOPMENT_TEAM = ZC8GP86N5T;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = ConvoyWatch;
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Convoy uses voice recognition so you can reply to riders hands-free while driving.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Convoy needs microphone access to record voice replies and commands while riding.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Convoy uses voice recognition so you can reply to riders hands-free while driving.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -369,7 +369,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 7XVL7L68YT;
+				DEVELOPMENT_TEAM = ZC8GP86N5T;
 				INFOPLIST_KEY_CFBundleDisplayName = ConvoyWatch;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 1.0;
@@ -387,7 +387,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 7XVL7L68YT;
+				DEVELOPMENT_TEAM = ZC8GP86N5T;
 				INFOPLIST_KEY_CFBundleDisplayName = ConvoyWatch;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 1.0;

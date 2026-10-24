@@ -17,12 +17,11 @@ import SwiftUI
 public struct ContentView: View {
     @StateObject private var rideManager = RideManager.shared
     @StateObject private var connectivity = WatchConnectivityManager.shared
-    @StateObject private var voiceService = SiriVoiceService.shared
     
     // Shows the blank screen with ONLY the 3 reason options
     @State private var showingReasonScreen: Bool = false
-    // Shows the hands-free voice reply screen
-    @State private var showingVoiceReply: Bool = false
+    // Shows the user profile sheet
+    @State private var showingProfile: Bool = false
     
     // Focus state for hardware Digital Crown / rotary knob
     @FocusState private var isCrownFocused: Bool
@@ -41,11 +40,13 @@ public struct ContentView: View {
                             rideManager.showSyncPairingScreen = false
                             rideManager.hasConnectedToRide = true
                             rideManager.session.isPhoneReachable = true
+                            rideManager.session.connectionStatus = .connected
                         }
                     },
                     onSkip: {
                         withAnimation(.easeInOut(duration: 0.25)) {
                             rideManager.showSyncPairingScreen = false
+                            rideManager.hasConnectedToRide = true
                         }
                     }
                 )
@@ -109,8 +110,8 @@ public struct ContentView: View {
                 .zIndex(30)
             }
         }
-        .sheet(isPresented: $showingVoiceReply) {
-            VoiceReplyView()
+        .sheet(isPresented: $showingProfile) {
+            UserProfileView()
         }
         .animation(.easeInOut(duration: 0.22), value: showingReasonScreen)
         .animation(.easeInOut(duration: 0.25), value: rideManager.hasConnectedToRide)
@@ -118,6 +119,7 @@ public struct ContentView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.68), value: rideManager.activeAlert?.id)
         .animation(.spring(response: 0.35, dampingFraction: 0.75), value: rideManager.showToast)
     }
+
     
     // MARK: - Screen 1: Connect to iPhone Convoy App
     
@@ -126,7 +128,7 @@ public struct ContentView: View {
             Spacer()
             
             // Prominent Convoy App Logo
-            ConvoyLogoView(size: 78, showGlow: true)
+            ConvoyLogoView(size: 86, showGlow: true)
             
             VStack(spacing: 3) {
                 Text("CONVOY")
@@ -185,7 +187,7 @@ public struct ContentView: View {
     
     private var cleanMainRideScreen: some View {
         VStack(spacing: 12) {
-            // Header: Convoy + Synced (Clear prominent icon)
+            // Header: Convoy + Synced + Profile Button
             HStack(spacing: 6) {
                 AppIcon(size: 20)
                 
@@ -198,9 +200,19 @@ public struct ContentView: View {
                 
                 PulsingDot(color: W.green, size: 5)
                 
-                Text("SYNCED")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(W.green)
+                // Profile button (top right)
+                Button {
+                    rideManager.playHaptic(.click)
+                    showingProfile = true
+                } label: {
+                    Image("avatar_meera")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 22, height: 22)
+                        .clipShape(Circle())
+                        .overlay(Circle().strokeBorder(W.amber.opacity(0.8), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 6)
             .padding(.top, 4)
@@ -247,53 +259,26 @@ public struct ContentView: View {
             
             Spacer()
             
-            // Bottom row: Tap Reason + Voice Reply mic button side by side
-            HStack(spacing: 8) {
-                // Prominent Tap Reason Button (Opens dedicated blank screen)
-                Button {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        showingReasonScreen = true
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "hand.tap.fill")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(W.amber)
-                        
-                        Text("Tap Reason")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 38)
-                    .background(W.card, in: Capsule())
+            // Prominent Tap Reason Button (Opens dedicated blank screen)
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    showingReasonScreen = true
                 }
-                .buttonStyle(.plain)
-                
-                // Voice Reply Mic Button (Siri hands-free)
-                Button {
-                    showingVoiceReply = true
-                    rideManager.playHaptic(.click)
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(voiceService.isListening ? W.red : W.card)
-                            .frame(width: 38, height: 38)
-                            .overlay(
-                                Circle().strokeBorder(
-                                    voiceService.isListening ? W.red.opacity(0.6) : Color.white.opacity(0.12),
-                                    lineWidth: 1.5
-                                )
-                            )
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(voiceService.isListening ? .white : W.secondary)
-                    }
-                    .shadow(color: voiceService.isListening ? W.red.opacity(0.6) : .clear, radius: 6)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "hand.tap.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(W.amber)
+                    
+                    Text("Tap Reason")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
                 }
-                .buttonStyle(.plain)
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: voiceService.isListening)
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .background(W.card, in: Capsule())
             }
+            .buttonStyle(.plain)
             .padding(.horizontal, 8)
             .padding(.bottom, 6)
         }

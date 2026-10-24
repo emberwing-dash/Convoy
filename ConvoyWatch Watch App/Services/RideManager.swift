@@ -108,16 +108,7 @@ public final class RideManager: ObservableObject {
             )
         ]
         
-        self.activeAlert = RideAlert(
-            kind: .fallingBehind,
-            title: "Meera is drifting",
-            detail: "800 m back · 28 km/h",
-            severity: .warning,
-            timestamp: Date(),
-            riderName: "Meera",
-            riderAvatar: "avatar_meera",
-            actions: ["Wait for her", "Keep going"]
-        )
+        self.activeAlert = nil
         self.alertHistory = [
             RideAlert(
                 kind: .fallingBehind,
@@ -301,37 +292,7 @@ public final class RideManager: ObservableObject {
             dismissActiveAlert()
         }
     }
-    
-    // MARK: - Voice Reply (Siri Hands-Free)
-    
-    /// Called by SiriVoiceService when the rider dictates a reply to another rider.
-    /// The message is sent via WatchConnectivity to the iPhone which relays it to the crew.
-    public func sendVoiceReply(to riderName: String, message: String) {
-        playHaptic(.success)
-        
-        // Send via WatchConnectivity → iPhone → relay to crew
-        let payload: [String: Any] = [
-            "type": "voice_reply",
-            "to": riderName,
-            "message": message,
-            "from": "You",
-            "timestamp": Date().timeIntervalSince1970
-        ]
-        connectivity.send(payload: payload, actionLabel: "Voice reply to \(riderName)")
-        
-        // Visual toast confirmation
-        displayToast(message: "✓ Sent to \(riderName)")
-        
-        // Log in alert history so rider can see what was sent
-        let alert = RideAlert(
-            kind: .general,
-            title: "You replied to \(riderName)",
-            detail: "\"\(message)\"",
-            severity: .info,
-            actions: ["OK"]
-        )
-        alertHistory.insert(alert, at: 0)
-    }
+
     
     // MARK: - Tap Reasons (Fuel, Traffic, Rest)
     
