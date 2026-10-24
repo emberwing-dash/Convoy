@@ -14,12 +14,6 @@ struct RootView: View {
                         showLaunchSplash = false
                     }
                 }
-            } else if !app.hasCompletedPermissions {
-                PermissionLaunchView {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        app.hasCompletedPermissions = true
-                    }
-                }
             } else {
                 switch app.phase {
                 case .onboarding: OnboardingFlow()

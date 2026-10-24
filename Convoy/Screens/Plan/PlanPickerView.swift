@@ -16,6 +16,10 @@ struct PlanPickerView: View {
             list.at(20, 198)
             PrimaryButton(title: "Done") { app.pop() }.frame(width: 353).at(20, 750)
         }
+        .task {
+            await app.loadFriends()
+            await app.loadCrews()
+        }
         .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
     }
@@ -49,19 +53,44 @@ struct PlanPickerView: View {
                         }
                     }
                 case .friends:
-                    VStack(spacing: 8) {
-                        Image(systemName: "person.3")
-                            .font(.system(size: 26))
-                            .foregroundStyle(CV.cream.opacity(0.5))
-                            .frame(width: 60, height: 60)
-                            .background(Color.white.opacity(0.06), in: Circle())
-                        Text("No friends yet")
-                            .cvText(15, .semibold, inter: true)
-                        Text("Invite the people you ride with from the Crew tab.")
-                            .cvText(13, color: CV.muted, inter: true)
-                            .multilineTextAlignment(.center)
+                    if app.friends.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "person.3")
+                                .font(.system(size: 26))
+                                .foregroundStyle(CV.cream.opacity(0.5))
+                                .frame(width: 60, height: 60)
+                                .background(Color.white.opacity(0.06), in: Circle())
+                            Text("No friends yet")
+                                .cvText(15, .semibold, inter: true)
+                            Text("Invite the people you ride with from the Crew tab.")
+                                .cvText(13, color: CV.muted, inter: true)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(28)
+                    } else {
+                        ForEach(Array(app.friends.enumerated()), id: \.element.id) { i, friend in
+                            let on = app.selectedFriends.contains(friend.username)
+                            Button {
+                                if on { app.selectedFriends.remove(friend.username) }
+                                else { app.selectedFriends.insert(friend.username) }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    AvatarChip(data: friend.avatar_data.flatMap { Data(base64Encoded: $0) }, name: friend.display_name, size: 40)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(friend.display_name).cvText(15, .semibold, inter: true)
+                                        Text("@\(friend.username)").cvText(12, color: CV.muted, inter: true)
+                                    }
+                                    Spacer()
+                                    SelectDot(on: on)
+                                }
+                                .padding(.horizontal, 15).frame(height: 64)
+                            }.buttonStyle(.plain)
+                            if i < app.friends.count - 1 {
+                                Rectangle().fill(Color.white.opacity(0.07))
+                                    .frame(height: 1).padding(.leading, 67)
+                            }
+                        }
                     }
-                    .padding(28)
                 }
             }
             .frame(width: 353)

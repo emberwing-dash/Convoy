@@ -19,6 +19,9 @@ struct HomeView: View {
             .scrollBounceBehavior(.basedOnSize)
             .scrollIndicators(.hidden)
         }
+        .task {
+            await app.refreshNotifications()
+        }
     }
 
     // MARK: - Header
@@ -30,11 +33,37 @@ struct HomeView: View {
                 Text("Hey \(app.displayName)").cvText(20, .semibold, tracking: -0.3, lineHeight: 24, inter: true)
             }
             Spacer()
-            Button { app.push(.profile) } label: { AvatarChip(data: app.avatarImageData, name: app.displayName, size: 44) }
+            
+            HStack(spacing: 12) {
+                // Notification Bell
+                Button { app.push(.notifications) } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(CV.cream)
+                            .frame(width: 44, height: 44)
+                            .background(CV.glassFill, in: Circle())
+                            .overlay(Circle().strokeBorder(CV.glassStroke, lineWidth: 1))
+                        
+                        if app.hasUnreadNotifications {
+                            Circle()
+                                .fill(CV.red)
+                                .frame(width: 10, height: 10)
+                                .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
+                                .offset(x: -4, y: 4)
+                        }
+                    }
+                }
                 .buttonStyle(.plain)
+                
+                // Profile Button
+                Button { app.push(.profile) } label: { AvatarChip(data: app.avatarImageData, name: app.displayName, size: 44) }
+                    .buttonStyle(.plain)
+            }
         }
         .frame(height: 44)
     }
+
 
     // MARK: - Actions
     private var actions: some View {
