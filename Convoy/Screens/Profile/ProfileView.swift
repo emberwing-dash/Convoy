@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @Environment(AppState.self) private var app
+    @State private var showSignOutConfirm = false
 
     private var totalRides: Int { app.completedRides.count }
     private var totalKm: String {
@@ -75,11 +76,21 @@ struct ProfileView: View {
 
                     sectionTitle("SETTINGS").padding(.top, 24)
                     VStack(spacing: 0) {
-                        row("phone", "Emergency contacts", nil, first: true)
-                        row("point.topleft.down.to.point.bottomright.curvepath",
-                            "Saved routes", "\(app.savedRoutes.count)")
-                        row("bell", "Notifications", nil)
-                        row("exclamationmark", "Help & privacy", nil)
+                        rowLink("point.topleft.down.to.point.bottomright.curvepath",
+                                "Saved routes",
+                                trailing: "\(app.savedRoutes.count)",
+                                action: { app.push(.discoverSaved) },
+                                first: true)
+                        rowLink("bell",
+                                "Notifications",
+                                trailing: app.notifications.isEmpty ? nil : "\(app.notifications.count)",
+                                action: { app.push(.notifications) })
+                        rowLink("phone",
+                                "Emergency contacts",
+                                action: { app.push(.placeholder("Emergency contacts")) })
+                        rowLink("exclamationmark",
+                                "Help & privacy",
+                                action: { app.push(.placeholder("Help & privacy")) })
                     }
                     .background(Color(hex: 0x1A1A1D),
                                 in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -88,8 +99,7 @@ struct ProfileView: View {
                     .padding(.top, 7)
 
                     Button {
-                        app.phase = .onboarding
-                        app.path.removeAll()
+                        showSignOutConfirm = true
                     } label: {
                         Text("Sign out")
                             .cvText(15, .semibold, color: CV.red, inter: true)
@@ -115,6 +125,16 @@ struct ProfileView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
+        .confirmationDialog("Sign out of Convoy?",
+                            isPresented: $showSignOutConfirm,
+                            titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) {
+                Task { await app.signOut() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your local data will be cleared from this device.")
+        }
         .onAppear {
             app.completedRides = StorageService.shared.loadCompletedRides()
         }
@@ -235,27 +255,33 @@ struct ProfileView: View {
             .padding(.leading, 4)
     }
 
-    private func row(_ symbol: String, _ title: String, _ trailing: String?,
-                     first: Bool = false) -> some View {
+    private func rowLink(_ symbol: String, _ title: String,
+                         trailing: String? = nil,
+                         action: @escaping () -> Void,
+                         first: Bool = false) -> some View {
         VStack(spacing: 0) {
             if !first {
                 Rectangle().fill(Color.white.opacity(0.07))
                     .frame(height: 1).padding(.leading, 52)
             }
-            HStack(spacing: 14) {
-                Image(systemName: symbol)
-                    .font(.system(size: 17, weight: .regular))
-                    .frame(width: 22)
-                Text(title).cvText(16, .medium, inter: true)
-                Spacer()
-                if let t = trailing {
-                    Text(t).cvText(13, color: CV.cream.opacity(0.5), inter: true)
+            Button(action: action) {
+                HStack(spacing: 14) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 17, weight: .regular))
+                        .frame(width: 22)
+                    Text(title).cvText(16, .medium, inter: true)
+                    Spacer()
+                    if let t = trailing {
+                        Text(t).cvText(13, color: CV.cream.opacity(0.5), inter: true)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(CV.cream.opacity(0.5))
                 }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(CV.cream.opacity(0.5))
+                .padding(.horizontal, 16).frame(height: 52)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 16).frame(height: 52)
+            .buttonStyle(.plain)
         }
     }
 }

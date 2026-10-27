@@ -7,7 +7,6 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            // ✅ Show the InConvoy splash on relaunch (phase == .main at cold start)
             if showLaunchSplash && app.phase == .main {
                 InConvoyView {
                     withAnimation(.easeInOut(duration: 0.35)) {
@@ -22,53 +21,81 @@ struct RootView: View {
             }
         }
         .onAppear {
-            // First launch is .onboarding — suppress the launch splash so the
-            // onboarding flow (which already ends with InConvoyView) runs untouched.
             if app.phase == .onboarding {
                 showLaunchSplash = false
             }
         }
+        .onOpenURL { url in
+            Task { await handleDeepLink(url) }
+        }
+    }
+
+    private func handleDeepLink(_ url: URL) async {
+        guard url.scheme?.lowercased() == "convoy" else { return }
+        guard app.phase == .main else { return }
+
+        let host = url.host?.lowercased() ?? ""
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard let payload = parts.first, !payload.isEmpty else { return }
+
+        switch host {
+        case "friend":
+            app.tab = .crew
+            app.crewSegment = .friends
+            app.popToRoot()
+            app.push(.userSearch(.friends))
+
+        case "crew":
+            if let crew = try? await SupabaseManager.shared.fetchCrewByCode(payload) {
+                app.tab = .crew
+                app.crewSegment = .crews
+                app.popToRoot()
+                app.push(.crewDetail(crew.id))
+            }
+
+        case "ride":
+            if await app.joinRideByCode(payload), let rideId = app.lastJoinedRideID {
+                app.tab = .ride
+                app.popToRoot()
+                app.push(.rideDetails(rideId))
+            }
+
+        default:
+            break
+        }
     }
 }
 
-enum OnboardingRoute: Hashable { case signIn, profile, inConvoy }
+enum OnboardingRoute: Hashable { case profile, inConvoy }
 
 struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
     @State private var path: [OnboardingRoute] = []
 
-    /// `true` if a profile was saved from a previous session.
-    /// Used to skip ProfileSetup when the user is only signing back in.
     private var hasExistingProfile: Bool {
         StorageService.shared.loadUserProfile() != nil
     }
 
     var body: some View {
         NavigationStack(path: $path) {
-            WelcomeView { path.append(.signIn) }
-                .navigationDestination(for: OnboardingRoute.self) { route in
-                    switch route {
-                    case .signIn:
-                        SignInView(onBack: pop) {
-                            // ✅ Skip ProfileSetup on subsequent sign-ins
-                            if hasExistingProfile {
-                                path.append(.inConvoy)
-                            } else {
-                                path.append(.profile)
-                            }
-                        }
-                    case .profile:
-                        ProfileSetupView(onBack: pop) { path.append(.inConvoy) }
-                    case .inConvoy:
-                        InConvoyView {
-                            app.completeOnboarding(
-                                name: app.displayName,
-                                handle: app.handle,
-                                imageData: app.avatarImageData
-                            )
-                        }
+            WelcomeView {
+                if hasExistingProfile { path.append(.inConvoy) }
+                else { path.append(.profile) }
+            }
+            .navigationDestination(for: OnboardingRoute.self) { route in
+                switch route {
+                case .profile:
+                    ProfileSetupView(onBack: pop) { path.append(.inConvoy) }
+                case .inConvoy:
+                    InConvoyView {
+                        app.completeOnboarding(
+                            name: app.displayName,
+                            handle: app.handle,
+                            imageData: app.avatarImageData
+                        )
                     }
                 }
+            }
         }
     }
 

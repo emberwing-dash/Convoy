@@ -195,21 +195,33 @@ struct UserSearchView: View {
     }
     
     private func search() {
-        guard !searchText.isEmpty else { return }
+        let clean = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+            .lowercased()
+        guard !clean.isEmpty else { return }
         isSearching = true
         errorMessage = nil
         foundUser = nil
         
         Task {
             do {
-                guard let user = try await SupabaseManager.shared.fetchProfile(username: searchText) else {
+                guard let user = try await SupabaseManager.shared.fetchProfile(username: clean) else {
                     throw NSError(domain: "App", code: 404, userInfo: [NSLocalizedDescriptionKey: "User not found. Check the handle."])
                 }
                 
-                guard let myId = app.backendUserId else { return }
+                var currentId = app.backendUserId
+                if currentId == nil {
+                    currentId = await SupabaseManager.shared.getOrRestoreUserId()
+                }
+                guard let validId = currentId else {
+                    throw NSError(domain: "App", code: 401, userInfo: [NSLocalizedDescriptionKey: "Unable to verify your account session. Please restart or sign in."])
+                }
+                if app.backendUserId != validId {
+                    await MainActor.run { app.backendUserId = validId }
+                }
                 
-                let friend = try await SupabaseManager.shared.isFriend(userId: myId, otherId: user.id)
-                let pending = try await SupabaseManager.shared.hasPendingFriendRequest(userId: myId, otherId: user.id)
+                let friend = try await SupabaseManager.shared.isFriend(userId: validId, otherId: user.id)
+                let pending = try await SupabaseManager.shared.hasPendingFriendRequest(userId: validId, otherId: user.id)
                 
                 var inCrew = false
                 if case .crew(let cid) = context {
@@ -233,11 +245,20 @@ struct UserSearchView: View {
     }
     
     private func sendFriendRequest(to username: String) {
-        guard let myId = app.backendUserId else { return }
         isProcessing = true
         Task {
             do {
-                try await SupabaseManager.shared.sendFriendRequest(senderId: myId, receiverUsername: username)
+                var currentId = app.backendUserId
+                if currentId == nil {
+                    currentId = await SupabaseManager.shared.getOrRestoreUserId()
+                }
+                guard let validId = currentId else {
+                    throw NSError(domain: "App", code: 401, userInfo: [NSLocalizedDescriptionKey: "Unable to verify your account session."])
+                }
+                if app.backendUserId != validId {
+                    await MainActor.run { app.backendUserId = validId }
+                }
+                try await SupabaseManager.shared.sendFriendRequest(senderId: validId, receiverUsername: username)
                 await MainActor.run {
                     self.hasPendingRequest = true
                     self.isProcessing = false
@@ -252,11 +273,21 @@ struct UserSearchView: View {
     }
     
     private func addToCrew(user: ProfileRow) {
-        guard case .crew(let cid) = context, let myId = app.backendUserId else { return }
+        guard case .crew(let cid) = context else { return }
         isProcessing = true
         Task {
             do {
-                try await SupabaseManager.shared.inviteToCrew(crewId: cid, receiverUsername: user.username, invitedBy: myId)
+                var currentId = app.backendUserId
+                if currentId == nil {
+                    currentId = await SupabaseManager.shared.getOrRestoreUserId()
+                }
+                guard let validId = currentId else {
+                    throw NSError(domain: "App", code: 401, userInfo: [NSLocalizedDescriptionKey: "Unable to verify your account session."])
+                }
+                if app.backendUserId != validId {
+                    await MainActor.run { app.backendUserId = validId }
+                }
+                try await SupabaseManager.shared.inviteToCrew(crewId: cid, receiverUsername: user.username, invitedBy: validId)
                 await MainActor.run {
                     self.isInCrew = true
                     self.isProcessing = false

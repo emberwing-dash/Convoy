@@ -47,7 +47,6 @@ final class PersistedRideEntity {
     var isCompleted: Bool = false
     var code: String = ""
 
-    // Plan snapshot
     var fromLocation: String = ""
     var toLocation: String = ""
     var stopsJSON: String = "[]"
@@ -58,8 +57,7 @@ final class PersistedRideEntity {
     var endLat: Double = 0
     var endLon: Double = 0
 
-    // ✅ NEW — polyline snapshot so the map thumbnail survives relaunch
-    var routeCoordsJSON: String = "[]"       // [[lat, lon], ...]
+    var routeCoordsJSON: String = "[]"
     var routeKm: Double = 0
     var routeMinutes: Int = 0
 
@@ -125,6 +123,8 @@ final class CrewEntity {
     }
 }
 
+// MARK: - Saved Route
+
 @Model
 final class SavedRouteEntity {
     @Attribute(.unique) var id: String = ""
@@ -145,8 +145,6 @@ final class SavedRouteEntity {
     var endLon: Double = 0
     var categoriesRaw: String = ""
     var createdAt: Date = Date()
-    
-    // ✅ Added to store the actual polyline
     var coordsJSON: String = "[]"
 
     init(id: String, title: String, tag: String, from: String, to: String,
@@ -174,6 +172,25 @@ final class SavedRouteEntity {
     }
 }
 
+// MARK: - Fill-up
+
+@Model
+final class FillUpEntity {
+    @Attribute(.unique) var id: UUID = UUID()
+    var odo: Int = 0
+    var litres: Double = 0
+    var price: Double = 0
+    var filledAt: Date = Date()
+
+    init(id: UUID = UUID(), odo: Int, litres: Double, price: Double, filledAt: Date = Date()) {
+        self.id = id
+        self.odo = odo
+        self.litres = litres
+        self.price = price
+        self.filledAt = filledAt
+    }
+}
+
 // MARK: - Service
 
 @MainActor
@@ -187,6 +204,7 @@ final class StorageService {
             PersistedRideEntity.self,
             CrewEntity.self,
             SavedRouteEntity.self,
+            FillUpEntity.self,
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
@@ -232,6 +250,16 @@ final class StorageService {
         try? context.save()
     }
 
+    /// Sign-out: wipes the local profile so onboarding runs fresh on next launch.
+    func clearUserProfile() {
+        guard let context else { return }
+        let d = FetchDescriptor<UserProfileEntity>()
+        if let all = try? context.fetch(d) {
+            for p in all { context.delete(p) }
+            try? context.save()
+        }
+    }
+
     // MARK: - Rides
     func loadActiveRides() -> [PersistedRideEntity] {
         guard let context else { return [] }
@@ -254,7 +282,6 @@ final class StorageService {
         let stopsData = (try? JSONEncoder().encode(ride.plan.stops)) ?? Data("[]".utf8)
         let stopsJSON = String(data: stopsData, encoding: .utf8) ?? "[]"
 
-        // ✅ Snapshot the selected route's polyline + stats
         let selected = ride.plan.selected
         let coordsPairs = (selected?.coords ?? []).map { [$0.lat, $0.lon] }
         let coordsData = (try? JSONSerialization.data(withJSONObject: coordsPairs)) ?? Data("[]".utf8)
@@ -314,12 +341,44 @@ final class StorageService {
         try? context.save()
     }
 
+    func syncCrews(_ crews: [CrewGroup]) {
+        guard let context else { return }
+        let d = FetchDescriptor<CrewEntity>()
+        if let existing = try? context.fetch(d) {
+            for e in existing { context.delete(e) }
+        }
+        for crew in crews {
+            let memberPayload = crew.members.map { ["name": $0.name, "detail": $0.detail] }
+            let data = (try? JSONSerialization.data(withJSONObject: memberPayload)) ?? Data("[]".utf8)
+            let membersJSON = String(data: data, encoding: .utf8) ?? "[]"
+            let entity = CrewEntity(
+                id: crew.id, name: crew.name, detail: crew.detail,
+                accentHex: crew.accentHex, avatarData: crew.avatarData,
+                membersJSON: membersJSON, since: crew.since, code: crew.code
+            )
+            context.insert(entity)
+        }
+        try? context.save()
+    }
+
     func updateCrewAvatar(id: UUID, avatarData: Data?) {
         guard let context else { return }
         let d = FetchDescriptor<CrewEntity>()
         if let all = try? context.fetch(d) {
             for c in all where c.id == id { c.avatarData = avatarData }
             try? context.save()
+        }
+    }
+
+    // MARK: - Notifications Cache
+    func loadCachedNotifications() -> [AppNotification] {
+        guard let data = UserDefaults.standard.data(forKey: "cached_notifications") else { return [] }
+        return (try? JSONDecoder().decode([AppNotification].self, from: data)) ?? []
+    }
+
+    func saveNotifications(_ notifs: [AppNotification]) {
+        if let data = try? JSONEncoder().encode(notifs) {
+            UserDefaults.standard.set(data, forKey: "cached_notifications")
         }
     }
 
@@ -331,28 +390,27 @@ final class StorageService {
     }
 
     func saveSavedRoute(_ route: DiscoverRoute) {
-            guard let context else { return }
-            let catsRaw = route.categories.map(\.rawValue).joined(separator: ",")
-            
-            let entity = SavedRouteEntity(
-                id: route.id, title: route.title, tag: route.tag,
-                from: route.from, to: route.to, km: route.km, time: route.time,
-                style: route.style, blurb: route.blurb,
-                startPlace: route.startPlace, finishPlace: route.finishPlace,
-                stops: route.stops,
-                startLat: route.startCoord.lat, startLon: route.startCoord.lon,
-                endLat: route.endCoord.lat, endLon: route.endCoord.lon,
-                categoriesRaw: catsRaw
-            )
-            
-            // ✅ Encode and save the path
-            let coordsPairs = route.coords.map { [$0.lat, $0.lon] }
-            let coordsData = (try? JSONSerialization.data(withJSONObject: coordsPairs)) ?? Data("[]".utf8)
-            entity.coordsJSON = String(data: coordsData, encoding: .utf8) ?? "[]"
-            
-            context.insert(entity)
-            try? context.save()
-        }
+        guard let context else { return }
+        let catsRaw = route.categories.map(\.rawValue).joined(separator: ",")
+
+        let entity = SavedRouteEntity(
+            id: route.id, title: route.title, tag: route.tag,
+            from: route.from, to: route.to, km: route.km, time: route.time,
+            style: route.style, blurb: route.blurb,
+            startPlace: route.startPlace, finishPlace: route.finishPlace,
+            stops: route.stops,
+            startLat: route.startCoord.lat, startLon: route.startCoord.lon,
+            endLat: route.endCoord.lat, endLon: route.endCoord.lon,
+            categoriesRaw: catsRaw
+        )
+
+        let coordsPairs = route.coords.map { [$0.lat, $0.lon] }
+        let coordsData = (try? JSONSerialization.data(withJSONObject: coordsPairs)) ?? Data("[]".utf8)
+        entity.coordsJSON = String(data: coordsData, encoding: .utf8) ?? "[]"
+
+        context.insert(entity)
+        try? context.save()
+    }
 
     func removeSavedRoute(id: String) {
         guard let context else { return }
@@ -361,5 +419,20 @@ final class StorageService {
             for r in all where r.id == id { context.delete(r) }
             try? context.save()
         }
+    }
+
+    // MARK: - Fill-ups
+    func loadFillUps() -> [FillUpEntity] {
+        guard let context else { return [] }
+        let d = FetchDescriptor<FillUpEntity>(
+            sortBy: [SortDescriptor(\.filledAt, order: .forward)]
+        )
+        return (try? context.fetch(d)) ?? []
+    }
+
+    func saveFillUp(odo: Int, litres: Double, price: Double) {
+        guard let context else { return }
+        context.insert(FillUpEntity(odo: odo, litres: litres, price: price))
+        try? context.save()
     }
 }

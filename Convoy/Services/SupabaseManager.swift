@@ -26,9 +26,21 @@ final class SupabaseManager {
         )
     }
 
-    // MARK: - Auth & Profile
-    var currentUserId: UUID? {
-        client.auth.currentUser?.id
+    // MARK: - Auth & Session
+
+    var currentUserId: UUID? { client.auth.currentUser?.id }
+
+    /// Ensures the Supabase auth session has finished restoring before returning the user ID.
+    func getOrRestoreUserId() async -> UUID? {
+        if let id = client.auth.currentUser?.id {
+            return id
+        }
+        do {
+            let session = try await client.auth.session
+            return session.user.id
+        } catch {
+            return client.auth.currentUser?.id
+        }
     }
 
     func signInAnonymously() async throws -> UUID {
@@ -36,14 +48,29 @@ final class SupabaseManager {
         return session.user.id
     }
 
+    /// Wrapper so views never need `import Supabase`.
+    func signOut() async throws {
+        try await client.auth.signOut()
+    }
+
+    // MARK: - Profile
+
     func createProfile(id: UUID, username: String, displayName: String, avatarData: Data?) async throws {
         let avatarBase64 = avatarData?.base64EncodedString()
-        let profile = ProfileInsert(id: id, username: username, display_name: displayName, avatar_data: avatarBase64)
+        let profile = ProfileInsert(
+            id: id,
+            username: username,
+            display_name: displayName,
+            avatar_data: avatarBase64
+        )
         try await client.from("profiles").insert(profile).execute()
     }
 
     func fetchProfile(username: String) async throws -> ProfileRow? {
-        let clean = username.replacingOccurrences(of: "@", with: "")
+        let clean = username.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+            .lowercased()
+        guard !clean.isEmpty else { return nil }
         let response: [ProfileRow] = try await client.from("profiles")
             .select()
             .eq("username", value: clean)
@@ -52,7 +79,34 @@ final class SupabaseManager {
         return response.first
     }
 
-    // MARK: - Search & Relationships
+    func searchProfiles(query: String, limit: Int = 10) async throws -> [ProfileRow] {
+        let clean = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+            .lowercased()
+        guard !clean.isEmpty else { return [] }
+
+        do {
+            let matches: [ProfileRow] = try await client.from("profiles")
+                .select()
+                .ilike("username", pattern: "%\(clean)%")
+                .limit(limit)
+                .execute()
+                .value
+            if !matches.isEmpty {
+                return matches
+            }
+        } catch {
+            // Fallback to exact match below
+        }
+
+        if let exact = try await fetchProfile(username: clean) {
+            return [exact]
+        }
+        return []
+    }
+
+    // MARK: - Relationship checks
+
     func isFriend(userId: UUID, otherId: UUID) async throws -> Bool {
         let response: [FriendshipRow] = try await client.from("friendships")
             .select()
@@ -62,7 +116,7 @@ final class SupabaseManager {
             .value
         return !response.isEmpty
     }
-    
+
     func hasPendingFriendRequest(userId: UUID, otherId: UUID) async throws -> Bool {
         let response: [FriendshipRow] = try await client.from("friendships")
             .select()
@@ -96,15 +150,28 @@ final class SupabaseManager {
     }
 
     // MARK: - Friendships
+
     func sendFriendRequest(senderId: UUID, receiverUsername: String) async throws {
-        guard let receiver = try await fetchProfile(username: receiverUsername) else {
-            throw NSError(domain: "Supabase", code: 404, userInfo: [NSLocalizedDescriptionKey: "User not found"])
+        let clean = receiverUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+            .lowercased()
+        guard let receiver = try await fetchProfile(username: clean) else {
+            throw NSError(domain: "Convoy", code: 404,
+                          userInfo: [NSLocalizedDescriptionKey: "User not found"])
         }
-        let request = FriendshipInsert(sender_id: senderId, receiver_id: receiver.id, status: "pending")
-        try await client.from("friendships").insert(request).execute()
+        try await sendFriendRequest(senderId: senderId, receiverId: receiver.id)
     }
 
     func sendFriendRequest(senderId: UUID, receiverId: UUID) async throws {
+        // Pre-check to avoid noisy unique-violation errors from Postgres.
+        if try await isFriend(userId: senderId, otherId: receiverId) {
+            throw NSError(domain: "Convoy", code: 409,
+                          userInfo: [NSLocalizedDescriptionKey: "You're already friends."])
+        }
+        if try await hasPendingFriendRequest(userId: senderId, otherId: receiverId) {
+            throw NSError(domain: "Convoy", code: 409,
+                          userInfo: [NSLocalizedDescriptionKey: "A friend request is already pending."])
+        }
         let request = FriendshipInsert(sender_id: senderId, receiver_id: receiverId, status: "pending")
         try await client.from("friendships").insert(request).execute()
     }
@@ -117,6 +184,16 @@ final class SupabaseManager {
             .execute()
             .value
         return response
+    }
+
+    func fetchOutgoingPendingFriendRequestUserIds(for userId: UUID) async throws -> [UUID] {
+        let response: [FriendshipRow] = try await client.from("friendships")
+            .select()
+            .eq("sender_id", value: userId)
+            .eq("status", value: "pending")
+            .execute()
+            .value
+        return response.map { $0.receiver_id }
     }
 
     func fetchFriends(for userId: UUID) async throws -> [ProfileRow] {
@@ -146,11 +223,25 @@ final class SupabaseManager {
             .execute()
     }
 
+    func declineFriendRequest(requestId: UUID) async throws {
+        try await client.from("friendships")
+            .delete()
+            .eq("id", value: requestId)
+            .execute()
+    }
+
     // MARK: - Crews
-    func createCrew(name: String, code: String, creatorId: UUID, memberIds: [UUID], avatarData: Data?) async throws -> UUID {
+
+    func createCrew(name: String, code: String, creatorId: UUID,
+                    memberIds: [UUID], avatarData: Data?) async throws -> UUID {
         let avatarBase64 = avatarData?.base64EncodedString()
-        let crew = CrewInsert(name: name, code: code, created_by: creatorId, avatar_data: avatarBase64)
-        
+        let crew = CrewInsert(
+            name: name,
+            code: code,
+            created_by: creatorId,
+            avatar_data: avatarBase64
+        )
+
         let inserted: [CrewRow] = try await client.from("crews")
             .insert(crew)
             .select()
@@ -158,23 +249,48 @@ final class SupabaseManager {
             .value
 
         guard let crewId = inserted.first?.id else {
-            throw NSError(domain: "Supabase", code: 500, userInfo: [NSLocalizedDescriptionKey: "Crew insert failed"])
+            throw NSError(domain: "Convoy", code: 500,
+                          userInfo: [NSLocalizedDescriptionKey: "Crew insert failed"])
         }
 
-        let adminMember = CrewMemberInsert(crew_id: crewId, user_id: creatorId, role: "admin", status: "accepted")
+        let adminMember = CrewMemberInsert(
+            crew_id: crewId,
+            user_id: creatorId,
+            role: "admin",
+            status: "accepted"
+        )
         try await client.from("crew_members").insert(adminMember).execute()
 
         for memberId in memberIds {
-            let invite = CrewMemberInsert(crew_id: crewId, user_id: memberId, role: "member", status: "pending", invited_by: creatorId)
-            try await client.from("crew_members").insert(invite).execute()
+            let invite = CrewMemberInsert(
+                crew_id: crewId,
+                user_id: memberId,
+                role: "member",
+                status: "pending",
+                invited_by: creatorId
+            )
+            try? await client.from("crew_members").insert(invite).execute()
         }
 
         return crewId
     }
-    
+
+    func fetchCrewByCode(_ code: String) async throws -> CrewGroup? {
+        let response: [CrewRow] = try await client.from("crews")
+            .select()
+            .eq("code", value: code.uppercased())
+            .execute()
+            .value
+        return response.first?.toCrewGroup()
+    }
+
     func inviteToCrew(crewId: UUID, receiverUsername: String, invitedBy: UUID) async throws {
-        guard let receiver = try await fetchProfile(username: receiverUsername) else {
-            throw NSError(domain: "Supabase", code: 404, userInfo: [NSLocalizedDescriptionKey: "User not found"])
+        let clean = receiverUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+            .lowercased()
+        guard let receiver = try await fetchProfile(username: clean) else {
+            throw NSError(domain: "Convoy", code: 404,
+                          userInfo: [NSLocalizedDescriptionKey: "User not found"])
         }
         try await inviteUserToCrew(crewId: crewId, userId: receiver.id, invitedBy: invitedBy)
     }
@@ -189,27 +305,47 @@ final class SupabaseManager {
 
         if let member = existing.first {
             if member.status == "accepted" {
-                throw NSError(domain: "Supabase", code: 409, userInfo: [NSLocalizedDescriptionKey: "User is already in this crew."])
+                throw NSError(domain: "Convoy", code: 409,
+                              userInfo: [NSLocalizedDescriptionKey: "User is already in this crew."])
             } else if member.status == "pending" {
-                throw NSError(domain: "Supabase", code: 409, userInfo: [NSLocalizedDescriptionKey: "Invite is already pending."])
+                throw NSError(domain: "Convoy", code: 409,
+                              userInfo: [NSLocalizedDescriptionKey: "Invite is already pending."])
             } else {
-                // If it was declined or other status, reactivate to pending
+                // Re-activate a previously declined invite.
+                let update = CrewMemberStatusUpdate(status: "pending")
                 try await client.from("crew_members")
-                    .update(["status": "pending", "invited_by": invitedBy.uuidString.lowercased()])
+                    .update(update)
                     .eq("id", value: member.id)
                     .execute()
                 return
             }
         }
 
-        let invite = CrewMemberInsert(crew_id: crewId, user_id: userId, role: "member", status: "pending", invited_by: invitedBy)
+        let invite = CrewMemberInsert(
+            crew_id: crewId,
+            user_id: userId,
+            role: "member",
+            status: "pending",
+            invited_by: invitedBy
+        )
         try await client.from("crew_members").insert(invite).execute()
     }
 
-    func inviteUsersToCrew(crewId: UUID, userIds: [UUID], invitedBy: UUID) async throws {
+    /// Returns the number of successes. Throws only if every invite failed.
+    @discardableResult
+    func inviteUsersToCrew(crewId: UUID, userIds: [UUID], invitedBy: UUID) async throws -> Int {
+        var success = 0
+        var lastError: Error?
         for userId in userIds {
-            try? await inviteUserToCrew(crewId: crewId, userId: userId, invitedBy: invitedBy)
+            do {
+                try await inviteUserToCrew(crewId: crewId, userId: userId, invitedBy: invitedBy)
+                success += 1
+            } catch {
+                lastError = error
+            }
         }
+        if success == 0, let lastError { throw lastError }
+        return success
     }
 
     func fetchCrews(for userId: UUID) async throws -> [CrewRow] {
@@ -255,7 +391,7 @@ final class SupabaseManager {
             .eq("id", value: memberId)
             .execute()
     }
-    
+
     func fetchCrewsWithMembers(for userId: UUID) async throws -> [CrewGroup] {
         let rows = try await fetchCrews(for: userId)
         var groups: [CrewGroup] = []
@@ -268,15 +404,157 @@ final class SupabaseManager {
         }
         return groups
     }
+
+    // MARK: - Rides
+
+    func createRide(_ ride: Ride, userId: UUID) async throws {
+        let stopsData = (try? JSONEncoder().encode(ride.plan.stops)) ?? Data("[]".utf8)
+        let stopsJSON = String(data: stopsData, encoding: .utf8) ?? "[]"
+
+        let selected = ride.plan.selected
+        let coordsPairs = (selected?.coords ?? []).map { [$0.lat, $0.lon] }
+        let coordsData = (try? JSONSerialization.data(withJSONObject: coordsPairs)) ?? Data("[]".utf8)
+        let coordsJSON = String(data: coordsData, encoding: .utf8) ?? "[]"
+
+        let iso = ISO8601DateFormatter()
+        let departsStr = iso.string(from: ride.departs)
+
+        let payload = RideInsert(
+            id: ride.id,
+            title: ride.title,
+            place: ride.place,
+            subtitle: ride.subtitle,
+            tag: ride.tag,
+            organiser_id: userId,
+            code: ride.code,
+            departs: departsStr,
+            distance: ride.distance,
+            duration: ride.duration,
+            display_date: ride.displayDate,
+            display_time: ride.displayTime,
+            from_location: ride.plan.from,
+            to_location: ride.plan.to,
+            stops_json: stopsJSON,
+            style_raw: ride.plan.style.rawValue,
+            route_set: ride.plan.routeSet,
+            start_lat: ride.plan.startCoord?.lat ?? 0,
+            start_lon: ride.plan.startCoord?.lon ?? 0,
+            end_lat: ride.plan.endCoord?.lat ?? 0,
+            end_lon: ride.plan.endCoord?.lon ?? 0,
+            route_coords_json: coordsJSON,
+            route_km: selected?.km ?? 0,
+            route_minutes: selected?.minutes ?? 0
+        )
+
+        try await client.from("rides").insert(payload).execute()
+
+        let member = RideMemberInsert(ride_id: ride.id, user_id: userId, role: "organiser")
+        try? await client.from("ride_members").insert(member).execute()
+    }
+
+    /// Looks up a ride by code on the server and joins the caller.
+    /// Throws if no ride exists with that code.
+    func joinRideByCode(_ code: String, userId: UUID) async throws -> Ride {
+        let rows: [RideRow] = try await client.from("rides")
+            .select()
+            .eq("code", value: code.uppercased())
+            .execute()
+            .value
+
+        guard let row = rows.first else {
+            throw NSError(domain: "Convoy", code: 404,
+                          userInfo: [NSLocalizedDescriptionKey: "No ride with code \(code)"])
+        }
+
+        let member = RideMemberInsert(ride_id: row.id, user_id: userId, role: "rider")
+        try? await client.from("ride_members").insert(member).execute()
+
+        return row.toRide()
+    }
+
+    // MARK: - Fill-ups
+
+    func insertFillUp(userId: UUID, odo: Int, litres: Double, price: Double) async throws {
+        let payload = FillUpInsert(
+            user_id: userId,
+            odo: odo,
+            litres: litres,
+            price: price
+        )
+        try await client.from("fill_ups").insert(payload).execute()
+    }
+
+    func fetchFillUps(userId: UUID) async throws -> [FillUpRow] {
+        let response: [FillUpRow] = try await client.from("fill_ups")
+            .select()
+            .eq("user_id", value: userId)
+            .order("filled_at", ascending: true)
+            .execute()
+            .value
+        return response
+    }
+
+    // MARK: - Saved routes
+
+    func saveSavedRoute(userId: UUID, route: DiscoverRoute) async throws {
+        let payload = SavedRouteInsert(
+            user_id: userId,
+            route_id: route.id,
+            title: route.title,
+            payload_json: Self.encodeRoutePayload(route)
+        )
+        try await client.from("saved_routes")
+            .upsert(payload, onConflict: "user_id,route_id")
+            .execute()
+    }
+
+    func deleteSavedRoute(userId: UUID, routeId: String) async throws {
+        try await client.from("saved_routes")
+            .delete()
+            .eq("user_id", value: userId)
+            .eq("route_id", value: routeId)
+            .execute()
+    }
+
+    /// Builds a JSON string for a DiscoverRoute. The type isn't `Encodable`
+    /// (it contains `Set<RouteCategory>` and `Coord`), so we serialize the
+    /// primitive fields manually.
+    private static func encodeRoutePayload(_ route: DiscoverRoute) -> String {
+        var dict: [String: Any] = [:]
+        dict["id"] = route.id
+        dict["title"] = route.title
+        dict["tag"] = route.tag
+        dict["from"] = route.from
+        dict["to"] = route.to
+        dict["km"] = route.km
+        dict["time"] = route.time
+        dict["style"] = route.style
+        dict["blurb"] = route.blurb
+        dict["startPlace"] = route.startPlace
+        dict["finishPlace"] = route.finishPlace
+        dict["stops"] = route.stops
+        dict["startLat"] = route.startCoord.lat
+        dict["startLon"] = route.startCoord.lon
+        dict["endLat"] = route.endCoord.lat
+        dict["endLon"] = route.endCoord.lon
+        dict["coords"] = route.coords.map { ["lat": $0.lat, "lon": $0.lon] }
+        dict["categories"] = route.categories.map(\.rawValue)
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let s = String(data: data, encoding: .utf8) else { return "{}" }
+        return s
+    }
 }
 
-// MARK: - Codable Payloads
+// MARK: - Codable payloads
 
-struct ProfileRow: Codable, Identifiable, Sendable {
+struct ProfileRow: Codable, Identifiable, Sendable, Hashable {
     let id: UUID
     let username: String
     let display_name: String
     let avatar_data: String?
+
+    static func == (l: ProfileRow, r: ProfileRow) -> Bool { l.id == r.id }
+    func hash(into h: inout Hasher) { h.combine(id) }
 }
 
 struct ProfileInsert: Codable {
@@ -304,7 +582,7 @@ struct FriendshipWithProfile: Codable, Identifiable, Sendable {
     let sender_id: UUID
     let receiver_id: UUID
     let status: String
-    let profiles: ProfileRow
+    let profiles: ProfileRow?
 }
 
 struct FriendshipWithBothProfiles: Codable, Identifiable, Sendable {
@@ -348,13 +626,18 @@ struct CrewMemberInsert: Codable {
     var invited_by: UUID? = nil
 }
 
+/// Typed wrapper so `update(["status": "pending"])` doesn't need `[String: Any]`.
+struct CrewMemberStatusUpdate: Codable {
+    let status: String
+}
+
 struct CrewMemberWithProfile: Codable, Identifiable, Sendable {
     let id: UUID
     let crew_id: UUID
     let user_id: UUID
     let role: String
     let status: String
-    let profiles: ProfileRow
+    let profiles: ProfileRow?
 }
 
 struct CrewInviteWithDetails: Codable, Identifiable, Sendable {
@@ -362,16 +645,102 @@ struct CrewInviteWithDetails: Codable, Identifiable, Sendable {
     let crew_id: UUID
     let user_id: UUID
     let status: String
-    let crews: CrewRow
+    let crews: CrewRow?
     let profiles: ProfileRow?
 }
+
+struct RideRow: Codable, Sendable {
+    let id: UUID
+    let title: String
+    let place: String?
+    let subtitle: String?
+    let tag: String?
+    let organiser_id: UUID
+    let code: String
+    let departs: String
+    let distance: String?
+    let duration: String?
+    let display_date: String?
+    let display_time: String?
+    let from_location: String?
+    let to_location: String?
+    let stops_json: String?
+    let style_raw: String?
+    let route_set: Bool?
+    let start_lat: Double?
+    let start_lon: Double?
+    let end_lat: Double?
+    let end_lon: Double?
+    let route_coords_json: String?
+    let route_km: Double?
+    let route_minutes: Int?
+}
+
+struct RideInsert: Codable {
+    let id: UUID
+    let title: String
+    let place: String?
+    let subtitle: String?
+    let tag: String?
+    let organiser_id: UUID
+    let code: String
+    let departs: String
+    let distance: String?
+    let duration: String?
+    let display_date: String?
+    let display_time: String?
+    let from_location: String?
+    let to_location: String?
+    let stops_json: String
+    let style_raw: String
+    let route_set: Bool
+    let start_lat: Double
+    let start_lon: Double
+    let end_lat: Double
+    let end_lon: Double
+    let route_coords_json: String
+    let route_km: Double
+    let route_minutes: Int
+}
+
+struct RideMemberInsert: Codable {
+    let ride_id: UUID
+    let user_id: UUID
+    let role: String
+}
+
+struct FillUpRow: Codable, Sendable {
+    let id: UUID
+    let odo: Int
+    let litres: Double
+    let price: Double
+    let filled_at: String?
+}
+
+struct FillUpInsert: Codable {
+    let user_id: UUID
+    let odo: Int
+    let litres: Double
+    let price: Double
+}
+
+struct SavedRouteInsert: Codable {
+    let user_id: UUID
+    let route_id: String
+    let title: String
+    let payload_json: String
+}
+
+// MARK: - Conversion helpers
 
 extension CrewRow {
     func toCrewGroup(members: [CrewMember] = []) -> CrewGroup {
         CrewGroup(
             id: id,
             name: name,
-            detail: members.isEmpty ? "1 rider · just you" : "\(members.count) rider\(members.count == 1 ? "" : "s")",
+            detail: members.isEmpty
+                ? "1 rider · just you"
+                : "\(members.count) rider\(members.count == 1 ? "" : "s")",
             accentHex: 0xFF3B30,
             avatarData: avatar_data.flatMap { Data(base64Encoded: $0) },
             members: members,
@@ -384,10 +753,74 @@ extension CrewRow {
 extension CrewMemberWithProfile {
     func toCrewMember() -> CrewMember {
         CrewMember(
-            name: profiles.display_name,
+            name: profiles?.display_name ?? "Rider",
             detail: role == "admin" ? "Admin" : "Member",
-            avatarData: profiles.avatar_data.flatMap { Data(base64Encoded: $0) },
+            avatarData: profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
             pending: status == "pending"
+        )
+    }
+}
+
+extension RideRow {
+    func toRide() -> Ride {
+        let stops: [String] = {
+            guard let s = stops_json,
+                  let data = s.data(using: .utf8),
+                  let arr = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+            return arr
+        }()
+
+        let style = RouteStyle(rawValue: style_raw ?? "Fastest") ?? .fastest
+        var plan = PlanDraft(
+            name: title,
+            from: from_location ?? "",
+            to: to_location ?? "",
+            stops: stops,
+            routeSet: route_set ?? false,
+            style: style
+        )
+        if let lat = start_lat, let lon = start_lon, lat != 0 || lon != 0 {
+            plan.startCoord = Coord(lat: lat, lon: lon)
+        }
+        if let lat = end_lat, let lon = end_lon, lat != 0 || lon != 0 {
+            plan.endCoord = Coord(lat: lat, lon: lon)
+        }
+        if let coordsStr = route_coords_json,
+           let data = coordsStr.data(using: .utf8),
+           let pairs = try? JSONSerialization.jsonObject(with: data) as? [[Double]] {
+            let coords = pairs.compactMap { p -> Coord? in
+                guard p.count == 2 else { return nil }
+                return Coord(lat: p[0], lon: p[1])
+            }
+            if coords.count > 1 {
+                plan.routes[style] = RouteSummary(
+                    km: route_km ?? 0,
+                    minutes: route_minutes ?? 0,
+                    coords: coords
+                )
+            }
+        }
+
+        let date = ISO8601DateFormatter().date(from: departs) ?? Date()
+
+        return Ride(
+            id: id,
+            title: title,
+            place: place ?? "",
+            subtitle: subtitle ?? "",
+            tag: tag ?? "Group ride",
+            departs: date,
+            riders: [],
+            plan: plan,
+            distance: distance ?? "",
+            duration: duration ?? "",
+            displayDate: display_date ?? "",
+            displayTime: display_time ?? "",
+            organiser: "host",
+            rsvp: .going,
+            lockText: "Start ride",
+            ridersGoing: 1,
+            listMeta: "\(distance ?? "") · \(from_location ?? "") → \(to_location ?? "")"
         )
     }
 }
