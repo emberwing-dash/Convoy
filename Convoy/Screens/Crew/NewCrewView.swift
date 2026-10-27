@@ -12,9 +12,23 @@ struct NewCrewView: View {
     @State private var showCropView = false
     @State private var showPhotosPicker = false
     @FocusState private var focused: Bool
-    
+
     @State private var isCreating = false
     @State private var errorMessage: String? = nil
+
+    /// `true` if we're somewhere in the Initiate Plan flow (so we can auto-select
+    /// the newly created crew when we pop back).
+    private var openedFromPlan: Bool {
+        app.path.contains(where: {
+            switch $0 {
+            case .planWho, .planDetails, .planMap, .planRoutes,
+                 .planReview, .planCreated:
+                return true
+            default:
+                return false
+            }
+        })
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -26,7 +40,6 @@ struct NewCrewView: View {
                     Text("A crew is a group you ride with often. Plan rides for the whole crew in one tap.")
                         .cvText(14, color: CV.muted, lineHeight: 18, inter: true).padding(.top, 8).padding(.bottom, 24)
 
-                    // ✅ Side-by-side Avatar and Name
                     HStack(spacing: 16) {
                         Button { showPhotosPicker = true } label: {
                             ZStack(alignment: .bottomTrailing) {
@@ -68,7 +81,7 @@ struct NewCrewView: View {
                         Text(error).cvText(13, color: CV.red, inter: true).padding(.top, 12)
                     }
 
-                    Text("You’ll be the admin. Share the crew code with anyone you ride with.")
+                    Text("You'll be the admin. Invite riders next.")
                         .cvText(13, color: CV.muted, lineHeight: 18, inter: true).padding(.top, 24)
                 }.padding(.horizontal, 20)
             }
@@ -132,7 +145,7 @@ struct NewCrewView: View {
 
         Task {
             do {
-                _ = try await SupabaseManager.shared.createCrew(
+                let crewId = try await SupabaseManager.shared.createCrew(
                     name: n,
                     code: code,
                     creatorId: userId,
@@ -143,13 +156,43 @@ struct NewCrewView: View {
                 let hydrated = try await SupabaseManager.shared.fetchCrewsWithMembers(for: userId)
 
                 await MainActor.run {
-                    app.crews = hydrated
                     isCreating = false
-                    app.pop()
-                    if let newCrew = hydrated.last {
-                        app.push(.crewDetail(newCrew.id))
-                        app.push(.crewInvite(newCrew.id))
+
+                    // Merge server state with a local fallback so the invite
+                    // screen never appears empty even if the fetch missed our
+                    // freshly-created crew (network blip, RLS race, etc.).
+                    var nextCrews = hydrated
+                    if !nextCrews.contains(where: { $0.id == crewId }) {
+                        nextCrews.append(CrewGroup(
+                            id: crewId,
+                            name: n,
+                            detail: "1 rider · just you",
+                            accentHex: 0xFF3B30,
+                            avatarData: avatarData,
+                            members: [CrewMember(
+                                name: app.displayName,
+                                detail: "Admin",
+                                avatarData: app.avatarImageData
+                            )],
+                            since: Date(),
+                            code: code
+                        ))
                     }
+                    app.crews = nextCrews
+                    StorageService.shared.syncCrews(nextCrews)
+
+                    // Auto-select the crew when we're inside the plan flow so
+                    // the user returns to a ready-to-go PlanWhoView.
+                    if openedFromPlan {
+                        app.selectedCrew = crewId
+                    }
+
+                    // Route every entry point to the invite screen — this is
+                    // the "complete the crew" step. Pop the creation screen
+                    // first so "back" from the invite goes to the originating
+                    // context (PlanWho or CrewView), not back here.
+                    app.pop()
+                    app.push(.crewInvite(crewId))
                 }
             } catch {
                 await MainActor.run {

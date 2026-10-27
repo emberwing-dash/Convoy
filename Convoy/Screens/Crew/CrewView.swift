@@ -22,16 +22,16 @@ struct CrewView: View {
             }
             .scrollIndicators(.hidden)
             .refreshable {
-                await app.loadFriendRequests()
-                await app.loadCrewInvites()
-                await app.loadCrews()
-                await app.loadFriends()
+                await app.loadCrews(force: true)
+                await app.loadFriends(force: true)
+                await app.refreshNotifications(force: true)
             }
             .task {
-                await app.loadFriendRequests()
-                await app.loadCrewInvites()
                 await app.loadCrews()
                 await app.loadFriends()
+                if app.notificationsLoadedAt == nil {
+                    await app.refreshNotifications()
+                }
             }
         }
     }
@@ -104,11 +104,12 @@ struct CrewView: View {
     }
 
     private func inviteCard(_ invite: CrewInviteWithDetails) -> some View {
-        HStack(spacing: 12) {
-            CrewAvatar(data: nil, name: invite.crews.name, size: 44)
+        let crewName = invite.crews?.name ?? "Crew Invite"
+        return HStack(spacing: 12) {
+            CrewAvatar(data: invite.crews?.avatar_data.flatMap { Data(base64Encoded: $0) }, name: crewName, size: 44)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(invite.crews.name)
+                Text(crewName)
                     .cvText(16, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
                     .lineLimit(1)
                 if let inviter = invite.profiles {
@@ -334,14 +335,16 @@ struct CrewView: View {
     }
 
     private func friendRequestCard(_ req: FriendshipWithProfile) -> some View {
-        HStack(spacing: 12) {
-            AvatarChip(data: req.profiles.avatar_data.flatMap { Data(base64Encoded: $0) }, name: req.profiles.display_name, size: 44)
+        let displayName = req.profiles?.display_name ?? "Someone"
+        let username = req.profiles?.username ?? "rider"
+        return HStack(spacing: 12) {
+            AvatarChip(data: req.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) }, name: displayName, size: 44)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(req.profiles.display_name)
+                Text(displayName)
                     .cvText(16, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
                     .lineLimit(1)
-                Text("@\(req.profiles.username) sent you a friend request")
+                Text("@\(username) sent you a friend request")
                     .cvText(12, color: CV.muted, inter: true)
                     .lineLimit(1)
             }

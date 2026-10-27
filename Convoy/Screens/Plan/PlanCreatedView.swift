@@ -87,7 +87,7 @@ struct PlanCreatedView: View {
             }
             .frame(width: 100, height: 4).at(146.5, 760)
 
-            Text("Taking you home")
+            Text("Taking you to your ride")
                 .cvText(13, color: CV.cream.opacity(0.45), inter: true)
                 .frame(width: 393).at(0, 776)
         }
@@ -96,9 +96,8 @@ struct PlanCreatedView: View {
         .task {
             withAnimation(.linear(duration: 2)) { progress = 1 }
             try? await Task.sleep(for: .seconds(2.2))
-            // Only finish if a real plan was prepared.
-            if app.draft.routeSet || !app.draft.to.trimmingCharacters(in: .whitespaces).isEmpty {
-                app.finishPlan()
+            if let rideId = app.finishPlan() {
+                app.push(.rideDetails(rideId))
             } else {
                 app.popToRoot()
             }

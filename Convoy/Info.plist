@@ -2,6 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>app.convoy.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>convoy</string>
+			</array>
+		</dict>
+	</array>
 	<key>SUPABASE_KEY</key>
 	<string>sb_publishable_4cTQxSHnQbUtxLE_n2Rz7A_YDCuQ5-0</string>
 	<key>SUPABASE_URL</key>
@@ -9,7 +22,11 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
-		<string>audio</string>
 	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 </dict>
 </plist>

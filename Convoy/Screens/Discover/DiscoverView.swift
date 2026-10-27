@@ -112,11 +112,8 @@ struct DiscoverView: View {
             }
         }
         .onChange(of: location.currentLocation) { _, newLoc in
-            guard let newLoc, !didInitialLoad else { return }
-            Task {
-                await discover.refresh(near: newLoc)
-                didInitialLoad = true
-            }
+            guard let newLoc else { return }
+            Task { await discover.refresh(near: newLoc) }
         }
     }
 

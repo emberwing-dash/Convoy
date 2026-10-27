@@ -7,6 +7,7 @@ struct JoinCodeView: View {
     @Environment(AppState.self) private var app
     @State private var code = ""
     @State private var notFound = false
+    @State private var isSubmitting = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -17,7 +18,7 @@ struct JoinCodeView: View {
                     Text("Join a ride")
                         .cvText(30, .bold, color: Color(hex: 0xF5EDDE), inter: true)
                         .padding(.top, 64)
-                    Text("Enter the 6-character code your friend shared.\nYou’ll see the ride before you join.")
+                    Text("Enter the 6-character code your friend shared.\nYou'll see the ride before you join.")
                         .cvText(15, color: CV.muted, inter: true)
                         .padding(.top, 6)
 
@@ -38,7 +39,7 @@ struct JoinCodeView: View {
                                 .background(Color(hex: 0x1C1C1F), in: Capsule())
                                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                         }
-                        Button { code = codeFromClipboardOrEmpty(); submit() } label: {
+                        Button { paste() } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "qrcode.viewfinder").font(.system(size: 16))
                                 Text("Scan QR")
@@ -79,7 +80,7 @@ struct JoinCodeView: View {
                             ForEach(app.rides.prefix(3)) { r in
                                 Button {
                                     code = r.code
-                                    submit()
+                                    Task { await submit() }
                                 } label: {
                                     HStack(spacing: 12) {
                                         RouteSnapshotView(
@@ -136,15 +137,22 @@ struct JoinCodeView: View {
                 }
         }
         .safeAreaInset(edge: .bottom) {
-            Button { submit() } label: {
-                Text("Find ride")
-                    .cvText(17, .semibold, color: CV.ink, inter: true)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(CV.cream, in: Capsule())
+            Button { Task { await submit() } } label: {
+                if isSubmitting {
+                    ProgressView().tint(CV.ink)
+                        .frame(maxWidth: .infinity).frame(height: 50)
+                        .background(CV.cream, in: Capsule())
+                } else {
+                    Text("Find ride")
+                        .cvText(17, .semibold, color: CV.ink, inter: true)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(CV.cream, in: Capsule())
+                }
             }
             .buttonStyle(.plain)
             .opacity(code.count == 6 ? 1 : 0.4)
+            .disabled(code.count != 6 || isSubmitting)
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
         }
@@ -183,37 +191,41 @@ struct JoinCodeView: View {
         let clip = (UIPasteboard.general.string ?? "").uppercased()
             .filter { $0.isLetter || $0.isNumber }
         code = String(clip.prefix(6))
-        submit()
+        Task { await submit() }
     }
 
-    private func codeFromClipboardOrEmpty() -> String {
-        let clip = (UIPasteboard.general.string ?? "").uppercased()
-            .filter { $0.isLetter || $0.isNumber }
-        return String(clip.prefix(6))
-    }
-
-    private func submit() {
+    private func submit() async {
         guard code.count == 6 else { return }
-        if app.joinRideByCode(code) {
+        isSubmitting = true
+        defer { isSubmitting = false }
+
+        if await app.joinRideByCode(code), let rideId = app.lastJoinedRideID {
             focused = false
-            app.push(.joinFound)
+            app.popToRoot()
+            app.tab = .ride
+            app.push(.rideDetails(rideId))
         } else {
             notFound = true
         }
     }
 }
 
-// MARK: - JoinFoundView
+// MARK: - JoinFoundView (kept for backward compat, unused after JoinCodeView pushes rideDetails directly)
 
 struct JoinFoundView: View {
     @Environment(AppState.self) private var app
+
+    private var ride: Ride? {
+        guard let id = app.lastJoinedRideID else { return nil }
+        return app.rides.first { $0.id == id }
+    }
 
     var body: some View {
         DesignCanvas {
             ContourBackdrop()
             CircleBackButton { app.pop() }.at(20, 58)
 
-            if let ride = app.upcomingRide {
+            if let ride {
                 Text("Ride found")
                     .cvText(13, .semibold, color: CV.red, inter: true)
                     .at(24, 120)
@@ -251,23 +263,10 @@ struct JoinFoundView: View {
                     .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
                 .at(24, 410)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Organised by")
-                        .cvText(12, color: CV.muted, inter: true)
-                    Text(ride.organiser)
-                        .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
-                        .padding(.top, 1)
-                }
-                .padding(.horizontal, 18)
-                .frame(width: 345, height: 68, alignment: .leading)
-                .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
-                .at(24, 494)
-
                 Button {
                     app.popToRoot()
                     app.tab = .ride
+                    app.push(.rideDetails(ride.id))
                 } label: {
                     Text("View ride")
                         .cvText(15, .semibold, color: CV.ink, inter: true)

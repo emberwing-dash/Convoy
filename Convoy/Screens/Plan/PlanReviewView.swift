@@ -86,7 +86,7 @@ struct PlanReviewView: View {
                 .cvText(13, .semibold, color: .white, inter: true)
                 .padding(.horizontal, 12).frame(height: 30)
                 .background(CV.red, in: Capsule()).offset(x: 12, y: 12)
-            Button { app.pop() } label: {
+            Button { app.popToLast(2) } label: {
                 Text("Edit route").cvText(13, .semibold, color: .white, inter: true)
                     .padding(.horizontal, 12).frame(height: 30)
                     .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Capsule())

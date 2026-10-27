@@ -58,7 +58,6 @@ struct ProfileSetupView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("STEP 2 OF 2").cvEyebrow()
                         Text("Who's riding?")
                             .cvText(32, .semibold, tracking: -0.96, lineHeight: 38)
                         Text("This is how your crew spots you on the map.")

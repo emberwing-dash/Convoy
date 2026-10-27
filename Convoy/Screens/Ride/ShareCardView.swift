@@ -37,18 +37,15 @@ struct ShareCardView: View {
             Text("Riders’ photos only appear if they allow it.")
                 .cvText(12, color: CV.cream.opacity(0.4), inter: true)
                 .frame(width: 393).at(0, 684)
-
+            
             Button {
-                app.popToRoot()
-                app.tab = .ride
+                app.pop()
             } label: {
                 Text("Done")
                     .cvText(15, .semibold, inter: true)
                     .frame(width: 120, height: 56)
                     .background(Color.white.opacity(0.08), in: Capsule())
             }
-            .buttonStyle(.plain)
-            .at(20, 750)
 
             ShareLink(item: shareText) {
                 HStack(spacing: 8) {

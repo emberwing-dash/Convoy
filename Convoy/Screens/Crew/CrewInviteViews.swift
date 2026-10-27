@@ -5,36 +5,42 @@ struct CrewInviteView: View {
     @Environment(AppState.self) private var app
     let crewID: UUID
 
-    // Crew & Code State
-    @State private var copied = false
-    @State private var existingMemberIds: Set<UUID> = []
-    @State private var pendingInviteUserIds: Set<UUID> = []
-    @State private var isLoadingData = true
-
-    // Search State
+    // Search + selection
     @State private var searchText = ""
-    @State private var isSearching = false
-    @State private var searchErrorMessage: String? = nil
-    @State private var foundUser: ProfileRow? = nil
-    @State private var isFriendOfSearched = false
-    @State private var hasPendingFriendRequest = false
-    @State private var isProcessingFriendRequest = false
+    @State private var searchResults: [ProfileRow] = []
+    @State private var searchError: String?
 
-    // Unified Selection State (Friends + Searched Users)
-    @State private var selectedUserIds: Set<UUID> = []
-    @State private var selectedUserProfiles: [UUID: ProfileRow] = [:]
-    @State private var isBatchInviting = false
+    // Selection
+    @State private var selectedIds: Set<UUID> = []
+    @State private var selectedProfiles: [UUID: ProfileRow] = [:]
 
-    // Feedback Toast
-    @State private var toastMessage: String? = nil
-    @State private var toastTask: Task<Void, Never>? = nil
+    // Relationship state
+    @State private var memberIds: Set<UUID> = []
+    @State private var pendingIds: Set<UUID> = []
+    @State private var friendIds: Set<UUID> = []
 
-    private var crew: CrewGroup? {
-        app.crews.first { $0.id == crewID }
-    }
+    // Send state
+    @State private var isSending = false
+    @State private var toast: String?
+    @State private var toastTask: Task<Void, Never>?
+    @State private var invitesSent = 0
 
-    private var availableFriends: [ProfileRow] {
-        app.friends.filter { !existingMemberIds.contains($0.id) && !pendingInviteUserIds.contains($0.id) }
+    @FocusState private var searchFocused: Bool
+
+    private var crew: CrewGroup? { app.crews.first { $0.id == crewID } }
+
+    private var visibleUsers: [ProfileRow] {
+        if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+            return app.friends
+        }
+        var seen = Set<UUID>()
+        var out: [ProfileRow] = []
+        for u in searchResults + app.friends {
+            guard !seen.contains(u.id) else { continue }
+            seen.insert(u.id)
+            out.append(u)
+        }
+        return out
     }
 
     var body: some View {
@@ -43,265 +49,142 @@ struct CrewInviteView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if let crew {
-                        headerSection(crew: crew)
-                        searchSection
-                        searchResultCard
-                        friendsSection
-                        codeAndShareSection(crew: crew)
-                    } else {
-                        VStack(spacing: 12) {
-                            ProgressView().tint(CV.red)
-                            Text("Loading crew...").cvText(14, color: CV.muted, inter: true)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 120)
+                    header
+                    searchBar.padding(.top, 20)
+
+                    if let searchError {
+                        Text(searchError)
+                            .cvText(13, color: CV.red, inter: true)
+                            .padding(.leading, 4).padding(.top, 8)
                     }
+
+                    userList.padding(.top, 24)
+                    shareCodeSection.padding(.top, 28)
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, selectedUserIds.isEmpty ? 60 : 130)
+                .padding(.bottom, selectedIds.isEmpty ? 100 : 130)
             }
+            .scrollDismissesKeyboard(.interactively)
             .scrollIndicators(.hidden)
 
-            // Top Navigation Bar
             topBar
 
-            // Floating Multi-Select Action Bar (Single Send Action)
-            if !selectedUserIds.isEmpty {
-                floatingBatchInviteBar
-            }
+            if !selectedIds.isEmpty { sendBar }
 
-            // Toast Banner
-            if let toast = toastMessage {
-                toastView(text: toast)
-            }
+            if let toast { toastBanner(toast) }
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
-        .task {
-            await loadData()
-        }
+        .task { await reload() }
     }
 
     // MARK: - Header
-    private func headerSection(crew: CrewGroup) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Invite to \(crew.name)")
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Invite to \(crew?.name ?? "crew")")
                 .cvText(28, .bold, color: Color(hex: 0xF5EDDE), inter: true)
                 .padding(.top, 64)
 
-            Text("Select friends or search riders by handle to invite in a single tap.")
+            Text("Select riders to invite — they'll get a notification.")
                 .cvText(14, color: CV.muted, lineHeight: 19, inter: true)
         }
     }
 
-    // MARK: - Search Section
-    private var searchSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("SEARCH BY @HANDLE")
-                .cvText(12, .semibold, color: CV.cream.opacity(0.5), tracking: 0.6, inter: true)
-                .padding(.top, 24)
-                .padding(.leading, 4)
+    // MARK: - Top bar (back + explicit Done)
 
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(CV.cream.opacity(0.45))
-                    .padding(.leading, 4)
+    private var topBar: some View {
+        HStack {
+            CircleBackButton { app.pop() }
 
-                TextField("", text: $searchText, prompt: Text("e.g. rider123").foregroundColor(CV.cream.opacity(0.35)))
-                    .cvText(15, .medium, color: CV.cream, inter: true)
-                    .autocapitalization(.none)
-                    .autocorrectionDisabled()
-                    .tint(CV.red)
-                    .onSubmit { performSearch() }
+            Spacer()
 
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                        foundUser = nil
-                        searchErrorMessage = nil
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(CV.cream.opacity(0.4))
+            Button {
+                app.pop()
+            } label: {
+                Text(invitesSent > 0 ? "Done (\(invitesSent))" : "Done")
+                    .cvText(15, .semibold, color: CV.ink, inter: true)
+                    .padding(.horizontal, 20)
+                    .frame(height: 44)
+                    .background(CV.cream, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    // MARK: - Search bar
+
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(CV.cream.opacity(0.45))
+
+            TextField("", text: $searchText,
+                      prompt: Text("Search by @handle or name")
+                        .foregroundColor(CV.cream.opacity(0.4)))
+                .focused($searchFocused)
+                .autocapitalization(.none)
+                .autocorrectionDisabled()
+                .tint(CV.red)
+                .cvText(15, .medium, inter: true)
+                .onSubmit { Task { await performSearch() } }
+                .onChange(of: searchText) { _, _ in
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(350))
+                        await performSearch()
                     }
-                    .buttonStyle(.plain)
                 }
 
+            if !searchText.isEmpty {
                 Button {
-                    performSearch()
+                    searchText = ""
+                    searchResults = []
+                    searchError = nil
                 } label: {
-                    if isSearching {
-                        ProgressView()
-                            .tint(CV.ink)
-                            .frame(width: 72, height: 38)
-                    } else {
-                        Text("Search")
-                            .cvText(14, .semibold, color: CV.ink, inter: true)
-                            .frame(width: 72, height: 38)
-                    }
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(CV.cream.opacity(0.4))
                 }
-                .background(CV.cream, in: Capsule())
-                .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
-                .opacity(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching ? 0.5 : 1)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-
-            if let error = searchErrorMessage {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .font(.system(size: 13))
-                    Text(error)
-                        .cvText(13, .medium, color: CV.red, inter: true)
-                }
-                .foregroundStyle(CV.red)
-                .padding(.leading, 6)
-                .padding(.top, 2)
-                .transition(.opacity)
+                .buttonStyle(.plain)
             }
         }
+        .padding(.horizontal, 14)
+        .frame(height: 48)
+        .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 
-    // MARK: - Search Result Card
-    @ViewBuilder
-    private var searchResultCard: some View {
-        if let user = foundUser {
-            let inCrew = existingMemberIds.contains(user.id)
-            let isPending = pendingInviteUserIds.contains(user.id)
-            let isSelected = selectedUserIds.contains(user.id)
+    // MARK: - User list
 
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 14) {
-                    AvatarChip(
-                        data: user.avatar_data.flatMap { Data(base64Encoded: $0) },
-                        name: user.display_name,
-                        size: 48
-                    )
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(user.display_name)
-                            .cvText(16, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
-
-                        HStack(spacing: 8) {
-                            Text("@\(user.username)")
-                                .cvText(13, color: CV.muted, inter: true)
-
-                            if isFriendOfSearched {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "person.2.fill")
-                                        .font(.system(size: 10))
-                                    Text("Friend")
-                                        .cvText(11, .semibold, inter: true)
-                                }
-                                .foregroundStyle(CV.green)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(CV.green.opacity(0.12), in: Capsule())
-                            } else if hasPendingFriendRequest {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "clock.fill")
-                                        .font(.system(size: 10))
-                                    Text("Friend Req Pending")
-                                        .cvText(11, .medium, inter: true)
-                                }
-                                .foregroundStyle(CV.muted)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(Color.white.opacity(0.06), in: Capsule())
-                            }
-                        }
-                    }
-                    Spacer()
-                }
-
-                Divider().overlay(Color.white.opacity(0.07))
-
-                // Actions for searched user: SELECT to invite (no direct individual invite)
-                HStack(spacing: 10) {
-                    if inCrew {
-                        statusBadge(text: "In Crew", icon: "checkmark.circle.fill", color: CV.green)
-                    } else if isPending {
-                        statusBadge(text: "Invite Sent", icon: "clock.fill", color: Color(hex: 0xFFB020))
-                    } else {
-                        Button {
-                            withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
-                                toggleUserSelection(user: user)
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle")
-                                    .font(.system(size: 14, weight: .bold))
-                                Text(isSelected ? "Selected to Invite" : "Select to Invite")
-                                    .cvText(14, .semibold, color: isSelected ? .white : CV.ink, inter: true)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .background(isSelected ? CV.red : CV.cream, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // Friend Request Action (if not friends and no pending request)
-                    if !isFriendOfSearched && !hasPendingFriendRequest {
-                        Button {
-                            sendFriendRequestToSearchedUser(user: user)
-                        } label: {
-                            HStack(spacing: 6) {
-                                if isProcessingFriendRequest {
-                                    ProgressView().tint(CV.cream)
-                                } else {
-                                    Image(systemName: "person.badge.plus")
-                                    Text("Add Friend")
-                                        .cvText(14, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .background(Color.white.opacity(0.1), in: Capsule())
-                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isProcessingFriendRequest)
-                    }
-                }
-            }
-            .padding(16)
-            .background(Color(hex: 0x1A1A1E), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(isSelected ? CV.red.opacity(0.6) : Color.white.opacity(0.1), lineWidth: isSelected ? 1.5 : 1))
-            .padding(.top, 12)
-            .transition(.scale(scale: 0.98).combined(with: .opacity))
-        }
-    }
-
-    // MARK: - Friends Section
-    private var friendsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var userList: some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("YOUR FRIENDS · \(app.friends.count)")
-                    .cvText(12, .semibold, color: CV.cream.opacity(0.5), tracking: 0.6, inter: true)
+                Text("SELECT RIDERS · \(visibleUsers.count)")
+                    .cvText(12, .semibold, color: CV.cream.opacity(0.5),
+                            tracking: 0.6, inter: true)
 
                 Spacer()
 
-                if availableFriends.count > 1 {
-                    let allSelected = availableFriends.allSatisfy { selectedUserIds.contains($0.id) }
+                let selectable = visibleUsers.filter { !memberIds.contains($0.id) && !pendingIds.contains($0.id) }
+                if selectable.count > 1 {
+                    let allSelected = selectable.allSatisfy { selectedIds.contains($0.id) }
                     Button {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        withAnimation(.snappy(duration: 0.2)) {
                             if allSelected {
-                                for f in availableFriends {
-                                    selectedUserIds.remove(f.id)
-                                    selectedUserProfiles.removeValue(forKey: f.id)
+                                for u in selectable {
+                                    selectedIds.remove(u.id)
+                                    selectedProfiles.removeValue(forKey: u.id)
                                 }
                             } else {
-                                for f in availableFriends {
-                                    selectedUserIds.insert(f.id)
-                                    selectedUserProfiles[f.id] = f
+                                for u in selectable {
+                                    selectedIds.insert(u.id)
+                                    selectedProfiles[u.id] = u
                                 }
                             }
                         }
@@ -312,51 +195,17 @@ struct CrewInviteView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.top, 28)
             .padding(.leading, 4)
 
-            if app.friends.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "person.2")
-                        .font(.system(size: 24))
-                        .foregroundStyle(CV.cream.opacity(0.4))
-                        .frame(width: 52, height: 52)
-                        .background(Color.white.opacity(0.04), in: Circle())
-                        .padding(.top, 6)
-
-                    Text("No friends on Convoy yet")
-                        .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
-
-                    Text("Search riders by @handle above to select them, or share your invite link below.")
-                        .cvText(13, color: CV.muted, lineHeight: 17, inter: true)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 6)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(20)
-                .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
+            if visibleUsers.isEmpty {
+                emptyCard
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(app.friends.enumerated()), id: \.element.id) { index, friend in
-                        let inCrew = existingMemberIds.contains(friend.id)
-                        let isPending = pendingInviteUserIds.contains(friend.id)
-                        let isSelected = selectedUserIds.contains(friend.id)
-
-                        friendRow(
-                            friend: friend,
-                            inCrew: inCrew,
-                            isPending: isPending,
-                            isSelected: isSelected
-                        )
-
-                        if index < app.friends.count - 1 {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.06))
-                                .frame(height: 1)
-                                .padding(.leading, 62)
+                    ForEach(Array(visibleUsers.enumerated()), id: \.element.id) { idx, user in
+                        row(for: user)
+                        if idx < visibleUsers.count - 1 {
+                            Rectangle().fill(Color.white.opacity(0.06))
+                                .frame(height: 1).padding(.leading, 62)
                         }
                     }
                 }
@@ -367,161 +216,152 @@ struct CrewInviteView: View {
         }
     }
 
-    private func friendRow(
-        friend: ProfileRow,
-        inCrew: Bool,
-        isPending: Bool,
-        isSelected: Bool
-    ) -> some View {
-        Button {
-            if !inCrew && !isPending {
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
-                    toggleUserSelection(user: friend)
+    private func row(for user: ProfileRow) -> some View {
+        let isMember   = memberIds.contains(user.id)
+        let isPending  = pendingIds.contains(user.id)
+        let isSelected = selectedIds.contains(user.id)
+        let isFriend   = friendIds.contains(user.id)
+
+        return Button {
+            guard !isMember, !isPending else { return }
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
+                if isSelected {
+                    selectedIds.remove(user.id)
+                    selectedProfiles.removeValue(forKey: user.id)
+                } else {
+                    selectedIds.insert(user.id)
+                    selectedProfiles[user.id] = user
                 }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
         } label: {
             HStack(spacing: 12) {
-                // Checkbox / Select Dot (only if selectable)
-                if !inCrew && !isPending {
-                    SelectDot(on: isSelected)
+                ZStack {
+                    Circle()
+                        .strokeBorder(isSelected ? CV.red : Color.white.opacity(0.25), lineWidth: 1.5)
+                        .frame(width: 26, height: 26)
+                    if isSelected {
+                        Circle().fill(CV.red).frame(width: 26, height: 26)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
                 }
+                .opacity(isMember || isPending ? 0 : 1)
 
                 AvatarChip(
-                    data: friend.avatar_data.flatMap { Data(base64Encoded: $0) },
-                    name: friend.display_name,
-                    size: 38
+                    data: user.avatar_data.flatMap { Data(base64Encoded: $0) },
+                    name: user.display_name,
+                    size: 40
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(friend.display_name)
-                        .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
-
-                    Text("@\(friend.username)")
+                    HStack(spacing: 6) {
+                        Text(user.display_name)
+                            .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                            .lineLimit(1)
+                        if isFriend {
+                            Image(systemName: "person.2.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(CV.green)
+                        }
+                    }
+                    Text("@\(user.username)")
                         .cvText(12, color: CV.muted, inter: true)
+                        .lineLimit(1)
                 }
 
                 Spacer()
 
-                // Status badges: "In Crew" or "Invited", or "Selected" indicator
-                if inCrew {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                        Text("In Crew")
-                            .cvText(12, .semibold, inter: true)
-                    }
-                    .foregroundStyle(CV.green)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(CV.green.opacity(0.12), in: Capsule())
+                if isMember {
+                    badge("In crew", color: CV.green)
                 } else if isPending {
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 10, weight: .semibold))
-                        Text("Invited")
-                            .cvText(12, .medium, inter: true)
-                    }
-                    .foregroundStyle(Color(hex: 0xFFB020))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color(hex: 0xFFB020).opacity(0.12), in: Capsule())
+                    badge("Invited", color: Color(hex: 0xFFB020))
                 } else if isSelected {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                        Text("Selected")
-                            .cvText(12, .semibold, inter: true)
-                    }
-                    .foregroundStyle(CV.red)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(CV.red.opacity(0.12), in: Capsule())
+                    badge("Selected", color: CV.red)
                 }
             }
             .padding(.horizontal, 14)
-            .frame(height: 62)
+            .frame(height: 64)
             .contentShape(Rectangle())
+            .opacity(isMember || isPending ? 0.55 : 1)
         }
         .buttonStyle(.plain)
-        .disabled(inCrew || isPending)
+        .disabled(isMember || isPending)
     }
 
-    // MARK: - Code & Share Section
-    private func codeAndShareSection(crew: CrewGroup) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("OR SHARE CODE")
-                .cvText(12, .semibold, color: CV.cream.opacity(0.5), tracking: 0.6, inter: true)
-                .padding(.top, 30)
+    private func badge(_ text: String, color: Color) -> some View {
+        Text(text)
+            .cvText(12, .semibold, color: color, inter: true)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.12), in: Capsule())
+    }
+
+    private var emptyCard: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "person.2")
+                .font(.system(size: 22))
+                .foregroundStyle(CV.cream.opacity(0.45))
+            Text(searchText.isEmpty ? "No friends yet" : "No matches")
+                .cvText(15, .semibold, inter: true)
+            Text(searchText.isEmpty
+                 ? "Search by @handle above or share the code below."
+                 : "Check the spelling or try a different handle.")
+                .cvText(13, color: CV.muted, inter: true)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
+    }
+
+    // MARK: - Share code
+
+    private var shareCodeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("OR SHARE THE CODE")
+                .cvText(12, .semibold, color: CV.cream.opacity(0.5),
+                        tracking: 0.6, inter: true)
                 .padding(.leading, 4)
 
-            // Code Card
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(crew.code)
-                        .cvText(32, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.3, inter: true)
-
-                    Text("convoy.app/c/\(crew.code.lowercased())")
-                        .cvText(13, color: CV.muted, inter: true)
+            if let crew {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(crew.code)
+                            .cvText(24, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.2, inter: true)
+                        Text("convoy://crew/\(crew.code.lowercased())")
+                            .cvText(12, color: CV.muted, inter: true)
+                    }
+                    Spacer()
+                    ShareLink(item: "Join \(crew.name) on Convoy: convoy://crew/\(crew.code.lowercased())") {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(CV.ink)
+                            .frame(width: 44, height: 44)
+                            .background(Color(hex: 0xF5EDDE), in: Circle())
+                    }
                 }
-
-                Spacer()
-
-                Button {
-                    UIPasteboard.general.string = "convoy.app/c/\(crew.code.lowercased())"
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        copied = true
-                    }
-                    showToast("Crew invite link copied!")
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        withAnimation { copied = false }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        if copied {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .bold))
-                            Text("Copied")
-                        } else {
-                            Text("Copy")
-                        }
-                    }
-                    .cvText(14, .semibold, color: copied ? CV.green : Color(hex: 0xF5EDDE), inter: true)
-                    .frame(width: 84, height: 38)
-                    .background(copied ? CV.green.opacity(0.15) : Color(hex: 0x333336), in: Capsule())
-                }
-                .buttonStyle(.plain)
+                .padding(16)
+                .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
             }
-            .padding(18)
-            .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
-            .padding(.top, 10)
-
-            ShareLink(item: "Join \(crew.name) on Convoy: convoy.app/c/\(crew.code.lowercased())") {
-                HStack(spacing: 8) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text("Share invite link")
-                        .cvText(14, .semibold, color: Color(hex: 0x121214), inter: true)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Color(hex: 0xF5EDDE), in: Capsule())
-            }
-            .padding(.top, 14)
         }
     }
 
-    // MARK: - Floating Multi-Select Bar (Single Action to Send All Invites)
-    private var floatingBatchInviteBar: some View {
+    // MARK: - Send bar
+
+    private var sendBar: some View {
         VStack {
             Spacer()
-
             HStack(spacing: 12) {
                 Button {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                        selectedUserIds.removeAll()
-                        selectedUserProfiles.removeAll()
+                    withAnimation(.snappy(duration: 0.2)) {
+                        selectedIds.removeAll()
+                        selectedProfiles.removeAll()
                     }
                 } label: {
                     Image(systemName: "xmark")
@@ -533,23 +373,22 @@ struct CrewInviteView: View {
                 .buttonStyle(.plain)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(selectedUserIds.count) rider\(selectedUserIds.count == 1 ? "" : "s") selected")
+                    Text("\(selectedIds.count) rider\(selectedIds.count == 1 ? "" : "s") selected")
                         .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
-
-                    Text("Tap to send all invites at once")
+                    Text("They'll get a crew invite notification")
                         .cvText(12, color: CV.muted, inter: true)
                 }
 
                 Spacer()
 
                 Button {
-                    batchInviteSelectedUsers()
+                    Task { await sendInvites() }
                 } label: {
-                    if isBatchInviting {
+                    if isSending {
                         ProgressView().tint(CV.ink).frame(width: 120, height: 44)
                     } else {
                         HStack(spacing: 6) {
-                            Text("Send Invites (\(selectedUserIds.count))")
+                            Text("Send \(selectedIds.count)")
                                 .cvText(14, .bold, color: CV.ink, inter: true)
                             Image(systemName: "paperplane.fill")
                                 .font(.system(size: 12, weight: .bold))
@@ -560,44 +399,32 @@ struct CrewInviteView: View {
                     }
                 }
                 .background(CV.cream, in: Capsule())
-                .disabled(isBatchInviting)
+                .disabled(isSending)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(
-                Color(hex: 0x19191D)
-                    .opacity(0.97)
+                Color(hex: 0x19191D).opacity(0.97)
                     .background(.ultraThinMaterial)
             )
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .strokeBorder(CV.red.opacity(0.4), lineWidth: 1.5))
-            .shadow(color: Color.black.opacity(0.5), radius: 20, y: 8)
+            .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
             .padding(.horizontal, 20)
             .padding(.bottom, 24)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
-    // MARK: - Top Bar
-    private var topBar: some View {
-        HStack {
-            CircleBackButton { app.pop() }
-            Spacer()
-        }
-        .padding(.leading, 20)
-        .padding(.top, 4)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
+    // MARK: - Toast
 
-    // MARK: - Toast Banner
-    private func toastView(text: String) -> some View {
+    private func toastBanner(_ text: String) -> some View {
         VStack {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(CV.green)
                     .font(.system(size: 14))
-
                 Text(text)
                     .cvText(13, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
             }
@@ -605,175 +432,101 @@ struct CrewInviteView: View {
             .padding(.vertical, 10)
             .background(Color(hex: 0x1E1E22), in: Capsule())
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-            .shadow(color: Color.black.opacity(0.4), radius: 12, y: 4)
+            .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
             .padding(.top, 56)
             .transition(.move(edge: .top).combined(with: .opacity))
-
             Spacer()
-        }
-    }
-
-    // MARK: - Helper Views
-    private func statusBadge(text: String, icon: String, color: Color) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
-            Text(text)
-                .cvText(14, .semibold, inter: true)
-        }
-        .foregroundStyle(color)
-        .frame(maxWidth: .infinity)
-        .frame(height: 44)
-        .background(color.opacity(0.15), in: Capsule())
-    }
-
-    // MARK: - Actions
-
-    private func toggleUserSelection(user: ProfileRow) {
-        if selectedUserIds.contains(user.id) {
-            selectedUserIds.remove(user.id)
-            selectedUserProfiles.removeValue(forKey: user.id)
-        } else {
-            selectedUserIds.insert(user.id)
-            selectedUserProfiles[user.id] = user
         }
     }
 
     private func showToast(_ text: String) {
         toastTask?.cancel()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            toastMessage = text
-        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { toast = text }
         toastTask = Task {
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
-            if !Task.isCancelled {
-                await MainActor.run {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        toastMessage = nil
-                    }
-                }
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.2)) { toast = nil }
             }
         }
     }
 
-    private func loadData() async {
-        isLoadingData = true
+    // MARK: - Data
+
+    private func reload() async {
         await app.loadFriends()
-        do {
-            let members = try await SupabaseManager.shared.fetchCrewMembers(crewId: crewID)
-            await MainActor.run {
-                // Only accepted members are in crew; pending are pending invites; declined are ignored!
-                existingMemberIds = Set(members.filter { $0.status == "accepted" }.map { $0.user_id })
-                pendingInviteUserIds = Set(members.filter { $0.status == "pending" }.map { $0.user_id })
-                isLoadingData = false
-            }
-        } catch {
-            await MainActor.run {
-                isLoadingData = false
-            }
-            print("Failed to fetch crew members: \(error)")
+        friendIds = Set(app.friends.map { $0.id })
+
+        if let members = try? await SupabaseManager.shared.fetchCrewMembers(crewId: crewID) {
+            memberIds  = Set(members.filter { $0.status == "accepted" }.map { $0.user_id })
+            pendingIds = Set(members.filter { $0.status == "pending"  }.map { $0.user_id })
         }
     }
 
-    private func performSearch() {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func performSearch() async {
+        let clean = searchText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
             .lowercased()
 
-        guard !query.isEmpty else { return }
+        guard !clean.isEmpty else {
+            searchResults = []
+            searchError = nil
+            return
+        }
 
-        isSearching = true
-        searchErrorMessage = nil
-        foundUser = nil
+        searchError = nil
 
-        Task {
-            do {
-                guard let user = try await SupabaseManager.shared.fetchProfile(username: query) else {
-                    throw NSError(domain: "Convoy", code: 404, userInfo: [NSLocalizedDescriptionKey: "No rider found for @\(query)"])
-                }
-
-                guard let myId = app.backendUserId else {
-                    throw NSError(domain: "Convoy", code: 401, userInfo: [NSLocalizedDescriptionKey: "User session not active."])
-                }
-
-                if user.id == myId {
-                    throw NSError(domain: "Convoy", code: 400, userInfo: [NSLocalizedDescriptionKey: "You're already the crew admin."])
-                }
-
-                let friend = try await SupabaseManager.shared.isFriend(userId: myId, otherId: user.id)
-                let pendingReq = try await SupabaseManager.shared.hasPendingFriendRequest(userId: myId, otherId: user.id)
-                let inCrew = try await SupabaseManager.shared.isInCrew(crewId: crewID, userId: user.id)
-                let pendingInvite = try await SupabaseManager.shared.hasPendingCrewInvite(crewId: crewID, userId: user.id)
-
-                await MainActor.run {
-                    self.foundUser = user
-                    self.isFriendOfSearched = friend
-                    self.hasPendingFriendRequest = pendingReq
-
-                    if inCrew {
-                        self.existingMemberIds.insert(user.id)
-                    } else {
-                        self.existingMemberIds.remove(user.id)
-                    }
-
-                    if pendingInvite {
-                        self.pendingInviteUserIds.insert(user.id)
-                    } else {
-                        self.pendingInviteUserIds.remove(user.id)
-                    }
-
-                    self.isSearching = false
-                }
-            } catch {
-                await MainActor.run {
-                    self.searchErrorMessage = error.localizedDescription
-                    self.isSearching = false
-                }
+        do {
+            guard let user = try await SupabaseManager.shared.fetchProfile(username: clean) else {
+                searchResults = []
+                searchError = "No rider found for @\(clean)"
+                return
             }
+            if user.id == app.backendUserId {
+                searchResults = []
+                searchError = "That's you!"
+                return
+            }
+            searchResults = [user]
+        } catch {
+            searchResults = []
+            searchError = error.localizedDescription
         }
     }
 
-    private func sendFriendRequestToSearchedUser(user: ProfileRow) {
-        guard let myId = app.backendUserId else { return }
-        isProcessingFriendRequest = true
-        Task {
-            do {
-                try await SupabaseManager.shared.sendFriendRequest(senderId: myId, receiverId: user.id)
-                await MainActor.run {
-                    hasPendingFriendRequest = true
-                    isProcessingFriendRequest = false
-                    showToast("Friend request sent to @\(user.username)!")
-                }
-            } catch {
-                await MainActor.run {
-                    searchErrorMessage = error.localizedDescription
-                    isProcessingFriendRequest = false
-                }
-            }
+    private func sendInvites() async {
+        guard !selectedIds.isEmpty else { return }
+        var currentId = app.backendUserId
+        if currentId == nil {
+            currentId = await SupabaseManager.shared.getOrRestoreUserId()
         }
-    }
+        guard let userId = currentId else {
+            showToast("Unable to verify your account session.")
+            return
+        }
+        if app.backendUserId != userId {
+            await MainActor.run { app.backendUserId = userId }
+        }
+        isSending = true
+        let ids = Array(selectedIds)
 
-    private func batchInviteSelectedUsers() {
-        guard let myId = app.backendUserId, !selectedUserIds.isEmpty else { return }
-        isBatchInviting = true
-        let idsToInvite = Array(selectedUserIds)
-
-        Task {
-            do {
-                try await SupabaseManager.shared.inviteUsersToCrew(crewId: crewID, userIds: idsToInvite, invitedBy: myId)
-                await MainActor.run {
-                    pendingInviteUserIds.formUnion(idsToInvite)
-                    let count = idsToInvite.count
-                    selectedUserIds.removeAll()
-                    selectedUserProfiles.removeAll()
-                    isBatchInviting = false
-                    showToast("Sent crew invites to \(count) rider\(count == 1 ? "" : "s")!")
-                }
-            } catch {
-                await MainActor.run {
-                    isBatchInviting = false
-                    showToast("Failed to send invites: \(error.localizedDescription)")
-                }
+        do {
+            let sent = try await SupabaseManager.shared.inviteUsersToCrew(
+                crewId: crewID, userIds: ids, invitedBy: userId
+            )
+            await MainActor.run {
+                pendingIds.formUnion(ids)
+                selectedIds.removeAll()
+                selectedProfiles.removeAll()
+                isSending = false
+                invitesSent += sent
+                showToast("Sent \(sent) invite\(sent == 1 ? "" : "s").")
+            }
+        } catch {
+            await MainActor.run {
+                isSending = false
+                showToast("Couldn't send invites: \(error.localizedDescription)")
             }
         }
     }

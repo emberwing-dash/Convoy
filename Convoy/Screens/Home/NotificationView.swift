@@ -88,9 +88,13 @@ struct NotificationView: View {
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
-        .background(SwipeBackEnabler())
-        .onAppear {
-            Task { await app.refreshNotifications() }
+        .refreshable {
+            await app.refreshNotifications(force: true)
+        }
+        .task {
+            if app.notificationsLoadedAt == nil {
+                await app.refreshNotifications()
+            }
         }
     }
 }
