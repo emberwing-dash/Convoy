@@ -65,7 +65,7 @@ struct PlanWhoView: View {
                 Text("Ride Crews")
                     .cvText(20, .semibold, tracking: -0.3, lineHeight: 25, inter: true)
                 Spacer()
-                if app.crews.count > 1 {
+                if app.crews.count > 3 {
                     seeAll { app.push(.pickCrews) }
                 }
             }
@@ -384,26 +384,7 @@ struct PlanWhoView: View {
             }
 
             if app.friends.count > 3 {
-                Rectangle()
-                    .fill(Color.white.opacity(0.06))
-                    .frame(height: 1)
-
-                Button {
-                    app.push(.pickFriends)
-                } label: {
-                    HStack {
-                        Text("See all \(app.friends.count) friends")
-                            .cvText(14, .semibold, color: Color(hex: 0xF5EDDE).opacity(0.9), inter: true)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(CV.muted)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .background(Color.white.opacity(0.02))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                seeAll { app.push(.pickFriends) }
             }
         }
         .background(Color(hex: 0x141417), in: RoundedRectangle(cornerRadius: 22, style: .continuous))

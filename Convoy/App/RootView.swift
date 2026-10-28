@@ -54,11 +54,18 @@ struct RootView: View {
             }
 
         case "ride":
-            if await app.joinRideByCode(payload), let rideId = app.lastJoinedRideID {
-                app.tab = .ride
-                app.popToRoot()
-                app.push(.rideDetails(rideId))
-            }
+            switch await app.joinRideByCode(payload) {
+                case .joined(let id):
+                    app.tab = .ride
+                    app.popToRoot()
+                    app.push(.rideDetails(id))
+                case .requestPending:
+                    app.tab = .ride
+                    app.popToRoot()
+                    app.push(.joinCode)  // show pending state there
+                case .failed:
+                    break
+                }
 
         default:
             break

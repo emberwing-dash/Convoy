@@ -20,7 +20,12 @@ struct HomeView: View {
             .scrollIndicators(.hidden)
         }
         .task {
+            await app.refreshRides()
             await app.refreshNotifications()
+        }
+        .refreshable {
+            await app.refreshRides(force: true)
+            await app.refreshNotifications(force: true)
         }
     }
 

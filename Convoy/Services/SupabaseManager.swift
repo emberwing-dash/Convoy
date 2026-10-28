@@ -269,7 +269,12 @@ final class SupabaseManager {
                 status: "pending",
                 invited_by: creatorId
             )
-            try? await client.from("crew_members").insert(invite).execute()
+
+            do {
+                try await client.from("crew_members").insert(invite).execute()
+            } catch {
+                print("[CrewMember] Failed to add organiser to crew: \(error)")
+            }
         }
 
         return crewId
@@ -448,13 +453,20 @@ final class SupabaseManager {
 
         try await client.from("rides").insert(payload).execute()
 
-        let member = RideMemberInsert(ride_id: ride.id, user_id: userId, role: "organiser")
-        try? await client.from("ride_members").insert(member).execute()
+        let member = RideMemberInsert(ride_id: ride.id, user_id: userId, role: "organiser", status: "accepted")
+        
+        do {
+            try await client.from("ride_members").insert(member).execute()
+        } catch {
+            print("[createRide] Failed to add organiser to ride_members: \(error)")
+        }
     }
 
     /// Looks up a ride by code on the server and joins the caller.
     /// Throws if no ride exists with that code.
-    func joinRideByCode(_ code: String, userId: UUID) async throws -> Ride {
+    enum RideJoinStatus { case alreadyMember, requestSent }
+
+    func joinRideByCode(_ code: String, userId: UUID) async throws -> (Ride, RideJoinStatus) {
         let rows: [RideRow] = try await client.from("rides")
             .select()
             .eq("code", value: code.uppercased())
@@ -466,10 +478,99 @@ final class SupabaseManager {
                           userInfo: [NSLocalizedDescriptionKey: "No ride with code \(code)"])
         }
 
-        let member = RideMemberInsert(ride_id: row.id, user_id: userId, role: "rider")
-        try? await client.from("ride_members").insert(member).execute()
+        let existing: [RideMemberRow] = try await client.from("ride_members")
+            .select()
+            .eq("ride_id", value: row.id)
+            .eq("user_id", value: userId)
+            .execute()
+            .value
 
-        return row.toRide()
+        if let current = existing.first {
+            if current.status == "accepted" {
+                let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
+                return (row.toRide(members: members), .alreadyMember)
+            }
+            if current.status == "declined" {
+                try await client.from("ride_members")
+                    .update(["status": "pending"])
+                    .eq("id", value: current.id)
+                    .execute()
+            }
+            let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
+            return (row.toRide(members: members), .requestSent)
+        }
+
+        let member = RideMemberInsert(ride_id: row.id, user_id: userId,
+                                      role: "rider", status: "pending")
+        try await client.from("ride_members").insert(member).execute()
+
+        let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
+        return (row.toRide(members: members), .requestSent)
+    }
+
+    // ─── NEW: fetch all rides the user belongs to, with members ──────────
+
+    func fetchUserRides(userId: UUID) async throws -> [Ride] {
+        let memberships: [RideMemberRow] = try await client.from("ride_members")
+            .select()
+            .eq("user_id", value: userId)
+            .eq("status", value: "accepted")
+            .execute()
+            .value
+
+        let rideIds = memberships.map { $0.ride_id }
+        guard !rideIds.isEmpty else { return [] }
+
+        let rows: [RideRow] = try await client.from("rides")
+            .select()
+            .in("id", values: rideIds)
+            .execute()
+            .value
+
+        var rides: [Ride] = []
+        for row in rows {
+            let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
+            rides.append(row.toRide(members: members))
+        }
+        return rides
+    }
+
+    // ─── NEW: pending ride joins for the organiser ───────────────────────
+
+    func fetchIncomingRideJoins(for userId: UUID) async throws -> [RideJoinWithDetails] {
+        let response: [RideJoinWithDetails] = try await client.from("ride_members")
+            .select("*, rides!ride_members_ride_id_fkey!inner(*), profiles!ride_members_user_id_fkey(*)")
+            .eq("status", value: "pending")
+            .eq("rides.organiser_id", value: userId)
+            .execute()
+            .value
+        return response
+    }
+
+    func acceptRideJoin(memberId: UUID) async throws {
+        try await client.from("ride_members")
+            .update(["status": "accepted"])
+            .eq("id", value: memberId)
+            .execute()
+    }
+
+    func declineRideJoin(memberId: UUID) async throws {
+        try await client.from("ride_members")
+            .delete()
+            .eq("id", value: memberId)
+            .execute()
+    }
+
+    // ─── NEW: ride members for card display ──────────────────────────────
+
+    func fetchRideMembers(rideId: UUID) async throws -> [RideMemberWithProfile] {
+        let response: [RideMemberWithProfile] = try await client.from("ride_members")
+            .select("*, profiles!ride_members_user_id_fkey(*)")
+            .eq("ride_id", value: rideId)
+            .eq("status", value: "accepted")
+            .execute()
+            .value
+        return response
     }
 
     // MARK: - Fill-ups
@@ -707,6 +808,34 @@ struct RideMemberInsert: Codable {
     let ride_id: UUID
     let user_id: UUID
     let role: String
+    let status: String
+}
+
+struct RideMemberRow: Codable, Sendable {
+    let id: UUID
+    let ride_id: UUID
+    let user_id: UUID
+    let role: String
+    let status: String?
+    let joined_at: String?
+}
+
+struct RideMemberWithProfile: Codable, Identifiable, Sendable {
+    let id: UUID
+    let ride_id: UUID
+    let user_id: UUID
+    let role: String
+    let status: String?
+    let profiles: ProfileRow?
+}
+
+struct RideJoinWithDetails: Codable, Identifiable, Sendable {
+    let id: UUID
+    let ride_id: UUID
+    let user_id: UUID
+    let status: String?
+    let rides: RideRow?
+    let profiles: ProfileRow?
 }
 
 struct FillUpRow: Codable, Sendable {
@@ -762,7 +891,7 @@ extension CrewMemberWithProfile {
 }
 
 extension RideRow {
-    func toRide() -> Ride {
+    func toRide(members: [RideMemberWithProfile] = []) -> Ride {
         let stops: [String] = {
             guard let s = stops_json,
                   let data = s.data(using: .utf8),
@@ -771,14 +900,9 @@ extension RideRow {
         }()
 
         let style = RouteStyle(rawValue: style_raw ?? "Fastest") ?? .fastest
-        var plan = PlanDraft(
-            name: title,
-            from: from_location ?? "",
-            to: to_location ?? "",
-            stops: stops,
-            routeSet: route_set ?? false,
-            style: style
-        )
+        var plan = PlanDraft(name: title, from: from_location ?? "",
+                             to: to_location ?? "", stops: stops,
+                             routeSet: route_set ?? false, style: style)
         if let lat = start_lat, let lon = start_lon, lat != 0 || lon != 0 {
             plan.startCoord = Coord(lat: lat, lon: lon)
         }
@@ -793,33 +917,27 @@ extension RideRow {
                 return Coord(lat: p[0], lon: p[1])
             }
             if coords.count > 1 {
-                plan.routes[style] = RouteSummary(
-                    km: route_km ?? 0,
-                    minutes: route_minutes ?? 0,
-                    coords: coords
-                )
+                plan.routes[style] = RouteSummary(km: route_km ?? 0,
+                                                  minutes: route_minutes ?? 0,
+                                                  coords: coords)
             }
+        }
+
+        let riders: [Rider] = members.map { m in
+            Rider(name: m.profiles?.display_name ?? "Rider",
+                  avatarData: m.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) })
         }
 
         let date = ISO8601DateFormatter().date(from: departs) ?? Date()
 
         return Ride(
-            id: id,
-            title: title,
-            place: place ?? "",
-            subtitle: subtitle ?? "",
-            tag: tag ?? "Group ride",
-            departs: date,
-            riders: [],
-            plan: plan,
-            distance: distance ?? "",
-            duration: duration ?? "",
-            displayDate: display_date ?? "",
-            displayTime: display_time ?? "",
-            organiser: "host",
-            rsvp: .going,
-            lockText: "Start ride",
-            ridersGoing: 1,
+            id: id, title: title, place: place ?? "",
+            subtitle: subtitle ?? "", tag: tag ?? "Group ride",
+            departs: date, riders: riders, plan: plan,
+            distance: distance ?? "", duration: duration ?? "",
+            displayDate: display_date ?? "", displayTime: display_time ?? "",
+            organiser: "host", rsvp: .going,
+            lockText: "Start ride", ridersGoing: max(1, riders.count),
             listMeta: "\(distance ?? "") · \(from_location ?? "") → \(to_location ?? "")"
         )
     }

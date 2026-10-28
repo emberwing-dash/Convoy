@@ -1,12 +1,11 @@
 // JoinViews.swift
 import SwiftUI
 
-// MARK: - JoinCodeView
-
 struct JoinCodeView: View {
     @Environment(AppState.self) private var app
     @State private var code = ""
-    @State private var notFound = false
+    @State private var errorMessage: String?
+    @State private var successMessage: String?
     @State private var isSubmitting = false
     @FocusState private var focused: Bool
 
@@ -18,99 +17,49 @@ struct JoinCodeView: View {
                     Text("Join a ride")
                         .cvText(30, .bold, color: Color(hex: 0xF5EDDE), inter: true)
                         .padding(.top, 64)
-                    Text("Enter the 6-character code your friend shared.\nYou'll see the ride before you join.")
+                    Text("Enter the 6-character code the organiser shared.\nYou'll see the ride before you join.")
                         .cvText(15, color: CV.muted, inter: true)
                         .padding(.top, 6)
 
                     boxes.padding(.top, 36)
 
-                    Text(notFound ? "No ride found for that code"
-                                  : "Codes look like ABC123 · not case sensitive")
-                        .cvText(12, color: notFound ? CV.red : CV.muted, inter: true)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 14)
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .cvText(12, color: CV.red, inter: true)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 14)
+                    } else if let successMessage {
+                        Text(successMessage)
+                            .cvText(12, color: CV.green, inter: true)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 14)
+                    } else {
+                        Text("Codes look like ABC123 · not case sensitive")
+                            .cvText(12, color: CV.muted, inter: true)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 14)
+                    }
 
                     HStack(spacing: 15) {
                         Button { paste() } label: {
                             Text("Paste from clipboard")
                                 .cvText(14, .semibold, inter: true)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 48)
+                                .frame(maxWidth: .infinity).frame(height: 48)
                                 .background(Color(hex: 0x1C1C1F), in: Capsule())
                                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                         }
                         Button { paste() } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "qrcode.viewfinder").font(.system(size: 16))
-                                Text("Scan QR")
-                                    .cvText(14, .semibold, inter: true)
+                                Text("Scan QR").cvText(14, .semibold, inter: true)
                             }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 48)
+                            .frame(maxWidth: .infinity).frame(height: 48)
                             .background(Color(hex: 0x1C1C1F), in: Capsule())
                             .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                         }
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 22)
-
-                    Text("YOUR UPCOMING RIDES")
-                        .cvText(12, .semibold, color: CV.muted, tracking: 0.6, inter: true)
-                        .padding(.top, 34)
-
-                    if app.rides.isEmpty {
-                        HStack(spacing: 12) {
-                            Image(systemName: "calendar.badge.plus")
-                                .font(.system(size: 20))
-                                .foregroundStyle(CV.cream.opacity(0.5))
-                                .frame(width: 40, height: 40)
-                                .background(Color.white.opacity(0.06), in: Circle())
-                            Text("You have no rides yet. Ask a friend for their code.")
-                                .cvText(13, color: CV.muted, inter: true)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 14)
-                        .frame(height: 68)
-                        .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
-                        .padding(.top, 10)
-                    } else {
-                        VStack(spacing: 8) {
-                            ForEach(app.rides.prefix(3)) { r in
-                                Button {
-                                    code = r.code
-                                    Task { await submit() }
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        RouteSnapshotView(
-                                            coords: r.plan.selected?.coords ?? [],
-                                            size: CGSize(width: 40, height: 40),
-                                            corner: 10
-                                        )
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text(r.title)
-                                                .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
-                                                .lineLimit(1)
-                                            Text("Code \(r.code)")
-                                                .cvText(12, color: CV.muted, inter: true)
-                                        }
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(CV.muted)
-                                    }
-                                    .padding(.horizontal, 14)
-                                    .frame(height: 64)
-                                    .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.top, 10)
-                    }
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
@@ -119,8 +68,7 @@ struct JoinCodeView: View {
             .scrollIndicators(.hidden)
 
             CircleBackButton { app.pop() }
-                .padding(.leading, 20)
-                .padding(.top, 4)
+                .padding(.leading, 20).padding(.top, 4)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             TextField("", text: $code)
@@ -133,7 +81,8 @@ struct JoinCodeView: View {
                 .onChange(of: code) { _, v in
                     let f = String(v.uppercased().filter { $0.isLetter || $0.isNumber }.prefix(6))
                     if f != v { code = f }
-                    notFound = false
+                    errorMessage = nil
+                    successMessage = nil
                 }
         }
         .safeAreaInset(edge: .bottom) {
@@ -145,8 +94,7 @@ struct JoinCodeView: View {
                 } else {
                     Text("Find ride")
                         .cvText(17, .semibold, color: CV.ink, inter: true)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(maxWidth: .infinity).frame(height: 50)
                         .background(CV.cream, in: Capsule())
                 }
             }
@@ -179,8 +127,7 @@ struct JoinCodeView: View {
                         Rectangle().fill(CV.red).frame(width: 2, height: 28)
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 60)
+                .frame(maxWidth: .infinity).frame(height: 60)
             }
         }
         .contentShape(Rectangle())
@@ -198,14 +145,22 @@ struct JoinCodeView: View {
         guard code.count == 6 else { return }
         isSubmitting = true
         defer { isSubmitting = false }
+        errorMessage = nil
+        successMessage = nil
 
-        if await app.joinRideByCode(code), let rideId = app.lastJoinedRideID {
+        switch await app.joinRideByCode(code) {
+        case .joined(let rideId):
             focused = false
             app.popToRoot()
             app.tab = .ride
             app.push(.rideDetails(rideId))
-        } else {
-            notFound = true
+
+        case .requestPending:
+            focused = false
+            successMessage = "Request sent. You'll see the ride once the organiser accepts."
+
+        case .failed:
+            errorMessage = "No ride found for that code."
         }
     }
 }

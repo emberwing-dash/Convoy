@@ -7,7 +7,16 @@ enum CrewSegment { case crews, friends }
 enum RidePhase { case starting, navigating }
 enum AppTab: Hashable { case ride, discover, crew }
 
-enum NotificationType: String, Codable, Hashable { case friendRequest, crewInvite }
+// MARK: - Notifications
+
+enum NotificationType: String, Codable, Hashable {
+    case friendRequest, crewInvite, rideJoin
+}
+
+enum NotificationStatus: String, Codable, Hashable {
+    case pending, accepted, declined
+}
+
 struct AppNotification: Identifiable, Codable, Hashable {
     let id: UUID
     let type: NotificationType
@@ -17,6 +26,41 @@ struct AppNotification: Identifiable, Codable, Hashable {
     let date: Date
     let requestId: UUID
     let crewId: UUID?
+    var status: NotificationStatus
+    var processedAt: Date?
+
+    init(id: UUID, type: NotificationType, title: String, subtitle: String,
+         avatarData: Data?, date: Date, requestId: UUID, crewId: UUID?,
+         status: NotificationStatus = .pending, processedAt: Date? = nil) {
+        self.id = id
+        self.type = type
+        self.title = title
+        self.subtitle = subtitle
+        self.avatarData = avatarData
+        self.date = date
+        self.requestId = requestId
+        self.crewId = crewId
+        self.status = status
+        self.processedAt = processedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, type, title, subtitle, avatarData, date, requestId, crewId, status, processedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        type = try c.decode(NotificationType.self, forKey: .type)
+        title = try c.decode(String.self, forKey: .title)
+        subtitle = try c.decode(String.self, forKey: .subtitle)
+        avatarData = try c.decodeIfPresent(Data.self, forKey: .avatarData)
+        date = try c.decode(Date.self, forKey: .date)
+        requestId = try c.decode(UUID.self, forKey: .requestId)
+        crewId = try c.decodeIfPresent(UUID.self, forKey: .crewId)
+        status = try c.decodeIfPresent(NotificationStatus.self, forKey: .status) ?? .pending
+        processedAt = try c.decodeIfPresent(Date.self, forKey: .processedAt)
+    }
 }
 
 enum SearchContext: Hashable {
@@ -39,6 +83,12 @@ enum Route: Hashable {
     case notifications
     case userSearch(SearchContext)
     case placeholder(String)
+}
+
+enum RideJoinOutcome {
+    case joined(UUID)
+    case requestPending(UUID)
+    case failed
 }
 
 @Observable
@@ -68,15 +118,21 @@ final class AppState {
     var notifications: [AppNotification] = []
     var pendingFriendRequests: [FriendshipWithProfile] = []
     var incomingCrewInvites: [CrewInviteWithDetails] = []
+    var incomingRideJoins: [RideJoinWithDetails] = []
 
-    // Cache timestamps — prevent redundant API calls when re-visiting screens
+    // Cache timestamps — prevent redundant API calls
     var notificationsLoadedAt: Date? = nil
     var crewsLoadedAt: Date? = nil
     var friendsLoadedAt: Date? = nil
-    /// How long (seconds) before a cached value is considered stale
-    let notificationStaleness: TimeInterval = 60
+    var ridesLoadedAt: Date? = nil
+
+    let notificationStaleness: TimeInterval = 45
     let crewStaleness: TimeInterval = 120
     let friendsStaleness: TimeInterval = 120
+    let ridesStaleness: TimeInterval = 120
+
+    /// Notifications older than this are dropped from local cache.
+    let notificationRetention: TimeInterval = 2 * 24 * 60 * 60
 
     // Navigation
     var tab: AppTab = .ride
@@ -109,7 +165,9 @@ final class AppState {
     // MARK: - Computed
     var upcomingRide: Ride? { rides.first }
     var sortedRides: [Ride] { rides.sorted { $0.departs < $1.departs } }
-    var hasUnreadNotifications: Bool { !notifications.isEmpty }
+    var hasUnreadNotifications: Bool {
+        notifications.contains { $0.status == .pending }
+    }
 
     init() {
         if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
@@ -133,6 +191,7 @@ final class AppState {
 
         self.completedRides = StorageService.shared.loadCompletedRides()
         self.crews = StorageService.shared.loadCrews().map(CrewGroup.from)
+        self.friends = StorageService.shared.loadCachedFriends()
         self.notifications = StorageService.shared.loadCachedNotifications()
         self.fillUps = StorageService.shared.loadFillUps().map { FillUp(odo: $0.odo, litres: $0.litres, price: $0.price) }
 
@@ -145,127 +204,203 @@ final class AppState {
                     return Coord(lat: pair[0], lon: pair[1])
                 }
             }
-
             let start = Coord(lat: e.startLat, lon: e.startLon)
             let end = Coord(lat: e.endLat, lon: e.endLon)
             if coords.isEmpty { coords = [start, end] }
-
             return DiscoverRoute(
                 id: e.id, title: e.title, tag: e.tag,
                 from: e.from, to: e.to, km: e.km, time: e.time,
                 style: e.style, blurb: e.blurb,
                 startPlace: e.startPlace, finishPlace: e.finishPlace,
                 stops: e.stops,
-                startCoord: start,
-                endCoord: end,
-                coords: coords,
+                startCoord: start, endCoord: end, coords: coords,
                 categories: Set(e.categoriesRaw.split(separator: ",").compactMap { RouteCategory(rawValue: String($0)) })
             )
         }
     }
 
+    // MARK: - Session helper
+
+    private func resolvedUserId() async -> UUID? {
+        if let id = backendUserId { return id }
+        if let restored = await SupabaseManager.shared.getOrRestoreUserId() {
+            await MainActor.run { self.backendUserId = restored }
+            return restored
+        }
+        return nil
+    }
+
+    // MARK: - Rides (server-synced)
+
+    /// Fetches all rides the current user is an accepted member of.
+    /// Never wipes locally-created rides that haven't reached the server yet.
+    /// Fetches ride_members so cards show the real rider list.
+    func refreshRides(force: Bool = false) async {
+        guard let userId = await resolvedUserId() else { return }
+
+        if !force, let loadedAt = ridesLoadedAt,
+           Date().timeIntervalSince(loadedAt) < ridesStaleness {
+            return
+        }
+
+        do {
+            let fetched = try await SupabaseManager.shared.fetchUserRides(userId: userId)
+            await MainActor.run {
+                let fetchedIds = Set(fetched.map { $0.id })
+                // Keep local rides the server hasn't seen yet (offline-created)
+                let localOnly = self.rides.filter { !fetchedIds.contains($0.id) }
+                self.rides = (fetched + localOnly).sorted { $0.departs < $1.departs }
+                self.ridesLoadedAt = Date()
+                for r in fetched { StorageService.shared.saveRide(r) }
+            }
+        } catch {
+            print("[Rides] refresh failed: \(error)")
+        }
+    }
+
     // MARK: - Notifications / social
 
-    /// Fetches friend requests and crew invites. Skips the network if data was
-    /// already fetched unless `force` is true.
     func refreshNotifications(force: Bool = false) async {
-        // Skip if already loaded and not forced
-        if !force && notificationsLoadedAt != nil {
-            print("[Notifications] Cache hit — skipping API fetch")
+        if !force, let loadedAt = notificationsLoadedAt,
+           Date().timeIntervalSince(loadedAt) < notificationStaleness {
             return
         }
-        // 1. Ensure authenticated user session has finished restoring
-        var activeUserId = backendUserId
-        if activeUserId == nil {
-            if let restoredId = await SupabaseManager.shared.getOrRestoreUserId() {
-                await MainActor.run { self.backendUserId = restoredId }
-                activeUserId = restoredId
-            }
-        }
-
-        guard let currentUserId = activeUserId else {
-            print("[Notifications] ⚠️ Aborting notification refresh: No authenticated user session found.")
+        guard let userId = await resolvedUserId() else {
+            print("[Notifications] aborting — no auth session")
             return
         }
 
-        print("[Notifications] Refreshing notifications for recipient ID: \(currentUserId.uuidString)")
+        // Fetch all three types in parallel; each falls back to the current
+        // in-memory state on failure so nothing "disappears" while we retry.
+        async let friendReqsTask   = fetchFriendReqs(userId)
+        async let crewInvitesTask  = fetchCrewInvites(userId)
+        async let rideJoinsTask    = fetchRideJoins(userId)
 
-        // 2. Fetch pending friend requests independently
-        var friendReqs: [FriendshipWithProfile] = self.pendingFriendRequests
-        var friendNotifs: [AppNotification] = []
-        do {
-            friendReqs = try await SupabaseManager.shared.fetchPendingFriendRequests(for: currentUserId)
-            print("[Notifications] Fetched \(friendReqs.count) pending friend request(s) for user \(currentUserId.uuidString)")
-            for req in friendReqs {
-                let senderName = req.profiles?.display_name ?? "Someone"
-                let senderUsername = req.profiles?.username ?? "rider"
-                friendNotifs.append(AppNotification(
-                    id: req.id,
-                    type: .friendRequest,
-                    title: "Friend Request",
-                    subtitle: "\(senderName) (@\(senderUsername)) wants to be friends.",
-                    avatarData: req.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
-                    date: Date(),
-                    requestId: req.id,
-                    crewId: nil
-                ))
-            }
-        } catch {
-            print("[Notifications] ⚠️ Error fetching friend requests for \(currentUserId.uuidString): \(error)")
+        let friendReqs   = await friendReqsTask
+        let crewInvites  = await crewInvitesTask
+        let rideJoins    = await rideJoinsTask
+
+        // Build fresh pending notifications
+        var fresh: [AppNotification] = []
+
+        for req in friendReqs {
+            let name = req.profiles?.display_name ?? "Someone"
+            let username = req.profiles?.username ?? "rider"
+            fresh.append(AppNotification(
+                id: req.id,
+                type: .friendRequest,
+                title: "Friend Request",
+                subtitle: "\(name) (@\(username)) wants to be friends.",
+                avatarData: req.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
+                date: Date(),
+                requestId: req.id,
+                crewId: nil
+            ))
         }
 
-        // 3. Fetch incoming crew invites independently (isolated from friend requests)
-        var crewInvites: [CrewInviteWithDetails] = self.incomingCrewInvites
-        var crewNotifs: [AppNotification] = []
-        do {
-            crewInvites = try await SupabaseManager.shared.fetchIncomingCrewInvites(for: currentUserId)
-            print("[Notifications] Fetched \(crewInvites.count) incoming crew invite(s) for user \(currentUserId.uuidString)")
-            for invite in crewInvites {
-                let inviterName = invite.profiles?.display_name ?? "Someone"
-                let crewName = invite.crews?.name ?? "a crew"
-                crewNotifs.append(AppNotification(
-                    id: invite.id,
-                    type: .crewInvite,
-                    title: "Crew Invite",
-                    subtitle: "\(inviterName) invited you to join \(crewName).",
-                    avatarData: invite.crews?.avatar_data.flatMap { Data(base64Encoded: $0) } ?? invite.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
-                    date: Date(),
-                    requestId: invite.id,
-                    crewId: invite.crew_id
-                ))
-            }
-        } catch {
-            print("[Notifications] ⚠️ Error fetching crew invites for \(currentUserId.uuidString): \(error)")
+        for invite in crewInvites {
+            let inviterName = invite.profiles?.display_name ?? "Someone"
+            let crewName = invite.crews?.name ?? "a crew"
+            fresh.append(AppNotification(
+                id: invite.id,
+                type: .crewInvite,
+                title: "Crew Invite",
+                subtitle: "\(inviterName) invited you to join \(crewName).",
+                avatarData: invite.crews?.avatar_data.flatMap { Data(base64Encoded: $0) }
+                          ?? invite.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
+                date: Date(),
+                requestId: invite.id,
+                crewId: invite.crew_id
+            ))
         }
 
-        // 4. Update published app state on the main actor and persist locally
-        let combinedNotifs = friendNotifs + crewNotifs
-        let updatedFriendReqs = friendReqs
-        let updatedCrewInvites = crewInvites
+        for join in rideJoins {
+            let riderName = join.profiles?.display_name ?? "A rider"
+            let username = join.profiles?.username ?? "rider"
+            let rideTitle = join.rides?.title ?? "your ride"
+            fresh.append(AppNotification(
+                id: join.id,
+                type: .rideJoin,
+                title: "Ride Join Request",
+                subtitle: "\(riderName) (@\(username)) wants to join \(rideTitle).",
+                avatarData: join.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
+                date: Date(),
+                requestId: join.id,
+                crewId: nil
+            ))
+        }
+
         await MainActor.run {
-            self.notifications = combinedNotifs
-            self.pendingFriendRequests = updatedFriendReqs
-            self.incomingCrewInvites = updatedCrewInvites
+            // Keep processed notifications from the last 2 days (so the list
+            // doesn't empty out immediately after the user taps accept).
+            let cutoff = Date().addingTimeInterval(-self.notificationRetention)
+            let recentProcessed = self.notifications.filter {
+                $0.status != .pending && ($0.processedAt ?? .distantPast) > cutoff
+            }
+            let processedRequestIds = Set(recentProcessed.map { $0.requestId })
+
+            // Never resurface a notification the user already acted on
+            let freshFiltered = fresh.filter { !processedRequestIds.contains($0.requestId) }
+
+            var seen = Set<String>()
+            var combined: [AppNotification] = []
+            for n in freshFiltered + recentProcessed {
+                let key = "\(n.type.rawValue)_\(n.requestId)"
+                if seen.insert(key).inserted { combined.append(n) }
+            }
+            combined.sort { $0.date > $1.date }
+
+            self.notifications = combined
+            self.pendingFriendRequests = friendReqs
+            self.incomingCrewInvites = crewInvites
+            self.incomingRideJoins = rideJoins
             self.notificationsLoadedAt = Date()
-            StorageService.shared.saveNotifications(combinedNotifs)
+            StorageService.shared.saveNotifications(combined)
         }
-        print("[Notifications] Published \(combinedNotifs.count) notification(s) (\(friendNotifs.count) friend request(s), \(crewNotifs.count) crew invite(s)) to AppState for user \(currentUserId.uuidString).")
+    }
+
+    private func fetchFriendReqs(_ userId: UUID) async -> [FriendshipWithProfile] {
+        (try? await SupabaseManager.shared.fetchPendingFriendRequests(for: userId))
+            ?? pendingFriendRequests
+    }
+    private func fetchCrewInvites(_ userId: UUID) async -> [CrewInviteWithDetails] {
+        (try? await SupabaseManager.shared.fetchIncomingCrewInvites(for: userId))
+            ?? incomingCrewInvites
+    }
+    private func fetchRideJoins(_ userId: UUID) async -> [RideJoinWithDetails] {
+        (try? await SupabaseManager.shared.fetchIncomingRideJoins(for: userId))
+            ?? incomingRideJoins
     }
 
     func acceptNotification(_ notif: AppNotification) async {
         do {
-            if notif.type == .friendRequest {
+            switch notif.type {
+            case .friendRequest:
                 try await SupabaseManager.shared.acceptFriendRequest(requestId: notif.requestId)
-                await loadFriends(force: true)
-            } else {
+            case .crewInvite:
                 try await SupabaseManager.shared.acceptCrewInvite(memberId: notif.requestId)
-                await loadCrews(force: true)
+            case .rideJoin:
+                try await SupabaseManager.shared.acceptRideJoin(memberId: notif.requestId)
             }
             await MainActor.run {
-                self.notifications.removeAll { $0.id == notif.id }
-                self.pendingFriendRequests.removeAll { $0.id == notif.requestId }
-                self.incomingCrewInvites.removeAll { $0.id == notif.requestId }
+                if let idx = self.notifications.firstIndex(where: { $0.id == notif.id }) {
+                    self.notifications[idx].status = .accepted
+                    self.notifications[idx].processedAt = Date()
+                }
+                switch notif.type {
+                case .friendRequest:
+                    self.pendingFriendRequests.removeAll { $0.id == notif.requestId }
+                case .crewInvite:
+                    self.incomingCrewInvites.removeAll { $0.id == notif.requestId }
+                case .rideJoin:
+                    self.incomingRideJoins.removeAll { $0.id == notif.requestId }
+                }
                 StorageService.shared.saveNotifications(self.notifications)
+            }
+            switch notif.type {
+            case .friendRequest: await loadFriends(force: true)
+            case .crewInvite:    await loadCrews(force: true)
+            case .rideJoin:      await refreshRides(force: true)
             }
         } catch {
             print("Error accepting: \(error)")
@@ -279,11 +414,22 @@ final class AppState {
                 try await SupabaseManager.shared.declineFriendRequest(requestId: notif.requestId)
             case .crewInvite:
                 try await SupabaseManager.shared.declineCrewInvite(memberId: notif.requestId)
+            case .rideJoin:
+                try await SupabaseManager.shared.declineRideJoin(memberId: notif.requestId)
             }
             await MainActor.run {
-                self.notifications.removeAll { $0.id == notif.id }
-                self.pendingFriendRequests.removeAll { $0.id == notif.requestId }
-                self.incomingCrewInvites.removeAll { $0.id == notif.requestId }
+                if let idx = self.notifications.firstIndex(where: { $0.id == notif.id }) {
+                    self.notifications[idx].status = .declined
+                    self.notifications[idx].processedAt = Date()
+                }
+                switch notif.type {
+                case .friendRequest:
+                    self.pendingFriendRequests.removeAll { $0.id == notif.requestId }
+                case .crewInvite:
+                    self.incomingCrewInvites.removeAll { $0.id == notif.requestId }
+                case .rideJoin:
+                    self.incomingRideJoins.removeAll { $0.id == notif.requestId }
+                }
                 StorageService.shared.saveNotifications(self.notifications)
             }
         } catch {
@@ -291,16 +437,9 @@ final class AppState {
         }
     }
 
-    /// Loads friends. Returns immediately from cache if fresh; otherwise fetches from Supabase.
+    /// Loads friends. Returns immediately from cache if fresh; otherwise fetches.
     func loadFriends(force: Bool = false) async {
-        var activeUserId = backendUserId
-        if activeUserId == nil {
-            if let restored = await SupabaseManager.shared.getOrRestoreUserId() {
-                await MainActor.run { self.backendUserId = restored }
-                activeUserId = restored
-            }
-        }
-        guard let userId = activeUserId else { return }
+        guard let userId = await resolvedUserId() else { return }
         if !force,
            let loadedAt = friendsLoadedAt,
            Date().timeIntervalSince(loadedAt) < friendsStaleness {
@@ -311,45 +450,32 @@ final class AppState {
             await MainActor.run {
                 self.friends = fetched
                 self.friendsLoadedAt = Date()
+                StorageService.shared.saveFriends(fetched)
             }
         } catch {
             print("Error loading friends: \(error)")
         }
     }
 
-    /// Loads crews. Instantly returns locally-persisted crews, then background-refreshes
-    /// from Supabase if stale (> crewStaleness seconds) or forced.
+    /// Loads crews. Shows local data instantly, then refreshes if stale.
     func loadCrews(force: Bool = false) async {
-        // Always show local data first so the UI is never blank
         if crews.isEmpty {
             let localCrews = StorageService.shared.loadCrews().map(CrewGroup.from)
             if !localCrews.isEmpty {
                 await MainActor.run { self.crews = localCrews }
             }
         }
-
-        var activeUserId = backendUserId
-        if activeUserId == nil {
-            if let restored = await SupabaseManager.shared.getOrRestoreUserId() {
-                await MainActor.run { self.backendUserId = restored }
-                activeUserId = restored
-            }
-        }
-        guard let userId = activeUserId else { return }
-
-        // Skip network if fresh
+        guard let userId = await resolvedUserId() else { return }
         if !force,
            let loadedAt = crewsLoadedAt,
            Date().timeIntervalSince(loadedAt) < crewStaleness {
             return
         }
-
         do {
             let hydrated = try await SupabaseManager.shared.fetchCrewsWithMembers(for: userId)
             await MainActor.run {
                 self.crews = hydrated
                 self.crewsLoadedAt = Date()
-                // Persist the fresh data locally so next cold-start is instant
                 StorageService.shared.syncCrews(hydrated)
             }
         } catch {
@@ -363,12 +489,13 @@ final class AppState {
             await loadCrews(force: true)
             await MainActor.run {
                 self.incomingCrewInvites.removeAll { $0.id == memberId }
-                self.notifications.removeAll { $0.requestId == memberId }
+                if let idx = self.notifications.firstIndex(where: { $0.requestId == memberId && $0.type == .crewInvite }) {
+                    self.notifications[idx].status = .accepted
+                    self.notifications[idx].processedAt = Date()
+                }
                 StorageService.shared.saveNotifications(self.notifications)
             }
-        } catch {
-            print("Error accepting crew invite: \(error)")
-        }
+        } catch { print("Error accepting crew invite: \(error)") }
     }
 
     func declineCrewInvite(memberId: UUID) async {
@@ -376,12 +503,13 @@ final class AppState {
             try await SupabaseManager.shared.declineCrewInvite(memberId: memberId)
             await MainActor.run {
                 self.incomingCrewInvites.removeAll { $0.id == memberId }
-                self.notifications.removeAll { $0.requestId == memberId }
+                if let idx = self.notifications.firstIndex(where: { $0.requestId == memberId && $0.type == .crewInvite }) {
+                    self.notifications[idx].status = .declined
+                    self.notifications[idx].processedAt = Date()
+                }
                 StorageService.shared.saveNotifications(self.notifications)
             }
-        } catch {
-            print("Error declining crew invite: \(error)")
-        }
+        } catch { print("Error declining crew invite: \(error)") }
     }
 
     func acceptFriend(requestId: UUID) async {
@@ -390,12 +518,13 @@ final class AppState {
             await loadFriends(force: true)
             await MainActor.run {
                 self.pendingFriendRequests.removeAll { $0.id == requestId }
-                self.notifications.removeAll { $0.requestId == requestId }
+                if let idx = self.notifications.firstIndex(where: { $0.requestId == requestId && $0.type == .friendRequest }) {
+                    self.notifications[idx].status = .accepted
+                    self.notifications[idx].processedAt = Date()
+                }
                 StorageService.shared.saveNotifications(self.notifications)
             }
-        } catch {
-            print("Error accepting friend request: \(error)")
-        }
+        } catch { print("Error accepting friend: \(error)") }
     }
 
     func declineFriend(requestId: UUID) async {
@@ -403,12 +532,13 @@ final class AppState {
             try await SupabaseManager.shared.declineFriendRequest(requestId: requestId)
             await MainActor.run {
                 self.pendingFriendRequests.removeAll { $0.id == requestId }
-                self.notifications.removeAll { $0.requestId == requestId }
+                if let idx = self.notifications.firstIndex(where: { $0.requestId == requestId && $0.type == .friendRequest }) {
+                    self.notifications[idx].status = .declined
+                    self.notifications[idx].processedAt = Date()
+                }
                 StorageService.shared.saveNotifications(self.notifications)
             }
-        } catch {
-            print("Error declining friend request: \(error)")
-        }
+        } catch { print("Error declining friend: \(error)") }
     }
 
     // MARK: - Onboarding / session
@@ -430,19 +560,19 @@ final class AppState {
     }
 
     func signOut() async {
-        // 1. Server-side sign out (best effort)
         try? await SupabaseManager.shared.signOut()
 
-        // 2. Clear local state
         backendUserId = nil
         friends = []
         crews = []
         notifications = []
         pendingFriendRequests = []
         incomingCrewInvites = []
+        incomingRideJoins = []
         notificationsLoadedAt = nil
         crewsLoadedAt = nil
         friendsLoadedAt = nil
+        ridesLoadedAt = nil
         rides = []
         completedRides = []
         savedRoutes = []
@@ -460,12 +590,11 @@ final class AppState {
         rideDay = false
         ridePhase = .starting
 
-        // 3. Clear local persistence
         StorageService.shared.clearUserProfile()
         StorageService.shared.saveNotifications([])
+        StorageService.shared.saveFriends([])
         StorageService.shared.syncCrews([])
 
-        // 4. Force onboarding
         phase = .onboarding
     }
 
@@ -503,9 +632,7 @@ final class AppState {
             listMeta: "\(draft.distanceText(draft.style)) · \(draft.from.components(separatedBy: ",")[0]) → \(draft.to)"
         )
 
-        guard !ride.title.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return nil
-        }
+        guard !ride.title.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
 
         StorageService.shared.saveRide(ride)
         rides.insert(ride, at: 0)
@@ -535,32 +662,40 @@ final class AppState {
         lastCompletedRideID = id
         rides.removeAll { $0.id == id }
 
-        // Push pastRide with a clean stack — prevents back-nav into zombie RideNav.
         popToRoot()
         push(.pastRide(id))
     }
 
-    /// Async because it may hit Supabase. Falls back to local-only if offline.
-    func joinRideByCode(_ code: String) async -> Bool {
+    /// Joins by code. Handles:
+    /// - already a member → adds the ride immediately
+    /// - not a member       → sends a pending join request, returns .requestPending
+    /// - unknown code       → tries local fallback, then .failed
+    func joinRideByCode(_ code: String) async -> RideJoinOutcome {
         let clean = code.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty, let userId = backendUserId else { return false }
+        guard !clean.isEmpty, let userId = await resolvedUserId() else { return .failed }
 
-        // 1. Try the server first (cross-device join).
-        if let synced = try? await SupabaseManager.shared.joinRideByCode(clean, userId: userId) {
-            if !rides.contains(where: { $0.id == synced.id }) {
-                rides.append(synced)
-                rides.sort { $0.departs < $1.departs }
+        if let (ride, status) = try? await SupabaseManager.shared.joinRideByCode(clean, userId: userId) {
+            switch status {
+            case .alreadyMember:
+                await MainActor.run {
+                    if !rides.contains(where: { $0.id == ride.id }) {
+                        rides.append(ride)
+                        rides.sort { $0.departs < $1.departs }
+                    }
+                    lastJoinedRideID = ride.id
+                }
+                return .joined(ride.id)
+            case .requestSent:
+                return .requestPending(ride.id)
             }
-            lastJoinedRideID = synced.id
-            return true
         }
 
-        // 2. Fall back to local-only (offline / not synced yet).
+        // Local-only fallback (offline or not synced yet)
         if let target = rides.first(where: { $0.code.uppercased() == clean }) {
             lastJoinedRideID = target.id
-            return true
+            return .joined(target.id)
         }
-        return false
+        return .failed
     }
 
     func startPlan(from route: DiscoverRoute, startAt: String) {
@@ -591,18 +726,8 @@ final class AppState {
         savedRoutes.contains { $0.id == route.id }
     }
 
-    /// Uses cached notification data — does NOT trigger a network fetch.
-    /// Call refreshNotifications(force: true) for an explicit pull-to-refresh.
-    func loadCrewInvites() async {
-        // Crew invites are already populated by refreshNotifications().
-        // This no-op ensures CrewView's .task doesn't redundantly hit the network.
-    }
-
-    /// Uses cached notification data — does NOT trigger a network fetch.
-    func loadFriendRequests() async {
-        // Friend requests are already populated by refreshNotifications().
-        // This no-op ensures CrewView's .task doesn't redundantly hit the network.
-    }
+    func loadCrewInvites() async { }
+    func loadFriendRequests() async { }
 
     // MARK: - Fill-ups
     func addFillUp(_ f: FillUp) {

@@ -435,4 +435,14 @@ final class StorageService {
         context.insert(FillUpEntity(odo: odo, litres: litres, price: price))
         try? context.save()
     }
+    
+    func saveFriends(_ friends: [ProfileRow]) {
+        if let data = try? JSONEncoder().encode(friends) {
+            UserDefaults.standard.set(data, forKey: "cached_friends")
+        }
+    }
+    func loadCachedFriends() -> [ProfileRow] {
+        guard let data = UserDefaults.standard.data(forKey: "cached_friends") else { return [] }
+        return (try? JSONDecoder().decode([ProfileRow].self, from: data)) ?? []
+    }
 }
