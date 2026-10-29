@@ -8,7 +8,7 @@ struct CrewMember: Identifiable, Hashable {
     var avatarData: Data?
     var pending: Bool = false
 
-    init(id: UUID = UUID(), name: String, detail: String, avatarData: Data? = nil, pending: Bool = false) {
+    nonisolated init(id: UUID = UUID(), name: String, detail: String, avatarData: Data? = nil, pending: Bool = false) {
         self.id = id; self.name = name; self.detail = detail
         self.avatarData = avatarData; self.pending = pending
     }
@@ -27,7 +27,7 @@ struct CrewGroup: Identifiable, Hashable {
     var accent: Color { Color(hex: accentHex) }
     var memberCount: Int { members.count }
 
-    init(id: UUID = UUID(), name: String, detail: String, accentHex: UInt32,
+    nonisolated init(id: UUID = UUID(), name: String, detail: String, accentHex: UInt32,
          avatarData: Data?, members: [CrewMember], since: Date, code: String) {
         self.id = id; self.name = name; self.detail = detail
         self.accentHex = accentHex; self.avatarData = avatarData
@@ -43,7 +43,7 @@ struct CrewGroup: Identifiable, Hashable {
     }
 
     /// Build from a SwiftData entity.
-    static func from(_ e: CrewEntity) -> CrewGroup {
+    nonisolated static func from(_ e: CrewEntity) -> CrewGroup {
         var members: [CrewMember] = []
         if let data = e.membersJSON.data(using: .utf8),
            let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] {

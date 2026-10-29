@@ -454,7 +454,7 @@ final class RoutePlanner {
 }
 
 extension MKPolyline {
-    var coords: [CLLocationCoordinate2D] {
+    nonisolated var coords: [CLLocationCoordinate2D] {
         var out = [CLLocationCoordinate2D](repeating: .init(), count: pointCount)
         getCoordinates(&out, range: NSRange(location: 0, length: pointCount))
         return out

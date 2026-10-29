@@ -24,7 +24,7 @@ final class NavigationVoice: NSObject, AVSpeechSynthesizerDelegate {
             try? session.setCategory(
                 .playAndRecord,
                 mode: .voicePrompt,
-                options: [.allowBluetooth, .allowBluetoothA2DP, .duckOthers, .defaultToSpeaker, .mixWithOthers]
+                options: [.allowBluetoothHFP, .allowBluetoothA2DP, .duckOthers, .defaultToSpeaker, .mixWithOthers]
             )
         }
     }

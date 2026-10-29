@@ -1,12 +1,13 @@
 // ConvoySiriVoiceService.swift
 import SwiftUI
-import Speech
 import AVFoundation
+import WhisperKit
 
 /// Hands-free on-device Siri voice service for Convoy Live Navigation.
-/// Runs continuous speech recognition so riders can speak directly
+/// Powered by Argmax WhisperKit with the OpenAI Whisper tiny.en CoreML model.
+/// Runs continuous on-device speech recognition so riders can speak directly:
 /// ("What's my ETA", "Next turn", "Find gas", "Mute voice", "Send SOS")
-/// with live speech-to-text display and zero screen taps required.
+/// with live real-time speech-to-text display and zero screen taps required.
 @MainActor @Observable
 final class ConvoySiriVoiceService: NSObject {
     static let shared = ConvoySiriVoiceService()
@@ -22,35 +23,68 @@ final class ConvoySiriVoiceService: NSObject {
     var audioLevel: CGFloat = 0.0
     var permissionStatus: String = "Not requested"
     var lastError: String? = nil
+    var modelStatusText: String = "Whisper tiny.en"
+    var isModelLoaded: Bool = false
 
-    // MARK: - Private
-    private var speechRecognizer: SFSpeechRecognizer?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private let audioEngine = AVAudioEngine()
+    // MARK: - Configuration
+    let modelVariant: String = "openai_whisper-tiny.en"
+    let modelRepo: String = "argmaxinc/whisperkit-coreml"
+
+    // MARK: - Private Whisper & Audio Engine
+    private var whisperKit: WhisperKit?
+    private var transcriptionTask: Task<Void, Never>?
     private var evaluateTask: Task<Void, Never>?
     private var dismissTask: Task<Void, Never>?
     private var restartTask: Task<Void, Never>?
     private var isExecutingAction: Bool = false
-    private var wantsListening: Bool = false   // tracks intent so restarts know to resume
+    private var wantsListening: Bool = false
+    private var lastBufferSize: Int = 0
+    private let silenceThreshold: Float = 0.28
 
     override private init() {
         super.init()
-        self.speechRecognizer = SFSpeechRecognizer(locale: Locale.current)
-            ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-            ?? SFSpeechRecognizer()
-        self.speechRecognizer?.defaultTaskHint = .dictation
+        // Proactively begin preparing WhisperKit on background task
+        Task { [weak self] in
+            await self?.preloadWhisperModel()
+        }
+    }
+
+    // MARK: - Model Preloading
+
+    private func preloadWhisperModel() async {
+        do {
+            self.modelStatusText = "Preparing tiny.en..."
+            let pipe = try await WhisperKit(
+                verbose: false,
+                logLevel: .error,
+                prewarm: false,
+                load: false,
+                download: false
+            )
+            self.whisperKit = pipe
+
+            let folder = try await WhisperKit.download(
+                variant: modelVariant,
+                from: modelRepo
+            )
+            pipe.modelFolder = folder
+
+            try await pipe.prewarmModels()
+            try await pipe.loadModels()
+
+            self.isModelLoaded = true
+            self.modelStatusText = "Whisper tiny.en (On-Device)"
+            print("[WhisperKit] ✅ tiny.en model loaded on iOS device")
+        } catch {
+            self.modelStatusText = "Whisper loading error"
+            self.lastError = error.localizedDescription
+            print("[WhisperKit] ❌ Model load error: \(error)")
+        }
     }
 
     // MARK: - Permissions
 
     func requestPermissions() async -> Bool {
-        // Speech recognition
-        let speechStatus: SFSpeechRecognizerAuthorizationStatus = await withCheckedContinuation { cont in
-            SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0) }
-        }
-
-        // Microphone
         let micGranted: Bool
         if #available(iOS 17.0, *) {
             micGranted = await withCheckedContinuation { cont in
@@ -62,11 +96,9 @@ final class ConvoySiriVoiceService: NSObject {
             }
         }
 
-        let speechGranted = (speechStatus == .authorized)
-        let allGranted = speechGranted && micGranted
-        self.permissionStatus = allGranted ? "Authorized" : "Denied – speech:\(speechGranted) mic:\(micGranted)"
-        print("[SiriVoice] Permissions → speech:\(speechGranted) mic:\(micGranted)")
-        return allGranted
+        self.permissionStatus = micGranted ? "Authorized" : "Denied"
+        print("[WhisperVoice] Microphone permission → \(micGranted)")
+        return micGranted
     }
 
     // MARK: - Public Lifecycle
@@ -94,29 +126,43 @@ final class ConvoySiriVoiceService: NSObject {
 
             let granted = await requestPermissions()
             guard granted else {
-                self.lastError = "Microphone or Speech permission denied. Go to Settings → Privacy."
+                self.lastError = "Microphone permission denied. Go to Settings → Privacy."
                 self.permissionStatus = "Denied"
-                print("[SiriVoice] ❌ Permissions not granted – cannot start")
+                self.isListening = false
                 return
             }
 
-            guard self.speechRecognizer?.isAvailable == true else {
-                print("[SiriVoice] ⚠️ SFSpeechRecognizer not available yet – retry in 3s")
-                self.scheduleStart(delay: 3_000_000_000)
+            // Ensure WhisperKit is loaded
+            if self.whisperKit == nil || !self.isModelLoaded {
+                await self.preloadWhisperModel()
+            }
+
+            guard let pipe = self.whisperKit, self.isModelLoaded else {
+                print("[WhisperVoice] ⚠️ Model not ready yet – retry in 2s")
+                self.scheduleStart(delay: 2_000_000_000)
                 return
             }
 
             do {
                 try self.activateAudioSession()
-                try self.startRecognitionEngine()
+                try pipe.audioProcessor.startRecordingLive { [weak self] _ in
+                    guard let self = self else { return }
+                    if let lastEnergy = pipe.audioProcessor.relativeEnergy.last {
+                        let level = CGFloat(max(0, min(1, lastEnergy)))
+                        DispatchQueue.main.async {
+                            self.audioLevel = level
+                        }
+                    }
+                }
+
                 self.isListening = true
                 self.lastError = nil
-                print("[SiriVoice] ✅ Hands-free listening ACTIVE")
+                self.runRealtimeTranscriptionLoop()
+                print("[WhisperVoice] ✅ Whisper live listening ACTIVE")
             } catch {
-                print("[SiriVoice] ❌ Engine start error: \(error)")
+                print("[WhisperVoice] ❌ Engine start error: \(error)")
                 self.lastError = error.localizedDescription
                 self.isListening = false
-                // Retry after 2 s
                 if wantsListening {
                     self.scheduleStart(delay: 2_000_000_000)
                 }
@@ -128,108 +174,85 @@ final class ConvoySiriVoiceService: NSObject {
         evaluateTask?.cancel()
         dismissTask?.cancel()
         restartTask?.cancel()
+        transcriptionTask?.cancel()
 
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionRequest = nil
-        recognitionTask = nil
-
-        if audioEngine.isRunning {
-            audioEngine.stop()
-        }
-        // Remove tap safely
-        audioEngine.inputNode.removeTap(onBus: 0)
-
+        whisperKit?.audioProcessor.stopRecording()
         isListening = false
+        audioLevel = 0.0
     }
 
     // MARK: - AVAudioSession
 
     private func activateAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
-        // .playAndRecord is required to simultaneously speak TTS and capture mic.
-        // .duckOthers lowers music/maps audio, .defaultToSpeaker routes to speaker in absence of headphones.
         try session.setCategory(
             .playAndRecord,
             mode: .voiceChat,
-            options: [.allowBluetooth, .allowBluetoothA2DP, .duckOthers, .defaultToSpeaker, .mixWithOthers]
+            options: [.allowBluetoothHFP, .allowBluetoothA2DP, .duckOthers, .defaultToSpeaker, .mixWithOthers]
         )
         try session.setActive(true, options: .notifyOthersOnDeactivation)
-        print("[SiriVoice] AVAudioSession active – category: playAndRecord")
+        print("[WhisperVoice] AVAudioSession active – category: playAndRecord")
     }
 
-    // MARK: - Recognition Engine
+    // MARK: - Streaming Loop
 
-    private func startRecognitionEngine() throws {
-        // Clean slate
-        recognitionTask?.cancel()
-        recognitionTask = nil
+    private func runRealtimeTranscriptionLoop() {
+        transcriptionTask?.cancel()
 
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.requiresOnDeviceRecognition = false  // allow network for better accuracy
-        // On iOS 17+ contextual strings improve accuracy for navigation commands
-        if #available(iOS 17.0, *) {
-            request.addsPunctuation = false
-        }
-        self.recognitionRequest = request
-
-        let inputNode = audioEngine.inputNode
-
-        // Get the hardware's native format (this is critical on real devices)
-        let hardwareFormat = inputNode.outputFormat(forBus: 0)
-        let sampleRate = hardwareFormat.sampleRate > 0 ? hardwareFormat.sampleRate : 16000.0
-        let channels = hardwareFormat.channelCount > 0 ? hardwareFormat.channelCount : 1
-
-        guard let recordingFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: sampleRate,
-            channels: channels,
-            interleaved: false
-        ) else {
-            throw NSError(domain: "SiriVoice", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Cannot create AVAudioFormat for hardware"])
-        }
-
-        inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
-
-            // Calculate audio level for animated orb
-            if let channelData = buffer.floatChannelData?[0] {
-                let frames = Int(buffer.frameLength)
-                var rms: Float = 0
-                for i in 0..<frames { rms += channelData[i] * channelData[i] }
-                rms = sqrtf(rms / Float(max(frames, 1)))
-                let level = CGFloat(min(max(rms * 25, 0.04), 1.0))
-                Task { @MainActor [weak self] in self?.audioLevel = level }
-            }
-        }
-
-        audioEngine.prepare()
-        try audioEngine.start()
-
-        recognitionTask = speechRecognizer?.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else { return }
-
-            if let result {
-                let text = result.bestTranscription.formattedString
-                Task { @MainActor in
-                    self.handleIncomingSpeech(text, isFinal: result.isFinal)
+        transcriptionTask = Task { [weak self] in
+            while let self = self, self.isListening && !self.isSpeaking {
+                do {
+                    try await self.processLiveAudioBuffer()
+                } catch {
+                    print("[WhisperVoice] Buffer processing error: \(error)")
                 }
+
+                // Yield to allow UI updates and energy polling
+                try? await Task.sleep(nanoseconds: 120_000_000) // 120ms
             }
+        }
+    }
 
-            if let error = error {
-                let nsError = error as NSError
-                // Code 301 = "No speech detected", 203 = "Retry" – both are normal and should restart
-                let isNormal = nsError.domain == "kAFAssistantErrorDomain"
-                    && (nsError.code == 301 || nsError.code == 203 || nsError.code == 209)
-                print("[SiriVoice] Recognition ended – error: \(nsError.code) normal:\(isNormal)")
+    private func processLiveAudioBuffer() async throws {
+        guard let pipe = whisperKit, isListening, !isSpeaking, !isExecutingAction else { return }
 
-                Task { @MainActor in
-                    guard self.wantsListening, !self.isSpeaking else { return }
-                    self.isListening = false
-                    self.scheduleStart(delay: isNormal ? 300_000_000 : 1_500_000_000)
+        let currentBuffer = pipe.audioProcessor.audioSamples
+        let nextBufferSize = currentBuffer.count - lastBufferSize
+        let nextBufferSeconds = Float(nextBufferSize) / Float(WhisperKit.sampleRate)
+
+        // Wait for at least 0.8s of audio buffer
+        guard nextBufferSeconds >= 0.8 else { return }
+
+        // Voice Activity Detection
+        let voiceDetected = AudioProcessor.isVoiceDetected(
+            in: pipe.audioProcessor.relativeEnergy,
+            nextBufferInSeconds: nextBufferSeconds,
+            silenceThreshold: silenceThreshold
+        )
+
+        guard voiceDetected else { return }
+
+        lastBufferSize = currentBuffer.count
+
+        let options = DecodingOptions(
+            verbose: false,
+            task: .transcribe,
+            language: "en",
+            temperatureFallbackCount: 2,
+            sampleLength: 224,
+            skipSpecialTokens: true
+        )
+
+        let results: [TranscriptionResult] = try await pipe.transcribe(
+            audioArray: Array(currentBuffer),
+            decodeOptions: options
+        )
+
+        if let result = results.first {
+            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                await MainActor.run {
+                    self.handleIncomingSpeech(text)
                 }
             }
         }
@@ -237,7 +260,7 @@ final class ConvoySiriVoiceService: NSObject {
 
     // MARK: - Incoming Speech Handler
 
-    private func handleIncomingSpeech(_ text: String, isFinal: Bool) {
+    private func handleIncomingSpeech(_ text: String) {
         guard !isSpeaking, !isExecutingAction else { return }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -251,15 +274,10 @@ final class ConvoySiriVoiceService: NSObject {
         }
 
         evaluateTask?.cancel()
-
-        if isFinal {
-            evaluateIntent(from: trimmed)
-        } else {
-            evaluateTask = Task {
-                try? await Task.sleep(nanoseconds: 900_000_000) // 0.9 s pause = intent
-                guard !Task.isCancelled else { return }
-                self.evaluateIntent(from: trimmed)
-            }
+        evaluateTask = Task {
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s pause = intent ready
+            guard !Task.isCancelled else { return }
+            self.evaluateIntent(from: trimmed)
         }
     }
 
@@ -279,7 +297,7 @@ final class ConvoySiriVoiceService: NSObject {
             clean = clean.replacingOccurrences(of: wake, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        print("[SiriVoice] Evaluating: '\(clean)' (raw: '\(raw)')")
+        print("[WhisperVoice] Evaluating: '\(clean)' (raw: '\(raw)')")
 
         if hasAnyToken(clean, ["eta", "arrival", "arrive", "reach", "time", "far", "long", "distance", "status", "progress", "where am i"]) {
             dispatchIntent(name: "ETA & Ride Status") {
@@ -313,14 +331,12 @@ final class ConvoySiriVoiceService: NSObject {
             }
         } else if hasAnyToken(clean, ["mute", "silence", "quiet", "stop talking", "shut up"]) {
             dispatchIntent(name: "Mute Navigation") {
-                var intent = ToggleVoiceGuidanceIntent()
-                intent.mute = true
+                let intent = ToggleVoiceGuidanceIntent(mute: true)
                 return (intent.execute(), nil)
             }
         } else if hasAnyToken(clean, ["unmute", "speak", "voice on", "sound on", "enable voice"]) {
             dispatchIntent(name: "Unmute Navigation") {
-                var intent = ToggleVoiceGuidanceIntent()
-                intent.mute = false
+                let intent = ToggleVoiceGuidanceIntent(mute: false)
                 return (intent.execute(), nil)
             }
         } else if hasAnyToken(clean, ["sos", "emergency", "help", "crash", "fell", "down", "rider down", "ambulance"]) {
@@ -360,7 +376,6 @@ final class ConvoySiriVoiceService: NSObject {
                 self.siriResponseText = result.dialog
                 self.activeSnippetView = result.snippet
 
-                // Pause recognition while speaking so we don't hear our own TTS
                 self.pauseForSpeech()
                 NavigationVoice.shared.speak(result.dialog, force: true)
 
@@ -380,24 +395,27 @@ final class ConvoySiriVoiceService: NSObject {
         scheduleAutoDismiss(delaySeconds: 5.0)
     }
 
-    /// Temporarily stop capturing while TTS is playing so mic doesn't hear itself
+    /// Temporarily pause microphone during TTS playback so mic doesn't hear itself
     private func pauseForSpeech() {
-        if audioEngine.isRunning {
-            audioEngine.pause()
-        }
+        whisperKit?.audioProcessor.pauseRecording()
     }
 
     func resumeAfterSpeech() {
         guard wantsListening else { return }
-        if !audioEngine.isRunning {
-            try? audioEngine.start()
+        try? whisperKit?.audioProcessor.resumeRecordingLive(inputDeviceID: nil) { [weak self] _ in
+            guard let self = self else { return }
+            if let lastEnergy = self.whisperKit?.audioProcessor.relativeEnergy.last {
+                let level = CGFloat(max(0, min(1, lastEnergy)))
+                DispatchQueue.main.async {
+                    self.audioLevel = level
+                }
+            }
         }
     }
 
     private func scheduleAutoDismiss(delaySeconds: Double) {
         dismissTask?.cancel()
         dismissTask = Task {
-            // Wait for TTS to finish (approximated by delay)
             try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
 
@@ -411,9 +429,8 @@ final class ConvoySiriVoiceService: NSObject {
             self.isSpeaking = false
             self.isExecutingAction = false
 
-            // Restart recognition after TTS
-            self.isListening = false
-            self.scheduleStart(delay: 500_000_000) // 0.5 s gap before re-listening
+            // Resume listening after TTS finishes
+            self.resumeAfterSpeech()
         }
     }
 }

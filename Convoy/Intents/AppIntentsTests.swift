@@ -79,8 +79,7 @@ public struct AppIntentsTestRunner {
 
         // 3. Test ToggleVoiceGuidanceIntent (Mute)
         do {
-            var intent = ToggleVoiceGuidanceIntent()
-            intent.mute = true
+            let intent = ToggleVoiceGuidanceIntent(mute: true)
             let dialog = intent.execute()
             let passed = session.isVoiceMuted == true && dialog.contains("muted")
             results.append(TestResult(
@@ -92,8 +91,7 @@ public struct AppIntentsTestRunner {
 
         // 4. Test ToggleVoiceGuidanceIntent (Unmute)
         do {
-            var intent = ToggleVoiceGuidanceIntent()
-            intent.mute = false
+            let intent = ToggleVoiceGuidanceIntent(mute: false)
             let dialog = intent.execute()
             let passed = session.isVoiceMuted == false && dialog.contains("unmuted")
             results.append(TestResult(

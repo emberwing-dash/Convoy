@@ -13,6 +13,7 @@
 		8DADA5E2308B4C3F001B9A60 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 8DADA5E1308B4C3F001B9A60 /* Realtime */; };
 		8DADA5E4308B4C3F001B9A60 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 8DADA5E3308B4C3F001B9A60 /* Storage */; };
 		8DADA5E6308B4C3F001B9A60 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 8DADA5E5308B4C3F001B9A60 /* Supabase */; };
+		BB0000033080DA0F00A64306 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = BB0000023080DA0F00A64306 /* WhisperKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +52,7 @@
 				8DADA5DC308B4C3F001B9A60 /* Auth in Frameworks */,
 				8DADA5E4308B4C3F001B9A60 /* Storage in Frameworks */,
 				8DADA5E2308B4C3F001B9A60 /* Realtime in Frameworks */,
+				BB0000033080DA0F00A64306 /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,6 +101,7 @@
 				8DADA5E1308B4C3F001B9A60 /* Realtime */,
 				8DADA5E3308B4C3F001B9A60 /* Storage */,
 				8DADA5E5308B4C3F001B9A60 /* Supabase */,
+				BB0000023080DA0F00A64306 /* WhisperKit */,
 			);
 			productName = Convoy;
 			productReference = 567FF9EC30800B73007FC40B /* Convoy.app */;
@@ -130,6 +133,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				BB0000013080DA0F00A64306 /* XCLocalSwiftPackageReference "../ref/argmax-oss-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 567FF9ED30800B73007FC40B /* Products */;
@@ -390,6 +394,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		BB0000013080DA0F00A64306 /* XCLocalSwiftPackageReference "../ref/argmax-oss-swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../ref/argmax-oss-swift;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -402,6 +413,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		BB0000023080DA0F00A64306 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BB0000013080DA0F00A64306 /* XCLocalSwiftPackageReference "../ref/argmax-oss-swift" */;
+			productName = WhisperKit;
+		};
 		8DADA5DB308B4C3F001B9A60 /* Auth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */;

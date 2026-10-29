@@ -256,6 +256,10 @@ public struct ToggleVoiceGuidanceIntent: AppIntent {
 
     public init() {}
 
+    public init(mute: Bool?) {
+        self.mute = mute
+    }
+
     @MainActor
     public func execute() -> String {
         let session = LiveNavigationSession.shared

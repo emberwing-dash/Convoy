@@ -75,8 +75,7 @@ struct SiriVoiceCommandSimulatorView: View {
                 icon: "speaker.slash.fill",
                 category: "Voice Settings",
                 action: {
-                    var intent = ToggleVoiceGuidanceIntent()
-                    intent.mute = true
+                    let intent = ToggleVoiceGuidanceIntent(mute: true)
                     let dialog = intent.execute()
                     return (dialog, nil)
                 }
@@ -87,8 +86,7 @@ struct SiriVoiceCommandSimulatorView: View {
                 icon: "speaker.wave.2.fill",
                 category: "Voice Settings",
                 action: {
-                    var intent = ToggleVoiceGuidanceIntent()
-                    intent.mute = false
+                    let intent = ToggleVoiceGuidanceIntent(mute: false)
                     let dialog = intent.execute()
                     return (dialog, nil)
                 }
