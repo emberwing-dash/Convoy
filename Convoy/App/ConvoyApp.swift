@@ -10,6 +10,13 @@ struct ConvoyApp: App {
                 .environment(app)
                 .preferredColorScheme(.dark)
                 .background(CV.bg)
+                .task {
+                    #if DEBUG
+                    if CommandLine.arguments.contains("--run-app-intent-tests") {
+                        await AppIntentsTestRunner.runAllTests()
+                    }
+                    #endif
+                }
         }
     }
 }

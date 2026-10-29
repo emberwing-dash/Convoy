@@ -192,6 +192,7 @@ struct AppleMapsRightControls: View {
     var onRecentre: () -> Void
     var onToggleVoice: () -> Void
     var onSOS: () -> Void
+    var onSiri: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 12) {
@@ -212,6 +213,32 @@ struct AppleMapsRightControls: View {
                     .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Circle())
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
             }.buttonStyle(.plain)
+
+            if let onSiri {
+                Button(action: onSiri) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                AngularGradient(
+                                    colors: [.purple, .blue, .cyan, .red, .orange, .purple],
+                                    center: .center
+                                )
+                            )
+                            .frame(width: 48, height: 48)
+                            .blur(radius: 2)
+
+                        Circle()
+                            .fill(Color(hex: 0x1A1A1D, opacity: 0.94))
+                            .frame(width: 44, height: 44)
+
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
 
             Button(action: onSOS) {
                 Image(systemName: "exclamationmark.bubble.fill")

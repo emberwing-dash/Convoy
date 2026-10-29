@@ -2,8 +2,11 @@
 import AVFoundation
 import Foundation
 
+/// Speaks turn-by-turn navigation prompts aloud during a Convoy ride.
+/// Uses .playAndRecord + .mixWithOthers so it coexists with the live
+/// microphone capture in ConvoySiriVoiceService.
 @MainActor
-final class NavigationVoice {
+final class NavigationVoice: NSObject, AVSpeechSynthesizerDelegate {
     static let shared = NavigationVoice()
 
     private let synthesizer = AVSpeechSynthesizer()
@@ -11,21 +14,18 @@ final class NavigationVoice {
     private var lastSpokenText: String = ""
     private var lastSpokenAt: Date = .distantPast
 
-    private init() {
-        // ✅ Same goal as before, but uses the *synchronous* setActive inside a
-        // detached task. That runs off the main thread (which is exactly what
-        // the runtime warning is about), and avoids relying on the async
-        // overload that this SDK/deployment target doesn't expose.
+    private override init() {
+        super.init()
+        synthesizer.delegate = self
+        // Don't activate the audio session here — ConvoySiriVoiceService owns it.
+        // We just configure the category so both can coexist.
         Task.detached(priority: .utility) {
             let session = AVAudioSession.sharedInstance()
-            try? session.setCategory(.playback,
-                                     mode: .voicePrompt,
-                                     options: [.duckOthers, .mixWithOthers])
-            do {
-                try session.setActive(true)
-            } catch {
-                print("AVAudioSession activation failed: \(error)")
-            }
+            try? session.setCategory(
+                .playAndRecord,
+                mode: .voicePrompt,
+                options: [.allowBluetooth, .allowBluetoothA2DP, .duckOthers, .defaultToSpeaker, .mixWithOthers]
+            )
         }
     }
 
@@ -37,9 +37,8 @@ final class NavigationVoice {
 
         if !force,
            trimmed == lastSpokenText,
-           Date().timeIntervalSince(lastSpokenAt) < 3 {
-            return
-        }
+           Date().timeIntervalSince(lastSpokenAt) < 3 { return }
+
         lastSpokenText = trimmed
         lastSpokenAt = Date()
 
@@ -49,6 +48,7 @@ final class NavigationVoice {
             ?? AVSpeechSynthesisVoice(language: "en-US")
         utterance.rate = 0.51
         utterance.pitchMultiplier = 1.0
+        utterance.volume = 1.0
 
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
@@ -58,5 +58,12 @@ final class NavigationVoice {
 
     func stop() {
         synthesizer.stopSpeaking(at: .immediate)
+    }
+
+    // Resume mic listening after TTS finishes
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            ConvoySiriVoiceService.shared.resumeAfterSpeech()
+        }
     }
 }

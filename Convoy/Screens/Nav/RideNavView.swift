@@ -44,6 +44,7 @@ struct RideNavView: View {
 
     @State private var isSheetExpanded = false
     @State private var isVoiceMuted = false
+    @State private var showSiriSimulator = false
 
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var isTrackingUser = true
@@ -104,7 +105,8 @@ struct RideNavView: View {
                                 NavigationVoice.shared.isMuted = isVoiceMuted
                                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                             },
-                            onSOS: { startSOS() }
+                            onSOS: { startSOS() },
+                            onSiri: { showSiriSimulator = true }
                         )
                         .padding(.trailing, 16).padding(.top, 10)
                     }
@@ -113,9 +115,11 @@ struct RideNavView: View {
                 Spacer()
 
                 if !isSheetExpanded && phase != .arrived {
-                    HStack(alignment: .bottom) {
+                    HStack(alignment: .bottom, spacing: 10) {
                         AppleMapsSpeedometer(speed: currentSpeedKmh)
                             .padding(.leading, 16).padding(.bottom, 10)
+                        SiriHandsFreeStatusBadge()
+                            .padding(.bottom, 18)
                         Spacer()
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -173,7 +177,18 @@ struct RideNavView: View {
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
+
+            if ConvoySiriVoiceService.shared.showSiriOverlay {
+                VStack {
+                    SiriHandsFreeOverlayView()
+                        .padding(.top, 136)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(150)
+            }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: ConvoySiriVoiceService.shared.showSiriOverlay)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: isSheetExpanded)
         .animation(.snappy(duration: 0.25), value: panel)
         .animation(.snappy(duration: 0.25), value: alert)
@@ -184,10 +199,22 @@ struct RideNavView: View {
         .onAppear {
             setupConfirmedRoute()
             locationService.startNavigationTracking()
+            LiveNavigationSession.shared.startSession(
+                destinationName: destinationName,
+                destinationCoordinate: destinationCoordinate,
+                startCoordinate: startCoordinate,
+                steps: navSteps,
+                rideId: app.upcomingRide?.id,
+                riderCount: app.upcomingRide?.riders.count ?? 1
+            )
+            isVoiceMuted = LiveNavigationSession.shared.isVoiceMuted
+            ConvoySiriVoiceService.shared.startListening()
         }
         .onDisappear {
             locationService.stopTracking()
             NavigationVoice.shared.stop()
+            LiveNavigationSession.shared.endSession()
+            ConvoySiriVoiceService.shared.stopListening()
         }
         .onChange(of: locationService.currentLocation) { _, newLocation in
             if let loc = newLocation { processRealLocationUpdate(loc) }
@@ -209,6 +236,28 @@ struct RideNavView: View {
                 offRouteTask?.cancel()
             }
         }
+        .onChange(of: LiveNavigationSession.shared.isVoiceMuted) { _, muted in
+            isVoiceMuted = muted
+        }
+        .onChange(of: LiveNavigationSession.shared.pendingStopNotice?.0.name) { _, _ in
+            if let pending = LiveNavigationSession.shared.pendingStopNotice {
+                stop = pending
+                withAnimation { alert = .stopAdded(pending.0, pending.1) }
+            }
+        }
+        .onChange(of: LiveNavigationSession.shared.sosTriggered) { _, triggered in
+            if triggered && sos == .off {
+                startSOS()
+            }
+        }
+        .onChange(of: LiveNavigationSession.shared.endRideRequested) { _, requested in
+            if requested {
+                finish()
+            }
+        }
+        .sheet(isPresented: $showSiriSimulator) {
+            SiriVoiceCommandSimulatorView()
+        }
     }
 
     // MARK: - Route setup
@@ -218,6 +267,7 @@ struct RideNavView: View {
         if let route = selectedRoute {
             locationService.setRoute(route.coords.map(\.cl))
             navSteps = route.steps
+            LiveNavigationSession.shared.updateSteps(route.steps)
         }
         if navSteps.isEmpty,
            let start = startCoordinate ?? locationService.currentLocation?.coordinate,
@@ -242,6 +292,7 @@ struct RideNavView: View {
                                 coordinate: Coord(step.polyline.coordinate),
                                 symbol: RoutePlanner.symbolForInstruction(inst))
                         }
+                        LiveNavigationSession.shared.updateSteps(self.navSteps)
                     }
                 }
             }
@@ -278,6 +329,18 @@ struct RideNavView: View {
                 withAnimation { phase = .arriving }
             }
         }
+
+        LiveNavigationSession.shared.updateMetrics(
+            speedKmh: currentSpeedKmh,
+            remainingDistanceMeters: remainingDistanceMeters,
+            remainingSeconds: (remainingDistanceMeters / 1000 / 45) * 3600,
+            arrivalTimeString: arrivalTimeString,
+            durationVal: durationStat.value,
+            durationUnit: durationStat.unit,
+            distanceVal: distanceStat.value,
+            distanceUnit: distanceStat.unit,
+            stepIndex: currentStepIndex
+        )
     }
 
     private func announceManeuver(step: NavStep, index: Int, distanceMeters: Double) {

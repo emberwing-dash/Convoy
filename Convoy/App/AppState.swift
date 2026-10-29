@@ -93,6 +93,7 @@ enum RideJoinOutcome {
 
 @Observable
 final class AppState {
+    static weak var shared: AppState?
     enum Phase { case onboarding, main }
 
     var phase: Phase = .onboarding
@@ -170,6 +171,7 @@ final class AppState {
     }
 
     init() {
+        AppState.shared = self
         if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
             self.phase = .main
             self.displayName = profile.displayName.isEmpty ? "Rider" : profile.displayName
@@ -749,6 +751,19 @@ final class AppState {
     func popTo(_ target: Route) {
         if let idx = path.firstIndex(of: target) {
             path.removeSubrange((idx + 1)...)
+        }
+    }
+
+    @MainActor
+    func startLiveNavigation(ride: Ride? = nil) {
+        if let ride, let idx = rides.firstIndex(where: { $0.id == ride.id }) {
+            let r = rides.remove(at: idx)
+            rides.insert(r, at: 0)
+        }
+        tab = .ride
+        rideDay = true
+        if !path.contains(.rideNav) {
+            push(.rideNav)
         }
     }
 }

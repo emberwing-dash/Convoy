@@ -23,6 +23,10 @@
 	<array>
 		<string>location</string>
 	</array>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Convoy understands your hands-free voice commands while riding in live navigation.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Convoy listens for your hands-free voice commands through your helmet intercom or phone microphone while riding.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
