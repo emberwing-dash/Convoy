@@ -1,0 +1,560 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 110;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		13EE0969308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 13EE0968308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8DADA5DC308B4C3F001B9A60 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 8DADA5DB308B4C3F001B9A60 /* Auth */; };
+		8DADA5DE308B4C3F001B9A60 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = 8DADA5DD308B4C3F001B9A60 /* Functions */; };
+		8DADA5E0308B4C3F001B9A60 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 8DADA5DF308B4C3F001B9A60 /* PostgREST */; };
+		8DADA5E2308B4C3F001B9A60 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 8DADA5E1308B4C3F001B9A60 /* Realtime */; };
+		8DADA5E4308B4C3F001B9A60 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 8DADA5E3308B4C3F001B9A60 /* Storage */; };
+		8DADA5E6308B4C3F001B9A60 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 8DADA5E5308B4C3F001B9A60 /* Supabase */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		13EE096A308CBB9100CCEBA0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 13EE0953308CBB9000CCEBA0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 13EE0967308CBB9100CCEBA0;
+			remoteInfo = "Convoy_WatchPhone Watch App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		13EE0978308CBB9200CCEBA0 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolder = Product;
+			files = (
+				13EE0969308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		13EE095B308CBB9000CCEBA0 /* Convoy_WatchPhone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Convoy_WatchPhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13EE0968308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Convoy_WatchPhone Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		13EE095E308CBB9000CCEBA0 /* Exceptions for "Convoy_WatchPhone" folder in "Convoy_WatchPhone" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 13EE095A308CBB9000CCEBA0 /* Convoy_WatchPhone */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		13EE095D308CBB9000CCEBA0 /* Convoy_WatchPhone */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				13EE095E308CBB9000CCEBA0 /* Exceptions for "Convoy_WatchPhone" folder in "Convoy_WatchPhone" target */,
+			);
+			path = Convoy_WatchPhone;
+			sourceTree = "<group>";
+		};
+		13EE096C308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Convoy_WatchPhone Watch App";
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		13EE0958308CBB9000CCEBA0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				8DADA5E0308B4C3F001B9A60 /* PostgREST in Frameworks */,
+				8DADA5DE308B4C3F001B9A60 /* Functions in Frameworks */,
+				8DADA5E6308B4C3F001B9A60 /* Supabase in Frameworks */,
+				8DADA5DC308B4C3F001B9A60 /* Auth in Frameworks */,
+				8DADA5E4308B4C3F001B9A60 /* Storage in Frameworks */,
+				8DADA5E2308B4C3F001B9A60 /* Realtime in Frameworks */,
+			);
+		};
+		13EE0965308CBB9100CCEBA0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		13EE0952308CBB9000CCEBA0 = {
+			isa = PBXGroup;
+			children = (
+				13EE095D308CBB9000CCEBA0 /* Convoy_WatchPhone */,
+				13EE096C308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App */,
+				13EE095C308CBB9000CCEBA0 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		13EE095C308CBB9000CCEBA0 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				13EE095B308CBB9000CCEBA0 /* Convoy_WatchPhone.app */,
+				13EE0968308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		13EE095A308CBB9000CCEBA0 /* Convoy_WatchPhone */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 13EE0979308CBB9200CCEBA0 /* Build configuration list for PBXNativeTarget "Convoy_WatchPhone" */;
+			buildPhases = (
+				13EE0957308CBB9000CCEBA0 /* Sources */,
+				13EE0958308CBB9000CCEBA0 /* Frameworks */,
+				13EE0959308CBB9000CCEBA0 /* Resources */,
+				13EE0978308CBB9200CCEBA0 /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				13EE096B308CBB9100CCEBA0 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				13EE095D308CBB9000CCEBA0 /* Convoy_WatchPhone */,
+			);
+			name = Convoy_WatchPhone;
+			productName = Convoy_WatchPhone;
+			productReference = 13EE095B308CBB9000CCEBA0 /* Convoy_WatchPhone.app */;
+			productType = "com.apple.product-type.application";
+		};
+		13EE0967308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 13EE0975308CBB9200CCEBA0 /* Build configuration list for PBXNativeTarget "Convoy_WatchPhone Watch App" */;
+			buildPhases = (
+				13EE0964308CBB9100CCEBA0 /* Sources */,
+				13EE0965308CBB9100CCEBA0 /* Frameworks */,
+				13EE0966308CBB9100CCEBA0 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				13EE096C308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App */,
+			);
+			name = "Convoy_WatchPhone Watch App";
+			productName = "Convoy_WatchPhone Watch App";
+			productReference = 13EE0968308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		13EE0953308CBB9000CCEBA0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					13EE095A308CBB9000CCEBA0 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					13EE0967308CBB9100CCEBA0 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+				};
+			};
+			buildConfigurationList = 13EE0956308CBB9000CCEBA0 /* Build configuration list for PBXProject "Convoy_WatchPhone" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 13EE0952308CBB9000CCEBA0;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 13EE095C308CBB9000CCEBA0 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				13EE095A308CBB9000CCEBA0 /* Convoy_WatchPhone */,
+				13EE0967308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		13EE0959308CBB9000CCEBA0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		13EE0966308CBB9100CCEBA0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		13EE0957308CBB9000CCEBA0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		13EE0964308CBB9100CCEBA0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		13EE096B308CBB9100CCEBA0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 13EE0967308CBB9100CCEBA0 /* Convoy_WatchPhone Watch App */;
+			targetProxy = 13EE096A308CBB9100CCEBA0 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		13EE0973308CBB9200CCEBA0 /* Debug configuration for PBXProject "Convoy_WatchPhone" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = ZC8GP86N5T;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		13EE0974308CBB9200CCEBA0 /* Release configuration for PBXProject "Convoy_WatchPhone" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = ZC8GP86N5T;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		13EE0976308CBB9200CCEBA0 /* Debug configuration for PBXNativeTarget "Convoy_WatchPhone Watch App" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZC8GP86N5T;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Convoy_WatchPhone;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "Testproj.Convoy-WatchPhone";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Testproj.Convoy-WatchPhone.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		13EE0977308CBB9200CCEBA0 /* Release configuration for PBXNativeTarget "Convoy_WatchPhone Watch App" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZC8GP86N5T;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Convoy_WatchPhone;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "Testproj.Convoy-WatchPhone";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Testproj.Convoy-WatchPhone.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		13EE097A308CBB9200CCEBA0 /* Debug configuration for PBXNativeTarget "Convoy_WatchPhone" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZC8GP86N5T;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Convoy_WatchPhone/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Convoy_WatchPhone;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Testproj.Convoy-WatchPhone";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		13EE097B308CBB9200CCEBA0 /* Release configuration for PBXNativeTarget "Convoy_WatchPhone" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZC8GP86N5T;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Convoy_WatchPhone/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Convoy_WatchPhone;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Testproj.Convoy-WatchPhone";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		13EE0956308CBB9000CCEBA0 /* Build configuration list for PBXProject "Convoy_WatchPhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				13EE0973308CBB9200CCEBA0 /* Debug configuration for PBXProject "Convoy_WatchPhone" */,
+				13EE0974308CBB9200CCEBA0 /* Release configuration for PBXProject "Convoy_WatchPhone" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		13EE0975308CBB9200CCEBA0 /* Build configuration list for PBXNativeTarget "Convoy_WatchPhone Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				13EE0976308CBB9200CCEBA0 /* Debug configuration for PBXNativeTarget "Convoy_WatchPhone Watch App" */,
+				13EE0977308CBB9200CCEBA0 /* Release configuration for PBXNativeTarget "Convoy_WatchPhone Watch App" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		13EE0979308CBB9200CCEBA0 /* Build configuration list for PBXNativeTarget "Convoy_WatchPhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				13EE097A308CBB9200CCEBA0 /* Debug configuration for PBXNativeTarget "Convoy_WatchPhone" */,
+				13EE097B308CBB9200CCEBA0 /* Release configuration for PBXNativeTarget "Convoy_WatchPhone" */,
+			);
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8DADA5DB308B4C3F001B9A60 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		8DADA5DD308B4C3F001B9A60 /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		8DADA5DF308B4C3F001B9A60 /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		8DADA5E1308B4C3F001B9A60 /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		8DADA5E3308B4C3F001B9A60 /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+		8DADA5E5308B4C3F001B9A60 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8DADA5DA308B4C3F001B9A60 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 13EE0953308CBB9000CCEBA0 /* Project object */;
+	validationLevel = 1;
+}
