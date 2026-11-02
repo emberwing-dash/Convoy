@@ -1,178 +1,238 @@
 // Discover.swift
 import SwiftUI
-import MapKit
 import CoreLocation
 
-enum RouteCategory: String, CaseIterable, Identifiable {
-    case nearYou = "Near you"
-    case scenic = "Scenic"
-    case popular = "Popular"
-    case longDistance = "Long distance"
+// MARK: - Categories
+
+nonisolated enum PlaceCategory: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
+    case lake, waterfall, viewpoint, beach, forest, cafe, historical, hillRoad, hillStation, waterfront
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .lake: "Lake"
+        case .waterfall: "Waterfall"
+        case .viewpoint: "Viewpoint"
+        case .beach: "Beach"
+        case .forest: "Forest"
+        case .cafe: "Café"
+        case .historical: "Historical"
+        case .hillRoad: "Hill road"
+        case .hillStation: "Hill station"
+        case .waterfront: "Waterfront"
+        }
+    }
+    var plural: String {
+        switch self {
+        case .cafe: "Cafés"
+        case .historical: "Historical"
+        case .hillRoad: "Hill roads"
+        case .hillStation: "Hill stations"
+        default: label + "s"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .lake: "water.waves"
+        case .waterfall: "drop"
+        case .viewpoint: "mountain.2"
+        case .beach: "beach.umbrella"
+        case .forest: "tree"
+        case .cafe: "cup.and.saucer"
+        case .historical: "building.columns"
+        case .hillRoad: "road.lanes"
+        case .hillStation: "mountain.2.circle"
+        case .waterfront: "sailboat"
+        }
+    }
+    /// How strongly the category alone signals "worth it for the view" (0…1). Used by the ranker.
+    var scenicWeight: Double {
+        switch self {
+        case .waterfall, .viewpoint: 1
+        case .lake, .forest, .hillRoad: 0.9
+        case .beach, .hillStation, .waterfront: 0.8
+        case .historical: 0.5
+        case .cafe: 0.2
+        }
+    }
+    /// Types shown in Places → Browse by type (D07).
+    static let browseable: [PlaceCategory] = [.lake, .waterfall, .viewpoint, .beach, .forest, .cafe, .historical, .hillRoad]
+}
+
+// MARK: - Shared value types
+
+nonisolated extension Coord: Codable {
+    private enum K: String, CodingKey { case lat, lon }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: K.self)
+        self.init(lat: try c.decode(Double.self, forKey: .lat), lon: try c.decode(Double.self, forKey: .lon))
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: K.self)
+        try c.encode(lat, forKey: .lat); try c.encode(lon, forKey: .lon)
+    }
+    var isValid: Bool { (-90...90).contains(lat) && (-180...180).contains(lon) && !(lat == 0 && lon == 0) }
+    func distanceKm(to o: Coord) -> Double {
+        CLLocation(latitude: lat, longitude: lon).distance(from: CLLocation(latitude: o.lat, longitude: o.lon)) / 1000
+    }
+}
+
+/// A real photo of the place and its credit. Credits are always shown with the photo.
+nonisolated struct PhotoRef: Codable, Hashable, Sendable {
+    enum Source: Codable, Hashable, Sendable { case asset(String), remote(URL) }
+    var source: Source
+    var credit: String
+}
+
+/// Two-wheeler road distance and time. Never a straight-line guess.
+nonisolated struct RideEstimate: Codable, Hashable, Sendable {
+    var distanceM: Double
+    var durationS: Double
+
+    enum TripLength: String { case day = "Day ride", weekend = "Weekend", multiDay = "Multi-day" }
+    var tripLength: TripLength { durationS <= 8 * 3600 ? .day : durationS <= 16 * 3600 ? .weekend : .multiDay }
+
+    var distanceText: String { distanceM >= 100_000 ? "\(Int((distanceM / 1000).rounded())) km" : String(format: "%.0f km", distanceM / 1000) }
+    var durationText: String { let m = Int(durationS / 60); return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m" }
+    /// Card line: "58 km · 1h 25m", or a trip-length bucket for long rides.
+    var cardText: String {
+        switch tripLength {
+        case .day: "\(distanceText) · \(durationText)"
+        case .weekend: "Weekend · 2 days"
+        case .multiDay: "Multi-day ride"
+        }
+    }
+}
+
+// MARK: - Places
+
+nonisolated struct DiscoverPlace: Codable, Identifiable, Hashable, Sendable {
+    struct Fact: Codable, Hashable, Sendable { var label: String; var value: String }
+
+    var id: String
+    var name: String
+    var region: String
+    var category: PlaceCategory
+    var coord: Coord
+    var summary: String
+    var photos: [PhotoRef] = []
+    var facts: [Fact] = []
+    var tags: [String] = []
+    /// Real interest signal (Wikipedia/Wikidata), 0…1. nil = unknown, never invented.
+    var fame: Double? = nil
+    /// Real Convoy engagement (saves / plans / rides), 0…1. nil = not enough data yet.
+    var popularity: Double? = nil
+    var isClosed = false
+    /// Where the record came from ("mock", "convoy", "google", "wikidata", …).
+    var source: String
+}
+
+// MARK: - Routes
+
+nonisolated struct RouteStop: Codable, Hashable, Sendable {
+    var name: String
+    var category: PlaceCategory? = nil
+    var coord: Coord
+    /// Road distance from the route start, when known.
+    var km: Double? = nil
+}
+
+nonisolated enum RouteVerification: String, Codable, Sendable { case unverified, riderVerified }
+
+/// A real journey: start → ordered stops → end, with road geometry.
+nonisolated struct DiscoverRoute: Codable, Identifiable, Hashable, Sendable {
+    var id: String
+    var title: String
+    var summary: String
+    var start: RouteStop
+    var end: RouteStop
+    var stops: [RouteStop] = []
+    var geometry: [Coord] = []
+    var tags: [String] = []
+    var scenery: [PlaceCategory] = []
+    var photos: [PhotoRef] = []
+    /// Two-wheeler estimate for the whole route (start → end via stops).
+    var estimate: RideEstimate? = nil
+    var verification: RouteVerification = .unverified
+    var popularity: Double? = nil
+    var source: String
+
+    var fromTo: String { "\(start.name.components(separatedBy: ",")[0]) → \(end.name.components(separatedBy: ",")[0])" }
+    var hasGeometry: Bool { geometry.count > 1 && geometry.allSatisfy(\.isValid) }
+
+    /// Seed for the existing planner. Stops keep their order.
+    func planSeed(start origin: String, startCoord: Coord?, include: Set<String>? = nil) -> PlanSeed {
+        PlanSeed(name: title, start: origin, startCoord: startCoord,
+                 destination: end.name, destinationCoord: end.coord,
+                 stops: stops.filter { include?.contains($0.name) ?? true }.map { .init(name: $0.name, coord: $0.coord) },
+                 discoverRoute: id)
+    }
+}
+
+nonisolated enum RouteCollection: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case nearMe = "Near me", popular = "Popular", weekend = "Weekend", longDistance = "Long distance"
+    case scenic = "Scenic", coastal = "Coastal", mountain = "Mountain"
     var id: String { rawValue }
 }
 
-/// A Discover route built from a real MapKit POI near the user's location.
-struct DiscoverRoute: Identifiable, Hashable {
-    let id: String
+// MARK: - Scenic collections (saved queries over the same places/routes)
+
+nonisolated struct ScenicCollection: Codable, Identifiable, Hashable, Sendable {
+    var id: String
     var title: String
-    var tag: String
-    var from: String
-    var to: String
-    var km: Int
-    var time: String
-    var style: String
-    var blurb: String
-    var startPlace: String
-    var finishPlace: String
-    var stops: Int
-    var startCoord: Coord
-    var endCoord: Coord
-    var coords: [Coord]
-    var categories: Set<RouteCategory>
+    var subtitle: String
+    var symbol: String
+    var photo: PhotoRef?
+    var placeIds: [String]
+    var routeIds: [String] = []
+    /// One factual line per item explaining why it's in the collection.
+    var reasons: [String: String] = [:]
 }
 
-/// Builds Discover routes on demand from MapKit, around the user's current location.
-@MainActor @Observable
-final class DiscoverService {
-    static let shared = DiscoverService()
+// MARK: - Origin & modes
 
-    private(set) var suggestions: [DiscoverRoute] = []
-    private(set) var isLoading = false
-    private(set) var lastLoadedLocation: CLLocation?
+nonisolated struct DiscoveryOrigin: Codable, Hashable, Sendable {
+    var name: String
+    var coord: Coord
+    var isCurrentLocation = false
+}
 
-    private let poiQueries: [(String, RouteCategory)] = [
-        ("viewpoint", .scenic),
-        ("waterfall", .scenic),
-        ("lake", .scenic),
-        ("hill station", .scenic),
-        ("national park", .scenic),
-        ("fort", .scenic),
-        ("temple", .scenic),
-        ("beach", .nearYou),
-    ]
-
-    func refresh(near location: CLLocation) async {
-        if let last = lastLoadedLocation, last.distance(from: location) < 5000, !suggestions.isEmpty {
-            return
-        }
-        isLoading = true
-        defer { isLoading = false }
-
-        let region = MKCoordinateRegion(
-            center: location.coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 2.0, longitudeDelta: 2.0))
-
-        var results: [DiscoverRoute] = []
-        var seen: Set<String> = []
-
-        for (query, category) in poiQueries {
-            let req = MKLocalSearch.Request()
-            req.naturalLanguageQuery = query
-            req.region = region
-            req.resultTypes = .pointOfInterest
-            guard let res = try? await MKLocalSearch(request: req).start() else { continue }
-
-            for item in res.mapItems.prefix(4) {
-                let coord = item.placemark.coordinate
-                let key = String(format: "%.3f_%.3f", coord.latitude, coord.longitude)
-                guard !seen.contains(key) else { continue }
-                seen.insert(key)
-
-                let name = item.name ?? query.capitalized
-                let distanceKm = location.distance(
-                    from: CLLocation(latitude: coord.latitude, longitude: coord.longitude)) / 1000
-                let driveMinutes = Int(round(distanceKm / 45.0 * 60))
-                let timeStr = driveMinutes < 60
-                    ? "\(max(1, driveMinutes))m"
-                    : "\(driveMinutes / 60)h \(driveMinutes % 60)m"
-
-                var cats: Set<RouteCategory> = [category]
-                if distanceKm < 40 { cats.insert(.nearYou) }
-                if distanceKm > 100 { cats.insert(.longDistance) }
-
-                let style = query.capitalized
-
-                results.append(DiscoverRoute(
-                    id: key,
-                    title: name,
-                    tag: style,
-                    from: "Your location",
-                    to: name,
-                    km: Int(round(distanceKm)),
-                    time: timeStr,
-                    style: style,
-                    blurb: item.placemark.title ?? "",
-                    startPlace: "Current location",
-                    finishPlace: item.placemark.title ?? name,
-                    stops: 1,
-                    startCoord: Coord(location.coordinate),
-                    endCoord: Coord(coord),
-                    coords: [Coord(location.coordinate), Coord(coord)],
-                    categories: cats))
-            }
-        }
-
-        let popular = results.sorted { $0.km < $1.km }.prefix(4)
-        for p in popular {
-            if let idx = results.firstIndex(where: { $0.id == p.id }) {
-                results[idx].categories.insert(.popular)
-            }
-        }
-
-        let sortedResults = results.sorted { $0.km < $1.km }
-        var fetchedResults: [DiscoverRoute] = []
-
-        await withTaskGroup(of: (String, [Coord]).self) { group in
-            for (idx, route) in sortedResults.enumerated() {
-                guard idx < 12 else { continue }
-
-                // Extract primitives BEFORE entering the Sendable closure
-                // so we don't touch `Coord` (which is fine, but `cl` was
-                // the main actor-isolated access that broke).
-                let routeId = route.id
-                let startLat = route.startCoord.lat
-                let startLon = route.startCoord.lon
-                let endLat = route.endCoord.lat
-                let endLon = route.endCoord.lon
-                let fallbackStart = route.startCoord
-                let fallbackEnd = route.endCoord
-
-                group.addTask {
-                    let req = MKDirections.Request()
-                    req.source = MKMapItem(placemark: MKPlacemark(
-                        coordinate: CLLocationCoordinate2D(latitude: startLat, longitude: startLon)))
-                    req.destination = MKMapItem(placemark: MKPlacemark(
-                        coordinate: CLLocationCoordinate2D(latitude: endLat, longitude: endLon)))
-                    req.transportType = .automobile
-
-                    if let res = try? await MKDirections(request: req).calculate(),
-                       let r = res.routes.first {
-                        let coords = r.polyline.coords.map { Coord(lat: $0.latitude, lon: $0.longitude) }
-                        return (routeId, coords)
-                    }
-                    return (routeId, [fallbackStart, fallbackEnd])
-                }
-            }
-
-            var paths: [String: [Coord]] = [:]
-            for await (id, path) in group {
-                paths[id] = path
-            }
-
-            for route in sortedResults {
-                var r = route
-                r.coords = paths[route.id] ?? [route.startCoord, route.endCoord]
-                fetchedResults.append(r)
-            }
-        }
-
-        suggestions = fetchedResults
-        lastLoadedLocation = location
+nonisolated enum SurpriseMode: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
+    case nearMe, anywhere, scenic, weekend, mixed
+    var id: String { rawValue }
+    var title: String {
+        switch self { case .nearMe: "Near me"; case .anywhere: "Anywhere"; case .scenic: "Scenic"; case .weekend: "Weekend"; case .mixed: "Mixed" }
     }
+    var symbol: String {
+        switch self { case .nearMe: "location"; case .anywhere: "safari"; case .scenic: "mountain.2"; case .weekend: "calendar"; case .mixed: "sparkles" }
+    }
+}
 
-    /// Force a rebuild from the current location.
-    func refreshNow(near location: CLLocation) async {
-        lastLoadedLocation = nil
-        await refresh(near: location)
+/// One page in Surprise me — a place or a route.
+nonisolated enum DiscoverItem: Identifiable, Hashable, Sendable {
+    case place(DiscoverPlace), route(DiscoverRoute)
+    var id: String { switch self { case .place(let p): "p:" + p.id; case .route(let r): "r:" + r.id } }
+}
+
+/// What the planner hand-off (D14) is planning to.
+nonisolated enum PlanTarget: Hashable, Sendable {
+    case route(String), place(String), trip
+}
+
+// MARK: - Saved payloads
+
+nonisolated extension DiscoverPlace {
+    /// Saved places share the saved-routes store and table; their id carries this prefix.
+    static let savedPrefix = "place:"
+    var savedId: String { Self.savedPrefix + id }
+}
+
+nonisolated enum DiscoverJSON {
+    static func encode<T: Encodable>(_ value: T) -> String {
+        (try? JSONEncoder().encode(value)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+    }
+    static func decode<T: Decodable>(_ type: T.Type, from string: String) -> T? {
+        guard !string.isEmpty else { return nil }
+        return try? JSONDecoder().decode(type, from: Data(string.utf8))
     }
 }

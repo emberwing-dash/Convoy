@@ -598,14 +598,19 @@ final class SupabaseManager {
     // MARK: - Saved routes
 
     func saveSavedRoute(userId: UUID, route: DiscoverRoute) async throws {
-        let payload = SavedRouteInsert(
-            user_id: userId,
-            route_id: route.id,
-            title: route.title,
-            payload_json: Self.encodeRoutePayload(route)
-        )
+        try await upsertSaved(SavedRouteInsert(user_id: userId, route_id: route.id, title: route.title,
+                                               payload_json: DiscoverJSON.encode(route)))
+    }
+
+    /// Places use the same table with a "place:" route id — no schema change.
+    func saveSavedPlace(userId: UUID, place: DiscoverPlace) async throws {
+        try await upsertSaved(SavedRouteInsert(user_id: userId, route_id: place.savedId, title: place.name,
+                                               payload_json: DiscoverJSON.encode(place)))
+    }
+
+    private func upsertSaved(_ row: SavedRouteInsert) async throws {
         try await client.from("saved_routes")
-            .upsert(payload, onConflict: "user_id,route_id")
+            .upsert(row, onConflict: "user_id,route_id")
             .execute()
     }
 
@@ -615,34 +620,6 @@ final class SupabaseManager {
             .eq("user_id", value: userId)
             .eq("route_id", value: routeId)
             .execute()
-    }
-
-    /// Builds a JSON string for a DiscoverRoute. The type isn't `Encodable`
-    /// (it contains `Set<RouteCategory>` and `Coord`), so we serialize the
-    /// primitive fields manually.
-    private static func encodeRoutePayload(_ route: DiscoverRoute) -> String {
-        var dict: [String: Any] = [:]
-        dict["id"] = route.id
-        dict["title"] = route.title
-        dict["tag"] = route.tag
-        dict["from"] = route.from
-        dict["to"] = route.to
-        dict["km"] = route.km
-        dict["time"] = route.time
-        dict["style"] = route.style
-        dict["blurb"] = route.blurb
-        dict["startPlace"] = route.startPlace
-        dict["finishPlace"] = route.finishPlace
-        dict["stops"] = route.stops
-        dict["startLat"] = route.startCoord.lat
-        dict["startLon"] = route.startCoord.lon
-        dict["endLat"] = route.endCoord.lat
-        dict["endLon"] = route.endCoord.lon
-        dict["coords"] = route.coords.map { ["lat": $0.lat, "lon": $0.lon] }
-        dict["categories"] = route.categories.map(\.rawValue)
-        guard let data = try? JSONSerialization.data(withJSONObject: dict),
-              let s = String(data: data, encoding: .utf8) else { return "{}" }
-        return s
     }
 }
 

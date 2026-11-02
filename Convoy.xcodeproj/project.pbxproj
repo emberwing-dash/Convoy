@@ -444,6 +444,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F5M6B8W4Y3;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_SOURCE_FILE_NAMES = DiscoverMock.xcassets;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Convoy/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Convoy uses the camera for ride photos.";

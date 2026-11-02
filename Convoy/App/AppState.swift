@@ -74,7 +74,10 @@ enum Route: Hashable {
     case mileageIntro, logFillUp, mileageProgress, mileageResults
     case crewDetail(UUID), newCrew, crewInvite(UUID), inviteFriends
     case discoverSearch, discoverSaved, discoverMap
-    case routeDetail(DiscoverRoute), routeStart(DiscoverRoute)
+    case discoverRoutes(RouteCollection?), discoverPlaces, placeCategory(PlaceCategory)
+    case placeDetail(String), routeDetail(String)
+    case scenic, scenicCollection(String), surprise, surpriseFeed(SurpriseMode)
+    case planHandoff(PlanTarget)
     case planWho, pickCrews, pickFriends
     case planDetails, planMap, planRoutes, planReview, planCreated
     case rideDetails(UUID), pastRide(UUID)
@@ -153,6 +156,7 @@ final class AppState {
     // Crews & saved routes
     var crews: [CrewGroup] = []
     var savedRoutes: [DiscoverRoute] = []
+    var savedPlaces: [DiscoverPlace] = []
     var selectedCrew: UUID? = nil
     var selectedFriends: Set<String> = []
 
@@ -195,27 +199,12 @@ final class AppState {
         self.notifications = StorageService.shared.loadCachedNotifications()
         self.fillUps = StorageService.shared.loadFillUps().map { FillUp(odo: $0.odo, litres: $0.litres, price: $0.price) }
 
-        self.savedRoutes = StorageService.shared.loadSavedRoutes().map { e in
-            var coords: [Coord] = []
-            if let data = e.coordsJSON.data(using: .utf8),
-               let pairs = try? JSONSerialization.jsonObject(with: data) as? [[Double]] {
-                coords = pairs.compactMap { pair in
-                    guard pair.count == 2 else { return nil }
-                    return Coord(lat: pair[0], lon: pair[1])
-                }
+        for e in StorageService.shared.loadSavedRoutes() {
+            if e.id.hasPrefix(DiscoverPlace.savedPrefix) {
+                if let p = DiscoverJSON.decode(DiscoverPlace.self, from: e.payloadJSON) { savedPlaces.append(p) }
+            } else {
+                savedRoutes.append(DiscoverJSON.decode(DiscoverRoute.self, from: e.payloadJSON) ?? DiscoverRoute(legacy: e))
             }
-            let start = Coord(lat: e.startLat, lon: e.startLon)
-            let end = Coord(lat: e.endLat, lon: e.endLon)
-            if coords.isEmpty { coords = [start, end] }
-            return DiscoverRoute(
-                id: e.id, title: e.title, tag: e.tag,
-                from: e.from, to: e.to, km: e.km, time: e.time,
-                style: e.style, blurb: e.blurb,
-                startPlace: e.startPlace, finishPlace: e.finishPlace,
-                stops: e.stops,
-                startCoord: start, endCoord: end, coords: coords,
-                categories: Set(e.categoriesRaw.split(separator: ",").compactMap { RouteCategory(rawValue: String($0)) })
-            )
         }
     }
 
@@ -576,6 +565,7 @@ final class AppState {
         rides = []
         completedRides = []
         savedRoutes = []
+        savedPlaces = []
         fillUps = []
         activeRideMedia = []
         draft = PlanDraft()
@@ -705,23 +695,30 @@ final class AppState {
     }
 
     func toggleSaved(_ route: DiscoverRoute) {
-        if let idx = savedRoutes.firstIndex(where: { $0.id == route.id }) {
-            savedRoutes.remove(at: idx)
-            StorageService.shared.removeSavedRoute(id: route.id)
-            if let userId = backendUserId {
-                Task { try? await SupabaseManager.shared.deleteSavedRoute(userId: userId, routeId: route.id) }
-            }
-        } else {
-            savedRoutes.append(route)
-            StorageService.shared.saveSavedRoute(route)
-            if let userId = backendUserId {
-                Task { try? await SupabaseManager.shared.saveSavedRoute(userId: userId, route: route) }
-            }
-        }
+        let saving = !isSaved(route)
+        if saving { savedRoutes.insert(route, at: 0); StorageService.shared.saveSavedRoute(route) }
+        else { savedRoutes.removeAll { $0.id == route.id }; StorageService.shared.removeSavedRoute(id: route.id) }
+        DiscoveryHistory.shared.setSaved(route.id, category: route.scenery.first, saved: saving)
+        syncSaved(id: route.id, saving: saving) { try await SupabaseManager.shared.saveSavedRoute(userId: $0, route: route) }
     }
 
-    func isSaved(_ route: DiscoverRoute) -> Bool {
-        savedRoutes.contains { $0.id == route.id }
+    func toggleSaved(_ place: DiscoverPlace) {
+        let saving = !isSaved(place)
+        if saving { savedPlaces.insert(place, at: 0); StorageService.shared.saveSavedPlace(place) }
+        else { savedPlaces.removeAll { $0.id == place.id }; StorageService.shared.removeSavedRoute(id: place.savedId) }
+        DiscoveryHistory.shared.setSaved(place.id, category: place.category, saved: saving)
+        syncSaved(id: place.savedId, saving: saving) { try await SupabaseManager.shared.saveSavedPlace(userId: $0, place: place) }
+    }
+
+    func isSaved(_ route: DiscoverRoute) -> Bool { savedRoutes.contains { $0.id == route.id } }
+    func isSaved(_ place: DiscoverPlace) -> Bool { savedPlaces.contains { $0.id == place.id } }
+
+    private func syncSaved(id: String, saving: Bool, upsert: @escaping (UUID) async throws -> Void) {
+        guard let userId = backendUserId else { return }
+        Task {
+            if saving { try? await upsert(userId) }
+            else { try? await SupabaseManager.shared.deleteSavedRoute(userId: userId, routeId: id) }
+        }
     }
 
     func loadCrewInvites() async { }

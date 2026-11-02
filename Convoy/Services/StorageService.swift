@@ -146,6 +146,8 @@ final class SavedRouteEntity {
     var categoriesRaw: String = ""
     var createdAt: Date = Date()
     var coordsJSON: String = "[]"
+    /// Full Discover payload (route or place JSON). Empty for rows saved before Discover v2.
+    var payloadJSON: String = ""
 
     init(id: String, title: String, tag: String, from: String, to: String,
          km: Int, time: String, style: String, blurb: String,
@@ -390,24 +392,24 @@ final class StorageService {
     }
 
     func saveSavedRoute(_ route: DiscoverRoute) {
+        saveSavedItem(id: route.id, title: route.title, start: route.start, end: route.end, payload: DiscoverJSON.encode(route))
+    }
+
+    func saveSavedPlace(_ place: DiscoverPlace) {
+        let stop = RouteStop(name: place.name, category: place.category, coord: place.coord)
+        saveSavedItem(id: place.savedId, title: place.name, start: stop, end: stop, payload: DiscoverJSON.encode(place))
+    }
+
+    private func saveSavedItem(id: String, title: String, start: RouteStop, end: RouteStop, payload: String) {
         guard let context else { return }
-        let catsRaw = route.categories.map(\.rawValue).joined(separator: ",")
-
+        removeSavedRoute(id: id)
         let entity = SavedRouteEntity(
-            id: route.id, title: route.title, tag: route.tag,
-            from: route.from, to: route.to, km: route.km, time: route.time,
-            style: route.style, blurb: route.blurb,
-            startPlace: route.startPlace, finishPlace: route.finishPlace,
-            stops: route.stops,
-            startLat: route.startCoord.lat, startLon: route.startCoord.lon,
-            endLat: route.endCoord.lat, endLon: route.endCoord.lon,
-            categoriesRaw: catsRaw
+            id: id, title: title, tag: "", from: start.name, to: end.name, km: 0, time: "",
+            style: "", blurb: "", startPlace: start.name, finishPlace: end.name, stops: 0,
+            startLat: start.coord.lat, startLon: start.coord.lon, endLat: end.coord.lat, endLon: end.coord.lon,
+            categoriesRaw: ""
         )
-
-        let coordsPairs = route.coords.map { [$0.lat, $0.lon] }
-        let coordsData = (try? JSONSerialization.data(withJSONObject: coordsPairs)) ?? Data("[]".utf8)
-        entity.coordsJSON = String(data: coordsData, encoding: .utf8) ?? "[]"
-
+        entity.payloadJSON = payload
         context.insert(entity)
         try? context.save()
     }
@@ -444,5 +446,17 @@ final class StorageService {
     func loadCachedFriends() -> [ProfileRow] {
         guard let data = UserDefaults.standard.data(forKey: "cached_friends") else { return [] }
         return (try? JSONDecoder().decode([ProfileRow].self, from: data)) ?? []
+    }
+}
+
+extension DiscoverRoute {
+    /// Rows saved before Discover v2. Their stored km/time weren't road estimates, so they're dropped.
+    init(legacy e: SavedRouteEntity) {
+        let pairs = (try? JSONSerialization.jsonObject(with: Data(e.coordsJSON.utf8))) as? [[Double]] ?? []
+        self.init(id: e.id, title: e.title, summary: e.blurb,
+                  start: RouteStop(name: e.startPlace.isEmpty ? e.from : e.startPlace, coord: Coord(lat: e.startLat, lon: e.startLon)),
+                  end: RouteStop(name: e.finishPlace.isEmpty ? e.to : e.finishPlace, coord: Coord(lat: e.endLat, lon: e.endLon)),
+                  geometry: pairs.compactMap { $0.count == 2 ? Coord(lat: $0[0], lon: $0[1]) : nil },
+                  source: "legacy")
     }
 }
