@@ -62,11 +62,11 @@ final class MockDiscoverRepository: DiscoverRepository {
     lazy var routesList: [DiscoverRoute] = {
         let p = Dictionary(uniqueKeysWithValues: placesList.map { ($0.id, $0) })
         func stop(_ id: String, _ km: Double?) -> RouteStop { RouteStop(name: p[id]!.name + (p[id]!.region.contains("Puducherry") ? ", Puducherry" : ""), category: p[id]!.category, coord: p[id]!.coord, km: km) }
-        let chennai = RouteStop(name: "Thiruvanmiyur · ECR start", coord: Coord(lat: 12.9830, lon: 80.2594), km: 0)
+        let chennai = RouteStop(name: "Thiruvanmiyur · ECR start", coord: Coord(lat: 12.9830, lon: 80.2594), km: 0, area: "Chennai")
         return [
             DiscoverRoute(id: "ecr-coastal-run", title: "ECR Coastal Run",
                           summary: "The East Coast Road hugs the Bay of Bengal past backwaters, the Shore Temple at Mahabalipuram and the salt pans of Marakkanam, then rolls into Puducherry's French Quarter.",
-                          start: chennai, end: stop("promenade-beach", 152),
+                          start: chennai, end: { var s = stop("promenade-beach", 152); s.area = "Puducherry"; return s }(),
                           stops: [stop("muttukadu", 30), RouteStop(name: "Shore Temple, Mahabalipuram", category: .historical, coord: p["shore-temple"]!.coord, km: 55), stop("marakkanam", 115)],
                           geometry: [chennai.coord, p["muttukadu"]!.coord, p["shore-temple"]!.coord, p["marakkanam"]!.coord, p["promenade-beach"]!.coord],
                           tags: ["Coastal", "Scenic", "Heritage"], scenery: [.beach, .waterfront, .historical],

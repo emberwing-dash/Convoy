@@ -92,7 +92,7 @@ nonisolated struct RideEstimate: Codable, Hashable, Sendable {
     enum TripLength: String { case day = "Day ride", weekend = "Weekend", multiDay = "Multi-day" }
     var tripLength: TripLength { durationS <= 8 * 3600 ? .day : durationS <= 16 * 3600 ? .weekend : .multiDay }
 
-    var distanceText: String { distanceM >= 100_000 ? "\(Int((distanceM / 1000).rounded())) km" : String(format: "%.0f km", distanceM / 1000) }
+    var distanceText: String { "\(Int((distanceM / 1000).rounded()).formatted()) km" }
     var durationText: String { let m = Int(durationS / 60); return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m" }
     /// Card line: "58 km · 1h 25m", or a trip-length bucket for long rides.
     var cardText: String {
@@ -135,6 +135,10 @@ nonisolated struct RouteStop: Codable, Hashable, Sendable {
     var coord: Coord
     /// Road distance from the route start, when known.
     var km: Double? = nil
+    /// Town or region for the "From → To" line ("Chennai"), when the stop name is more specific.
+    var area: String? = nil
+
+    var shortName: String { area ?? name.components(separatedBy: ",")[0] }
 }
 
 nonisolated enum RouteVerification: String, Codable, Sendable { case unverified, riderVerified }
@@ -157,7 +161,7 @@ nonisolated struct DiscoverRoute: Codable, Identifiable, Hashable, Sendable {
     var popularity: Double? = nil
     var source: String
 
-    var fromTo: String { "\(start.name.components(separatedBy: ",")[0]) → \(end.name.components(separatedBy: ",")[0])" }
+    var fromTo: String { "\(start.shortName) → \(end.shortName)" }
     var hasGeometry: Bool { geometry.count > 1 && geometry.allSatisfy(\.isValid) }
 
     /// Seed for the existing planner. Stops keep their order.

@@ -66,7 +66,11 @@ struct MapThumb: View {
         }
         opts.size = size; opts.scale = 2
         opts.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
-        opts.pointOfInterestFilter = .excludingAll
+        opts.preferredConfiguration = {
+            let c = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
+            c.pointOfInterestFilter = .excludingAll
+            return c
+        }()
         guard let snap = try? await MKMapSnapshotter(options: opts).start() else { return }
         let out = UIGraphicsImageRenderer(size: size).image { ctx in
             snap.image.draw(at: .zero)
