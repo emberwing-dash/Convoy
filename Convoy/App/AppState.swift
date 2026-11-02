@@ -698,11 +698,9 @@ final class AppState {
         return .failed
     }
 
-    func startPlan(from route: DiscoverRoute, startAt: String) {
-        draft = PlanDraft(name: route.title, from: startAt, to: route.finishPlace,
-                          stops: [], routeSet: true, style: .scenic)
-        draft.startCoord = route.startCoord
-        draft.endCoord = route.endCoord
+    /// Opens the existing planner pre-filled from Discover. Route stops are carried over in order.
+    func startPlan(_ seed: PlanSeed) {
+        draft = PlanDraft(seed: seed)
         planner.reset()
     }
 

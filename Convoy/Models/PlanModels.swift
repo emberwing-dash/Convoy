@@ -142,3 +142,31 @@ struct PlanDraft: Hashable {
             ?? .now.addingTimeInterval(86400)
     }
 }
+
+/// What Discover hands to the existing ride planner. Stops keep their order.
+struct PlanSeed: Hashable {
+    struct Stop: Hashable {
+        var name: String
+        var coord: Coord?
+    }
+    var name: String
+    var start: String
+    var startCoord: Coord?
+    var destination: String
+    var destinationCoord: Coord?
+    var stops: [Stop] = []
+    var discoverRoute: String? = nil
+}
+
+extension PlanDraft {
+    /// The planner reads `stops` and `stopCoords` by index (PlanMapView, RoutePlanner),
+    /// so coordinates are only passed for the leading run of stops that have one;
+    /// any later stop is resolved from its name in the planner instead of shifting coordinates.
+    init(seed: PlanSeed) {
+        self.init(name: seed.name, from: seed.start, to: seed.destination,
+                  stops: seed.stops.map(\.name),
+                  stopCoords: seed.stops.prefix { $0.coord != nil }.compactMap(\.coord),
+                  routeSet: true, style: .scenic, discoverRoute: seed.discoverRoute,
+                  startCoord: seed.startCoord, endCoord: seed.destinationCoord)
+    }
+}

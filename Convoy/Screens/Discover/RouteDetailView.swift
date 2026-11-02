@@ -190,7 +190,10 @@ struct RouteStartView: View {
 
             PrimaryButton(title: "Continue to plan") {
                 let start = useRouteStart ? route.startPlace : "Current Location"
-                app.startPlan(from: route, startAt: start)
+                app.startPlan(PlanSeed(name: route.title, start: start,
+                                       startCoord: useRouteStart ? route.startCoord : nil,
+                                       destination: route.finishPlace, destinationCoord: route.endCoord,
+                                       discoverRoute: route.id))
                 app.push(.planDetails)
             }
             .frame(width: 353)
