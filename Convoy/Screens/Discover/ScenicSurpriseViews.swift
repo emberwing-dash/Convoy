@@ -172,10 +172,7 @@ struct SurpriseModeView: View {
 
     var body: some View {
         let mode = SurpriseMode(rawValue: modeRaw) ?? .mixed
-        ZStack {
-            Image("dm_key").resizable().scaledToFill().ignoresSafeArea().opacity(0.35)
-            LinearGradient(colors: [CV.bg.opacity(0.6), CV.bg.opacity(0.95)], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
                 CircleBackButton(symbol: "xmark") { app.pop() }.padding(.bottom, 26)
                 Label("SURPRISE ME", systemImage: "sparkles").cvText(12, .semibold, color: CV.red, tracking: 1.2, inter: true)
                 Text("Where should we\ntake you?").cvText(32, .bold, tracking: -0.6, inter: true).padding(.top, 8)
@@ -204,8 +201,13 @@ struct SurpriseModeView: View {
                 }
                 .foregroundStyle(CV.muted).padding(.bottom, 14)
                 DiscoverButton(title: "Start swiping") { app.push(.surpriseFeed(needsOrigin(mode) ? .anywhere : mode)) }
-            }
-            .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
+        }
+        .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
+        .background {
+            DiscoverImage(photo: PhotoRef(source: .asset("dm_key"), credit: "")).opacity(0.35)
+                .overlay(LinearGradient(colors: [CV.bg.opacity(0.6), CV.bg.opacity(0.95)], startPoint: .top, endPoint: .bottom))
+                .background(CV.bg)
+                .ignoresSafeArea()
         }
         .toolbar(.hidden, for: .navigationBar)
         .originPicker(isPresented: $pickingOrigin)

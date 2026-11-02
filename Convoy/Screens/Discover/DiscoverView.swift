@@ -70,7 +70,7 @@ struct DiscoverView: View {
                          photo: tilePhoto("dm_ecr")) { app.push(.discoverRoutes(nil)) }
             CategoryTile(title: "Scenic", subtitle: "Views, lakes and forest roads", symbol: "mountain.2",
                          photo: tilePhoto("dm_forest")) { app.push(.scenic) }
-            CategoryTile(title: "Places", subtitle: "Destinations near and far", symbol: "mappin.and.ellipse",
+            CategoryTile(title: "Places", subtitle: "Destinations near and far", symbol: "mappin.circle",
                          photo: tilePhoto("dm_shore")) { app.push(.discoverPlaces) }
             CategoryTile(title: "Surprise me", subtitle: "Swipe to find somewhere new", symbol: "sparkles",
                          photo: tilePhoto("dm_sonamarg")) { app.push(.surprise) }
