@@ -208,7 +208,9 @@ final class AppState {
         var routes: [DiscoverRoute] = [], places: [DiscoverPlace] = []
         for e in rows {
             if e.id.hasPrefix(DiscoverPlace.savedPrefix) {
-                if let p = DiscoverJSON.decode(DiscoverPlace.self, from: e.payloadJSON) { places.append(p) }
+                if let p = DiscoverJSON.decode(DiscoverPlace.self, from: e.payloadJSON) ?? DiscoverPlace(legacy: e) {
+                    places.append(p)
+                }
             } else {
                 routes.append(DiscoverJSON.decode(DiscoverRoute.self, from: e.payloadJSON) ?? DiscoverRoute(legacy: e))
             }
