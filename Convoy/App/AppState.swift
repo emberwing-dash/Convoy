@@ -199,13 +199,21 @@ final class AppState {
         self.notifications = StorageService.shared.loadCachedNotifications()
         self.fillUps = StorageService.shared.loadFillUps().map { FillUp(odo: $0.odo, litres: $0.litres, price: $0.price) }
 
-        for e in StorageService.shared.loadSavedRoutes() {
+        (savedRoutes, savedPlaces) = Self.savedItems(from: StorageService.shared.loadSavedRoutes())
+    }
+
+    /// Saved routes and places from the local store. Rows saved before Discover v2 have no payload
+    /// and are rebuilt from their columns; place rows carry the "place:" id prefix.
+    static func savedItems(from rows: [SavedRouteEntity]) -> (routes: [DiscoverRoute], places: [DiscoverPlace]) {
+        var routes: [DiscoverRoute] = [], places: [DiscoverPlace] = []
+        for e in rows {
             if e.id.hasPrefix(DiscoverPlace.savedPrefix) {
-                if let p = DiscoverJSON.decode(DiscoverPlace.self, from: e.payloadJSON) { savedPlaces.append(p) }
+                if let p = DiscoverJSON.decode(DiscoverPlace.self, from: e.payloadJSON) { places.append(p) }
             } else {
-                savedRoutes.append(DiscoverJSON.decode(DiscoverRoute.self, from: e.payloadJSON) ?? DiscoverRoute(legacy: e))
+                routes.append(DiscoverJSON.decode(DiscoverRoute.self, from: e.payloadJSON) ?? DiscoverRoute(legacy: e))
             }
         }
+        return (routes, places)
     }
 
     // MARK: - Session helper
@@ -713,11 +721,37 @@ final class AppState {
     func isSaved(_ route: DiscoverRoute) -> Bool { savedRoutes.contains { $0.id == route.id } }
     func isSaved(_ place: DiscoverPlace) -> Bool { savedPlaces.contains { $0.id == place.id } }
 
+    private static let pendingSavedKey = "discover.pendingSavedSync"
+    private var pendingSaved: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: Self.pendingSavedKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: Self.pendingSavedKey) }
+    }
+
+    /// Mirrors one saved item to Supabase. A failure (e.g. offline) queues the id; the retry
+    /// later applies whatever the current local state is, so repeated toggles stay correct.
     private func syncSaved(id: String, saving: Bool, upsert: @escaping (UUID) async throws -> Void) {
         guard let userId = backendUserId else { return }
         Task {
-            if saving { try? await upsert(userId) }
-            else { try? await SupabaseManager.shared.deleteSavedRoute(userId: userId, routeId: id) }
+            do {
+                if saving { try await upsert(userId) }
+                else { try await SupabaseManager.shared.deleteSavedRoute(userId: userId, routeId: id) }
+                pendingSaved.remove(id)
+            } catch {
+                pendingSaved.insert(id)
+            }
+        }
+    }
+
+    /// Re-sends saves/unsaves that failed while offline.
+    func retryPendingSavedSync() {
+        for id in pendingSaved {
+            if let r = savedRoutes.first(where: { $0.id == id }) {
+                syncSaved(id: id, saving: true) { try await SupabaseManager.shared.saveSavedRoute(userId: $0, route: r) }
+            } else if let p = savedPlaces.first(where: { $0.savedId == id }) {
+                syncSaved(id: id, saving: true) { try await SupabaseManager.shared.saveSavedPlace(userId: $0, place: p) }
+            } else {
+                syncSaved(id: id, saving: false) { _ in }
+            }
         }
     }
 

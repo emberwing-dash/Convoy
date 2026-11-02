@@ -9,6 +9,8 @@ final class MockDiscoverRepository: DiscoverRepository {
     private static func photo(_ asset: String, _ credit: String = "Sample photo · credit pending (dev only)") -> PhotoRef {
         PhotoRef(source: .asset(asset), credit: credit)
     }
+    /// Looks like the place but nobody has confirmed where it was taken.
+    private static func unverified(_ asset: String) -> PhotoRef { photo(asset, "Sample photo · location not verified (dev only)") }
 
     let placesList: [DiscoverPlace] = [
         DiscoverPlace(id: "shore-temple", name: "Shore Temple", region: "Mahabalipuram, Tamil Nadu", category: .historical,
@@ -22,11 +24,11 @@ final class MockDiscoverRepository: DiscoverRepository {
                       summary: "The seafront promenade along Puducherry's French Quarter.", tags: ["Coastal"], fame: 0.55, popularity: 0.5, source: "mock"),
         DiscoverPlace(id: "yelagiri", name: "Yelagiri Hills", region: "Vellore district, Tamil Nadu", category: .viewpoint,
                       coord: Coord(lat: 12.5786, lon: 78.6403),
-                      summary: "A small hill station reached by a ghat road with 14 hairpin bends.", photos: [photo("dm_yelagiri")],
+                      summary: "A small hill station reached by a ghat road with 14 hairpin bends.",
                       tags: ["Hairpins", "Sunset"], fame: 0.45, popularity: 0.6, source: "mock"),
         DiscoverPlace(id: "kolli-hills", name: "Kolli Hills", region: "Namakkal district, Tamil Nadu", category: .hillStation,
                       coord: Coord(lat: 11.2485, lon: 78.3387),
-                      summary: "Hill range known for its ghat road of 70 hairpin bends.", photos: [photo("dm_kolli")],
+                      summary: "Hill range known for its ghat road of 70 hairpin bends.", photos: [unverified("dm_kolli")],
                       tags: ["Hairpins", "Forest"], fame: 0.5, popularity: 0.55, source: "mock"),
         DiscoverPlace(id: "agaya-gangai", name: "Agaya Gangai Falls", region: "Kolli Hills, Tamil Nadu", category: .waterfall,
                       coord: Coord(lat: 11.3097, lon: 78.3383), summary: "A waterfall on the Aiyaru river in the Kolli Hills.", fame: 0.3, source: "mock"),
@@ -44,9 +46,9 @@ final class MockDiscoverRepository: DiscoverRepository {
                       coord: Coord(lat: 12.6080, lon: 80.1990), summary: "Monolithic rock-cut temples.", fame: 0.6, source: "mock"),
         DiscoverPlace(id: "nandi-hills", name: "Nandi Hills", region: "Karnataka", category: .viewpoint,
                       coord: Coord(lat: 13.3702, lon: 77.6835), summary: "Hill fort north of Bengaluru, known for sunrise above the clouds.",
-                      photos: [photo("dm_nandi")], tags: ["Sunrise"], fame: 0.75, popularity: 0.65, source: "mock"),
+                      tags: ["Sunrise"], fame: 0.75, popularity: 0.65, source: "mock"),
         DiscoverPlace(id: "munnar", name: "Munnar", region: "Kerala", category: .hillStation,
-                      coord: Coord(lat: 10.0889, lon: 77.0595), summary: "Tea-estate hill town in the Western Ghats.", photos: [photo("dm_munnar")],
+                      coord: Coord(lat: 10.0889, lon: 77.0595), summary: "Tea-estate hill town in the Western Ghats.", photos: [unverified("dm_munnar")],
                       tags: ["Tea estates"], fame: 0.85, source: "mock"),
         DiscoverPlace(id: "pangong-tso", name: "Pangong Tso", region: "Ladakh", category: .lake,
                       coord: Coord(lat: 33.7595, lon: 78.6674), summary: "High-altitude lake at about 4,225 m on the Ladakh–Tibet border.",
@@ -55,7 +57,7 @@ final class MockDiscoverRepository: DiscoverRepository {
                       coord: Coord(lat: 32.2976, lon: 78.0119), summary: "One of the oldest and largest monasteries in Spiti.", photos: [photo("dm_key")],
                       tags: ["High altitude"], fame: 0.8, source: "mock"),
         DiscoverPlace(id: "sonamarg", name: "Sonamarg", region: "Kashmir", category: .viewpoint,
-                      coord: Coord(lat: 34.3036, lon: 75.2930), summary: "Alpine valley on the Srinagar–Leh road.", photos: [photo("dm_sonamarg")],
+                      coord: Coord(lat: 34.3036, lon: 75.2930), summary: "Alpine valley on the Srinagar–Leh road.", photos: [unverified("dm_sonamarg")],
                       fame: 0.7, source: "mock"),
     ]
 
@@ -76,12 +78,12 @@ final class MockDiscoverRepository: DiscoverRepository {
                           start: RouteStop(name: "Chennai", coord: Coord(lat: 13.0827, lon: 80.2707), km: 0), end: stop("kolli-hills", 350),
                           stops: [stop("agaya-gangai", 345)],
                           geometry: [Coord(lat: 13.0827, lon: 80.2707), Coord(lat: 11.6643, lon: 78.1460), Coord(lat: 11.2485, lon: 78.3387)],
-                          tags: ["Hills", "Twisties"], scenery: [.hillRoad, .forest], photos: [Self.photo("dm_kolli")],
+                          tags: ["Hills", "Twisties"], scenery: [.hillRoad, .forest], photos: [Self.unverified("dm_kolli")],
                           estimate: RideEstimate(distanceM: 350_000, durationS: 6 * 3600 + 50 * 60), popularity: 0.6, source: "mock"),
             DiscoverRoute(id: "yelagiri-ghat", title: "Yelagiri ghat road", summary: "Highway out of Chennai, then 14 hairpins up to the Yelagiri plateau.",
                           start: RouteStop(name: "Chennai", coord: Coord(lat: 13.0827, lon: 80.2707), km: 0), end: stop("yelagiri", 230),
                           geometry: [Coord(lat: 13.0827, lon: 80.2707), Coord(lat: 12.9165, lon: 79.1325), Coord(lat: 12.5786, lon: 78.6403)],
-                          tags: ["Hills", "Twisties"], scenery: [.hillRoad, .viewpoint], photos: [Self.photo("dm_yelagiri")],
+                          tags: ["Hills", "Twisties"], scenery: [.hillRoad, .viewpoint], photos: [],
                           estimate: RideEstimate(distanceM: 230_000, durationS: 4 * 3600 + 30 * 60), popularity: 0.5, source: "mock"),
             DiscoverRoute(id: "ecr-omr-loop", title: "ECR–OMR loop", summary: "Out along the coast on ECR to Mahabalipuram, back on OMR.",
                           start: RouteStop(name: "Chennai", coord: Coord(lat: 13.0827, lon: 80.2707), km: 0), end: RouteStop(name: "Chennai", coord: Coord(lat: 13.0827, lon: 80.2707), km: 118),
@@ -92,7 +94,7 @@ final class MockDiscoverRepository: DiscoverRepository {
             DiscoverRoute(id: "into-munnar", title: "Into Munnar", summary: "A two-day ride across Tamil Nadu and up into the tea country of the Western Ghats.",
                           start: RouteStop(name: "Chennai", coord: Coord(lat: 13.0827, lon: 80.2707), km: 0), end: stop("munnar", 620),
                           geometry: [Coord(lat: 13.0827, lon: 80.2707), Coord(lat: 10.7905, lon: 78.7047), Coord(lat: 10.0889, lon: 77.0595)],
-                          tags: ["Mountain", "Scenic"], scenery: [.hillStation, .forest], photos: [Self.photo("dm_munnar")],
+                          tags: ["Mountain", "Scenic"], scenery: [.hillStation, .forest], photos: [Self.unverified("dm_munnar")],
                           estimate: RideEstimate(distanceM: 620_000, durationS: 11 * 3600 + 30 * 60), source: "mock"),
         ]
     }()
@@ -105,15 +107,15 @@ final class MockDiscoverRepository: DiscoverRepository {
                          photo: photo("dm_sunset"), placeIds: ["nandi-hills", "yelagiri"], routeIds: ["ecr-coastal-run"],
                          reasons: ["nandi-hills": "Known for sunrise above the clouds", "yelagiri": "Sunset over the valley from the top", "ecr-coastal-run": "Sunrise over the Bay of Bengal"]),
         ScenicCollection(id: "lakes", title: "Lakes", subtitle: "Still water, easy stops", symbol: "water.waves",
-                         photo: photo("dm_lake"), placeIds: ["pangong-tso", "muttukadu"], reasons: ["pangong-tso": "High-altitude lake in Ladakh"]),
+                         photo: photo("dm_pangong"), placeIds: ["pangong-tso", "muttukadu"], reasons: ["pangong-tso": "High-altitude lake in Ladakh"]),
         ScenicCollection(id: "viewpoints", title: "Viewpoints", subtitle: "Climb for the panorama", symbol: "mountain.2",
-                         photo: photo("dm_nandi"), placeIds: ["nandi-hills", "yelagiri", "seekuparai", "javadhu", "sonamarg"]),
+                         photo: unverified("dm_sonamarg"), placeIds: ["nandi-hills", "yelagiri", "seekuparai", "javadhu", "sonamarg"]),
         ScenicCollection(id: "hill-roads", title: "Hill roads", subtitle: "Hairpins and ghat sections", symbol: "road.lanes",
-                         photo: photo("dm_kolli"), placeIds: ["kolli-hills", "yelagiri"], routeIds: ["kolli-hairpins", "yelagiri-ghat"]),
+                         photo: unverified("dm_kolli"), placeIds: ["kolli-hills", "yelagiri"], routeIds: ["kolli-hairpins", "yelagiri-ghat"]),
         ScenicCollection(id: "mountain-views", title: "Mountain views", subtitle: "Valleys and high passes", symbol: "mountain.2",
-                         photo: photo("dm_sonamarg"), placeIds: ["sonamarg", "key-monastery", "pangong-tso"]),
+                         photo: photo("dm_key"), placeIds: ["sonamarg", "key-monastery", "pangong-tso"]),
         ScenicCollection(id: "waterfronts", title: "Waterfronts", subtitle: "Ride along the water", symbol: "sailboat",
-                         photo: photo("dm_river"), placeIds: ["muttukadu", "promenade-beach", "shore-temple"], routeIds: ["ecr-coastal-run"]),
+                         photo: photo("dm_shore_wide"), placeIds: ["muttukadu", "promenade-beach", "shore-temple"], routeIds: ["ecr-coastal-run"]),
     ]
 
     func places(_ q: PlaceQuery) async throws -> Page<DiscoverPlace> {

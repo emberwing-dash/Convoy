@@ -19,6 +19,7 @@ struct ScenicView: View {
             Eyebrow(text: "Scenic", color: CV.red)
             Text("Ride for the view").cvText(30, .bold, tracking: -0.5, inter: true).padding(.top, 6)
             Text("Collections of real places and roads, picked for what you'll see.").cvText(14, color: CV.muted, inter: true).padding(.top, 4)
+            OfflineBanner().padding(.top, 14)
 
             if let featured = store.collections.first {
                 Button { app.push(.scenicCollection(featured.id)) } label: {
@@ -204,7 +205,7 @@ struct SurpriseModeView: View {
         }
         .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
         .background {
-            DiscoverImage(photo: PhotoRef(source: .asset("dm_key"), credit: "")).opacity(0.35)
+            LandingArt(assets: ["discover_surprise", "dm_key"], fallback: .surprise).opacity(0.35)
                 .overlay(LinearGradient(colors: [CV.bg.opacity(0.6), CV.bg.opacity(0.95)], startPoint: .top, endPoint: .bottom))
                 .background(CV.bg)
                 .ignoresSafeArea()
@@ -348,7 +349,7 @@ struct SurpriseFeedView: View {
                     DiscoverButton(title: "Details", style: .secondary) {
                         switch item { case .place(let p): app.push(.placeDetail(p.id)); case .route(let r): app.push(.routeDetail(r.id)) }
                     }
-                    DiscoverButton(title: "Plan this ride") {
+                    PlanRideButton(compact: true) {
                         switch item { case .place(let p): app.push(.planHandoff(.place(p.id))); case .route(let r): app.push(.planHandoff(.route(r.id))) }
                     }
                     .frame(width: 160)

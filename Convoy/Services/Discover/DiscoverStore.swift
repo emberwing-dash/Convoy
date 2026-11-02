@@ -1,6 +1,7 @@
 // DiscoverStore.swift
 import Foundation
 import CoreLocation
+import Network
 
 /// State shared by every Discover screen. Screens never talk to a backend directly —
 /// only to this store, which talks to a `DiscoverRepository` and a `RoutingProvider`.
@@ -8,7 +9,7 @@ import CoreLocation
 final class DiscoverStore {
     static let shared = DiscoverStore()
 
-    enum Phase: Equatable { case idle, loading, loaded, failed }
+    enum Phase: Equatable { case idle, loading, loaded, failed, offline }
 
     private let repo: DiscoverRepository
     private let routing: RoutingProvider
@@ -24,11 +25,18 @@ final class DiscoverStore {
     private(set) var origin: DiscoveryOrigin?
     private(set) var recentOrigins: [DiscoveryOrigin]
     private(set) var locating = false
+    /// Network reachability (path monitor). Discover keeps working from its cache when false.
+    private(set) var isOnline = true
+    /// Set when the catalogue on screen came from the on-phone cache rather than a fresh load.
+    private(set) var cachedAt: Date?
+    private let monitor = NWPathMonitor()
+    private let cacheFile: URL
     /// Places collected with "Add to trip", in riding order.
     var trip: [DiscoverPlace] = [] { didSet { persistTrip() } }
 
     init(repo: DiscoverRepository? = nil, routing: RoutingProvider? = nil,
-         history: DiscoveryHistory = .shared, defaults: UserDefaults = .standard) {
+         history: DiscoveryHistory = .shared, defaults: UserDefaults = .standard,
+         cacheFile: URL = URL.cachesDirectory.appending(path: "discover-catalogue.json")) {
         #if DEBUG
         let mock = MockDiscoverRepository()
         self.repo = repo ?? mock
@@ -40,9 +48,38 @@ final class DiscoverStore {
         #endif
         self.history = history
         self.defaults = defaults
+        self.cacheFile = cacheFile
+        #if DEBUG
+        if Debug.resetOrigin { defaults.removeObject(forKey: Keys.origin) }
+        #endif
         origin = DiscoverJSON.decode(DiscoveryOrigin.self, from: defaults.string(forKey: Keys.origin) ?? "")
         recentOrigins = DiscoverJSON.decode([DiscoveryOrigin].self, from: defaults.string(forKey: Keys.recents) ?? "") ?? []
         trip = DiscoverJSON.decode([DiscoverPlace].self, from: defaults.string(forKey: Keys.trip) ?? "") ?? []
+        monitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in self?.setOnline(path.status == .satisfied) }
+        }
+        monitor.start(queue: .global(qos: .utility))
+    }
+
+    #if DEBUG
+    /// Launch arguments for simulator testing — no system settings are changed.
+    enum Debug {
+        static let args = ProcessInfo.processInfo.arguments
+        static let offline = args.contains("-DiscoverSimulateOffline")
+        static let locationDenied = args.contains("-DiscoverSimulateLocationDenied")
+        static let resetOrigin = args.contains("-DiscoverResetOrigin")
+    }
+    #endif
+
+    private func setOnline(_ online: Bool) {
+        var online = online
+        #if DEBUG
+        if Debug.offline { online = false }
+        #endif
+        guard online != isOnline || phase == .idle else { return }
+        isOnline = online
+        // Back online while showing cached or no data → refresh.
+        if online, cachedAt != nil || phase == .offline || phase == .failed { Task { await load() } }
     }
 
     private enum Keys { static let origin = "discover.origin", recents = "discover.recentOrigins", trip = "discover.trip" }
@@ -55,29 +92,73 @@ final class DiscoverStore {
     }
 
     func load() async {
+        #if DEBUG
+        if Debug.offline { isOnline = false }
+        #endif
         phase = .loading
+        guard isOnline else { phase = restoreCache() ? .loaded : .offline; return }
         do {
             async let p = repo.places(PlaceQuery(limit: 500))
             async let r = repo.routes(RouteQuery(limit: 500))
             async let c = repo.collections()
             (places, routes, collections) = try await (p.items, r.items, c)
+            cachedAt = nil
             phase = .loaded
             await refreshEstimates()
-            if origin == nil, LocationService.shared.isAuthorized { await useCurrentLocation() }
+            if origin == nil, LocationService.shared.isAuthorized, !locationDenied { await useCurrentLocation() }
         } catch {
-            phase = .failed
+            phase = restoreCache() ? .loaded : .failed
         }
     }
 
     private func refreshEstimates() async {
-        guard let origin else { estimates = [:]; return }
+        guard isOnline else { return }   // keep cached estimates; the banner says they may be out of date
+        guard let origin else { estimates = [:]; saveCache(); return }
         estimates = await routing.estimates(from: origin, to: places)
+        saveCache()
     }
+
+    // MARK: Offline cache (on this phone only)
+
+    private struct Cache: Codable {
+        var savedAt: Date
+        var places: [DiscoverPlace], routes: [DiscoverRoute], collections: [ScenicCollection]
+        var estimates: [String: RideEstimate]
+        var originName: String?
+    }
+
+    private func saveCache() {
+        guard cachedAt == nil, !places.isEmpty || !routes.isEmpty else { return }
+        let c = Cache(savedAt: .now, places: places, routes: routes, collections: collections, estimates: estimates, originName: origin?.name)
+        try? JSONEncoder().encode(c).write(to: cacheFile, options: .atomic)
+    }
+
+    /// Loads the last good catalogue. Estimates are kept only if they were measured from the current origin.
+    private func restoreCache() -> Bool {
+        guard let data = try? Data(contentsOf: cacheFile), let c = try? JSONDecoder().decode(Cache.self, from: data) else { return false }
+        (places, routes, collections) = (c.places, c.routes, c.collections)
+        estimates = c.originName == origin?.name ? c.estimates : [:]
+        cachedAt = c.savedAt
+        return true
+    }
+
+    /// "You're offline. Showing places saved 2 hours ago — ride times may be out of date."
+    var offlineNote: String? {
+        guard let cachedAt else { return isOnline ? nil : "You're offline. Discover needs a connection to load places." }
+        let age = RelativeDateTimeFormatter().localizedString(for: cachedAt, relativeTo: .now)
+        return (isOnline ? "Couldn't refresh. " : "You're offline. ") + "Showing places saved \(age) — ride times may be out of date."
+    }
+
+    /// Planning uses live routing in the existing planner.
+    var canPlan: Bool { isOnline }
 
     // MARK: Origin
 
     var originName: String { origin?.name.components(separatedBy: ",")[0] ?? "Choose a start" }
     var locationDenied: Bool {
+        #if DEBUG
+        if Debug.locationDenied { return true }
+        #endif
         let s = LocationService.shared.authorizationStatus
         return s == .denied || s == .restricted
     }
@@ -85,6 +166,8 @@ final class DiscoverStore {
     func setOrigin(_ o: DiscoveryOrigin) async {
         origin = o
         defaults.set(DiscoverJSON.encode(o), forKey: Keys.origin)
+        // Offline: re-read the cache so only estimates measured from this origin remain.
+        if isOnline { estimates = [:] } else if cachedAt != nil { _ = restoreCache() }
         if !o.isCurrentLocation {
             recentOrigins = Array(([o] + recentOrigins.filter { $0.name != o.name }).prefix(3))
             defaults.set(DiscoverJSON.encode(recentOrigins), forKey: Keys.recents)

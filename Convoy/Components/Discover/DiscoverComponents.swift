@@ -19,10 +19,61 @@ struct DiscoverImage: View {
     var body: some View {
         Color.clear.overlay {
             switch photo?.source {
-            case .asset(let name)?: Image(name).resizable().scaledToFill()
+            case .asset(let name)?:
+                if let image = UIImage(named: name) { Image(uiImage: image).resizable().scaledToFill() }
+                else { MapThumb(center: coord, path: path) }   // asset not shipped in this build
             case .remote(let url)?:
                 AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { CV.surface }
             case nil: MapThumb(center: coord, path: path)
+            }
+        }
+        .clipped()
+    }
+}
+
+/// Shipping art for Discover surfaces that have no licensed photo yet:
+/// Convoy contour lines over a dark gradient with a coloured glow. Never pretends to be a place.
+struct BrandedArt: View {
+    enum Style { case hero, routes, scenic, places, surprise }
+    var style: Style
+
+    var body: some View {
+        let (top, glow, symbol): (UInt32, UInt32, String?) = switch style {
+        case .hero: (0x2B0F09, 0xFF5A1F, nil)
+        case .routes: (0x241312, 0xFF3B30, "point.topleft.down.to.point.bottomright.curvepath")
+        case .scenic: (0x0F2119, 0x2FB86A, "mountain.2")
+        case .places: (0x161B26, 0x5E7CE2, "mappin.and.ellipse")
+        case .surprise: (0x231229, 0xB45CE0, "sparkles")
+        }
+        ZStack {
+            LinearGradient(colors: [Color(hex: top), CV.bg], startPoint: .top, endPoint: .bottom)
+            RadialGradient(colors: [Color(hex: glow).opacity(style == .hero ? 0.55 : 0.4), .clear],
+                           center: style == .hero ? UnitPoint(x: 0.72, y: 0.3) : UnitPoint(x: 0.85, y: 0.1),
+                           startRadius: 0, endRadius: style == .hero ? 340 : 170)
+            Image("contour").resizable().scaledToFill().opacity(0.5).blendMode(.screen)
+            if let symbol {
+                Image(systemName: symbol).font(.system(size: 92, weight: .ultraLight))
+                    .foregroundStyle(.white.opacity(0.09))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, 14).padding(.trailing, -6)
+            }
+        }
+        .clipped()
+        .accessibilityHidden(true)
+    }
+}
+
+/// Landing artwork: the first licensed asset that ships in this build, else `BrandedArt`.
+/// Licensed files go in the main asset catalog under the `discover_*` names (docs/DISCOVER_ASSETS.md).
+struct LandingArt: View {
+    let assets: [String]
+    let fallback: BrandedArt.Style
+    var body: some View {
+        Color.clear.overlay {
+            if let image = assets.lazy.compactMap({ UIImage(named: $0) }).first {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                BrandedArt(style: fallback)
             }
         }
         .clipped()
@@ -255,11 +306,12 @@ struct CategoryTile: View {
     let subtitle: String
     var symbol: String? = nil
     var photo: PhotoRef?
+    var art: LandingArt? = nil
     var height: CGFloat = 150
     var action: () -> Void
     var body: some View {
         Button(action: action) {
-            DiscoverImage(photo: photo)
+            Group { if let art { art } else { DiscoverImage(photo: photo) } }
                 .frame(maxWidth: .infinity).frame(height: height)
                 .overlay(LinearGradient(colors: [.clear, .black.opacity(0.8)], startPoint: .center, endPoint: .bottom))
                 .overlay(alignment: .topLeading) {
@@ -615,6 +667,31 @@ struct InfoNote: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(boxed ? 12 : 0)
         .background { if boxed { RoundedRectangle(cornerRadius: 14, style: .continuous).fill(CV.surface) } }
+    }
+}
+
+/// D17c · offline / stale-cache banner. Renders nothing when online with fresh data.
+struct OfflineBanner: View {
+    private var store: DiscoverStore { .shared }
+    var body: some View {
+        if let note = store.offlineNote { InfoNote(text: note, symbol: "wifi.slash", boxed: true) }
+    }
+}
+
+/// "Plan this ride" — disabled with its reason when the existing planner can't route (offline).
+struct PlanRideButton: View {
+    private var store: DiscoverStore { .shared }
+    var title = "Plan this ride"
+    var compact = false
+    var action: () -> Void
+    var body: some View {
+        if store.canPlan {
+            DiscoverButton(title: title, action: action)
+        } else {
+            DiscoverButton(title: compact ? "Offline" : "Planning needs a connection", symbol: "wifi.slash", style: .secondary) {}
+                .disabled(true).opacity(0.6)
+                .accessibilityHint("Connect to the internet to plan this ride")
+        }
     }
 }
 

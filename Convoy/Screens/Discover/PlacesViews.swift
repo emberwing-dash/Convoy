@@ -21,6 +21,7 @@ struct PlacesBrowseView: View {
             .padding(.top, 8)
             OriginPill(title: store.origin == nil ? "Choose a start" : "From \(store.originName)") { pickingOrigin = true }.padding(.top, 14)
             ChipBar(items: ["Near me", "Popular", "Famous"], selection: $scope) { $0 }.padding(.top, 16)
+            OfflineBanner().padding(.top, 14)
 
             Text("Browse by type").cvText(19, .semibold, inter: true).padding(.top, 24).padding(.bottom, 12)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
@@ -90,6 +91,7 @@ struct PlaceCategoryView: View {
                 RoundIconButton(symbol: "map", dark: false) { app.push(.discoverMap) }
             }
             .padding(.top, 8)
+            OfflineBanner().padding(.top, 14)
             if near.widened, let r = near.radiusKm, !everywhere, !items.isEmpty {
                 InfoNote(text: "Not enough within \(Int(r == 50 ? 25 : r == 100 ? 50 : 100)) km, so we widened to \(Int(r)) km.",
                          action: ("Change", { pickingOrigin = true }), boxed: true).padding(.top, 16)
@@ -171,7 +173,7 @@ struct PlaceDetailView: View {
                                        style: .secondary) { withAnimation(.snappy) { store.toggleTrip(p) } }
                             .frame(width: 140)
                             .sensoryFeedback(.success, trigger: store.inTrip(p))
-                        DiscoverButton(title: "Plan this ride") { app.push(.planHandoff(.place(p.id))) }
+                        PlanRideButton { app.push(.planHandoff(.place(p.id))) }
                     }
                     .padding(.top, 20)
 

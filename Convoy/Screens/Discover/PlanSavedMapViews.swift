@@ -77,7 +77,7 @@ struct PlanHandoffView: View {
         }
         .overlay(alignment: .bottom) {
             if legs != nil {
-                DiscoverButton(title: "Continue to planner") { continueToPlanner() }
+                PlanRideButton(title: "Continue to planner") { continueToPlanner() }
                     .disabled(startChoice == nil).opacity(startChoice == nil ? 0.5 : 1)
                     .padding(.horizontal, 20).padding(.bottom, 12)
                     .background(LinearGradient(colors: [CV.bg.opacity(0), CV.bg], startPoint: .top, endPoint: .center).ignoresSafeArea())

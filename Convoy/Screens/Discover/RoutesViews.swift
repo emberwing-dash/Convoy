@@ -49,6 +49,7 @@ struct RoutesBrowseView: View {
             .padding(.top, 8)
             OriginPill(title: store.origin == nil ? "Choose a start" : "From \(store.originName)") { pickingOrigin = true }.padding(.top, 14)
             ChipBar(items: RouteCollection.allCases, selection: $collection) { $0.rawValue }.padding(.top, 16)
+            OfflineBanner().padding(.top, 14)
 
             if store.phase == .loading {
                 Skeleton().frame(height: 250).padding(.top, 18)
@@ -303,7 +304,7 @@ struct RouteDetailView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(app.isSaved(r) ? "Remove from saved" : "Save route")
-                        DiscoverButton(title: "Plan this ride") { app.push(.planHandoff(.route(r.id))) }
+                        PlanRideButton { app.push(.planHandoff(.route(r.id))) }
                     }
                     .padding(.top, 20)
 

@@ -13,14 +13,25 @@ struct DiscoverView: View {
             VStack(alignment: .leading, spacing: 0) {
                 hero
                 VStack(alignment: .leading, spacing: 28) {
-                    if store.phase == .failed {
+                    if store.phase == .offline {
+                        DiscoverStateView(symbol: "wifi.slash", title: "You're offline",
+                                          message: "Discover needs a connection the first time it loads. Your saved places and routes still work.",
+                                          primary: ("Open saved", { app.push(.discoverSaved) }),
+                                          secondary: ("Try again", { Task { await store.load() } }))
+                    } else if store.phase == .failed {
                         DiscoverStateView(symbol: "exclamationmark.circle", title: "Couldn't load Discover",
                                           message: "Something went wrong on our side. Your saved places still work.",
                                           primary: ("Try again", { Task { await store.load() } }),
                                           secondary: ("Open saved", { app.push(.discoverSaved) }))
                     } else {
+                        OfflineBanner()
                         tiles
-                        if store.phase != .loaded { skeleton } else { sections }
+                        if store.phase != .loaded { skeleton }
+                        else if store.places.isEmpty && store.routes.isEmpty { emptyCatalogue }
+                        else { sections }
+                        if !store.isOnline {
+                            Text("Saving still works offline and syncs when you reconnect.").cvText(11, color: CV.dim, inter: true)
+                        }
                     }
                 }
                 .padding(.horizontal, 20).padding(.top, 16)
@@ -32,16 +43,23 @@ struct DiscoverView: View {
         .ignoresSafeArea(edges: .top)
         .originPicker(isPresented: $pickingOrigin)
         .tripBar(bottom: 86)
-        .task { await store.loadIfNeeded() }
+        .task { await store.loadIfNeeded(); app.retryPendingSavedSync() }
+        .onChange(of: store.isOnline) { _, online in if online { app.retryPendingSavedSync() } }
+    }
+
+    /// Release builds before the Stage 5 data source is connected: say so plainly.
+    private var emptyCatalogue: some View {
+        DiscoverStateView(symbol: "map", title: "Places and routes are on the way",
+                          message: "We're adding real places and rider routes. Meanwhile you can plan any ride from the Ride tab.",
+                          primary: ("Plan a ride", { app.tab = .ride }))
     }
 
     // MARK: Hero (bundled image — never waits on the network)
 
     private var hero: some View {
         ZStack(alignment: .bottomLeading) {
-            LinearGradient(colors: [Color(hex: 0x3A1A0C), CV.bg], startPoint: .top, endPoint: .bottom)
-            Image("dm_hero").resizable().scaledToFill()
-                .frame(height: 470).clipped()
+            LandingArt(assets: ["discover_hero", "dm_hero"], fallback: .hero)
+                .frame(height: 470)
             LinearGradient(colors: [.black.opacity(0.35), .clear, CV.bg.opacity(0.9), CV.bg], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 10) {
                 Eyebrow(text: "Discover", color: CV.red)
@@ -67,17 +85,15 @@ struct DiscoverView: View {
         let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
         return LazyVGrid(columns: cols, spacing: 10) {
             CategoryTile(title: "Routes", subtitle: "Journeys worth riding", symbol: "point.topleft.down.to.point.bottomright.curvepath",
-                         photo: tilePhoto("dm_ecr")) { app.push(.discoverRoutes(nil)) }
+                         art: LandingArt(assets: ["discover_routes", "dm_ecr"], fallback: .routes)) { app.push(.discoverRoutes(nil)) }
             CategoryTile(title: "Scenic", subtitle: "Views, lakes and forest roads", symbol: "mountain.2",
-                         photo: tilePhoto("dm_forest")) { app.push(.scenic) }
+                         art: LandingArt(assets: ["discover_scenic", "dm_forest"], fallback: .scenic)) { app.push(.scenic) }
             CategoryTile(title: "Places", subtitle: "Destinations near and far", symbol: "mappin.circle",
-                         photo: tilePhoto("dm_shore")) { app.push(.discoverPlaces) }
+                         art: LandingArt(assets: ["discover_places", "dm_shore"], fallback: .places)) { app.push(.discoverPlaces) }
             CategoryTile(title: "Surprise me", subtitle: "Swipe to find somewhere new", symbol: "sparkles",
-                         photo: tilePhoto("dm_sonamarg")) { app.push(.surprise) }
+                         art: LandingArt(assets: ["discover_surprise", "dm_sonamarg"], fallback: .surprise)) { app.push(.surprise) }
         }
     }
-
-    private func tilePhoto(_ asset: String) -> PhotoRef { PhotoRef(source: .asset(asset), credit: "") }
 
     // MARK: Sections — each renders only when it has data
 
