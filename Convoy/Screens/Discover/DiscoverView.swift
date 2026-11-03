@@ -231,6 +231,8 @@ struct OriginPickerSheet: View {
         DiscoveryOrigin(name: "Chennai, Tamil Nadu", coord: Coord(lat: 13.0827, lon: 80.2707)),
         DiscoveryOrigin(name: "Bengaluru, Karnataka", coord: Coord(lat: 12.9716, lon: 77.5946)),
         DiscoveryOrigin(name: "Mumbai, Maharashtra", coord: Coord(lat: 19.0760, lon: 72.8777)),
+        DiscoveryOrigin(name: "Delhi, NCT", coord: Coord(lat: 28.6139, lon: 77.2090)),
+        DiscoveryOrigin(name: "Leh, Ladakh", coord: Coord(lat: 34.1526, lon: 77.5771)),
     ]
 
     var body: some View {

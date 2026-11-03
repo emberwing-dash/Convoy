@@ -254,6 +254,7 @@ struct RouteDetailView: View {
     private var store: DiscoverStore { .shared }
     let id: String
     @State private var creditFor: PhotoRef?
+    @State private var pacing: RidePacingProfile = .balanced
 
     var body: some View {
         if let r = store.route(id) ?? app.savedRoutes.first(where: { $0.id == id }) {
@@ -284,17 +285,186 @@ struct RouteDetailView: View {
                     }
                     Text(r.title).cvText(28, .bold, tracking: -0.5, inter: true).padding(.top, 12)
                     Text(r.fromTo).cvText(15, color: CV.muted, inter: true).padding(.top, 2)
+
+                    let activeStops = r.estimate.map { e in
+                        SegmentAwareRoutingCalibrator.calculatePlannedStops(
+                            saddleDurationSeconds: e.durationS,
+                            roadDistanceKm: e.distanceM / 1000.0,
+                            pacing: pacing
+                        )
+                    }
+                    let activeTotalTripS = r.estimate.map { $0.durationS + (activeStops?.totalStopsDuration ?? 0) }
+                    let totalTripText = activeTotalTripS.map { t -> String in
+                        let m = Int(t / 60)
+                        return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m"
+                    }
+                    let stopCountTotal = (activeStops?.fuelCount ?? 0) + (activeStops?.restCount ?? 0) + (activeStops?.mealCount ?? 0)
+
                     HStack(spacing: 8) {
                         if let e = r.estimate {
                             StatTile(value: e.distanceText, label: "Distance")
-                            StatTile(value: e.durationText, label: "Motorcycle")
+                            StatTile(value: e.durationText, label: "Saddle time")
+                            if let total = totalTripText {
+                                StatTile(value: total, label: "Total trip")
+                            }
                         }
-                        StatTile(value: "\(r.stops.count + 1)", label: "Stops")
-                        if let s = r.tags.first { StatTile(value: s, label: "Scenery") }
+                        StatTile(value: "\(r.stops.count + stopCountTotal)", label: "Total stops")
+                        if totalTripText == nil, let s = r.tags.first {
+                            StatTile(value: s, label: "Scenery")
+                        }
                     }
                     .padding(.top, 16)
-                    Text(r.estimate == nil ? "Ride time unavailable for this route yet." : "Two-wheeler route · measured from the route start.")
-                        .cvText(11, color: CV.dim, inter: true).padding(.top, 8)
+
+                    if r.estimate != nil {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("RIDE PACING").cvText(11, .bold, color: CV.muted, tracking: 0.5, inter: true)
+                            HStack(spacing: 8) {
+                                ForEach(RidePacingProfile.PacingType.allCases, id: \.self) { pType in
+                                    Button {
+                                        pacing = RidePacingProfile.profile(for: pType)
+                                    } label: {
+                                        Text(pType.rawValue)
+                                            .cvText(12, .medium, color: pacing.type == pType ? CV.cream : CV.muted, inter: true)
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 8)
+                                            .background(pacing.type == pType ? CV.red.opacity(0.35) : Color.white.opacity(0.06))
+                                            .clipShape(Capsule())
+                                            .overlay(Capsule().stroke(pacing.type == pType ? CV.red : Color.white.opacity(0.12), lineWidth: 1))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .padding(.top, 16)
+                    }
+
+                    if let e = r.estimate, let st = activeStops {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Image(systemName: "gauge.with.needle")
+                                    .foregroundStyle(CV.cream)
+                                    .font(.system(size: 13, weight: .semibold))
+                                Text("Journey Breakdown")
+                                    .cvText(13, .semibold, color: CV.cream, inter: true)
+                                Spacer()
+                                if let prov = e.provenance {
+                                    Text(prov)
+                                        .cvText(10, color: CV.dim, inter: true)
+                                        .lineLimit(1)
+                                }
+                            }
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("Moving saddle time:")
+                                        .cvText(12, color: CV.muted, inter: true)
+                                    Spacer()
+                                    Text(e.durationText)
+                                        .cvText(12, .semibold, color: CV.cream, inter: true)
+                                }
+                                if let rawProv = e.providerRawDurationText, rawProv != e.durationText {
+                                    HStack {
+                                        Text("  ↳ Provider baseline:")
+                                            .cvText(11, color: CV.dim, inter: true)
+                                        Spacer()
+                                        Text(rawProv)
+                                            .cvText(11, color: CV.dim, inter: true)
+                                    }
+                                }
+                                HStack {
+                                    Text("Planned stops (\(pacing.type.rawValue)):")
+                                        .cvText(12, color: CV.muted, inter: true)
+                                    Spacer()
+                                    Text("+\(Int(st.totalStopsDuration / 60))m")
+                                        .cvText(12, .semibold, color: CV.cream, inter: true)
+                                }
+                                if st.fuelCount > 0 {
+                                    HStack {
+                                        Text("  ↳ Fuel stops:")
+                                            .cvText(11, color: CV.dim, inter: true)
+                                        Spacer()
+                                        Text("\(st.fuelCount) stop (\(Int(st.fuelDuration / 60))m)")
+                                            .cvText(11, color: CV.dim, inter: true)
+                                    }
+                                }
+                                if st.restCount > 0 {
+                                    HStack {
+                                        Text("  ↳ Rest breaks:")
+                                            .cvText(11, color: CV.dim, inter: true)
+                                        Spacer()
+                                        Text("\(st.restCount) break (\(Int(st.restDuration / 60))m)")
+                                            .cvText(11, color: CV.dim, inter: true)
+                                    }
+                                }
+                                if st.mealCount > 0 {
+                                    HStack {
+                                        Text("  ↳ Meal stop:")
+                                            .cvText(11, color: CV.dim, inter: true)
+                                        Spacer()
+                                        Text("\(st.mealCount) stop (\(Int(st.mealDuration / 60))m)")
+                                            .cvText(11, color: CV.dim, inter: true)
+                                    }
+                                }
+                                Divider().background(Color.white.opacity(0.1)).padding(.vertical, 2)
+                                HStack {
+                                    Text("Total journey estimate:")
+                                        .cvText(13, .bold, color: CV.cream, inter: true)
+                                    Spacer()
+                                    Text(totalTripText ?? e.durationText)
+                                        .cvText(13, .bold, color: CV.cream, inter: true)
+                                }
+                            }
+
+                            if let calcAt = e.calculatedAt {
+                                Text("Calculated \(calcAt.formatted(date: .abbreviated, time: .shortened)) · Segment calibrated")
+                                    .cvText(10, color: CV.dim, inter: true)
+                                    .padding(.top, 2)
+                            }
+                        }
+                        .padding(14)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                        .padding(.top, 14)
+                    }
+
+                    if let e = r.estimate {
+                        if let avoided = e.avoidedExpressway {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "checkmark.shield.fill")
+                                    .foregroundStyle(CV.red)
+                                    .font(.system(size: 18))
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("2W Safe Route · \(avoided) Avoided")
+                                        .cvText(13, .semibold, color: CV.cream, inter: true)
+                                    Text("Complies with two-wheeler highway prohibitions. Routed via legal arterial roads.")
+                                        .cvText(11, color: CV.muted, inter: true)
+                                    if let citation = e.legalCitation {
+                                        Text(citation)
+                                            .cvText(10, color: CV.dim, inter: true)
+                                            .padding(.top, 1)
+                                    }
+                                }
+                            }
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(CV.red.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(CV.red.opacity(0.3), lineWidth: 1))
+                            .padding(.top, 12)
+                        }
+
+                        if let terrain = e.terrain {
+                            HStack(spacing: 6) {
+                                Image(systemName: "mountain.2.fill").foregroundStyle(CV.muted).font(.system(size: 11))
+                                Text(terrain).cvText(11, color: CV.muted, inter: true)
+                            }
+                            .padding(.top, 8)
+                        }
+                    } else {
+                        Text("Ride time unavailable for this route yet.")
+                            .cvText(11, color: CV.dim, inter: true).padding(.top, 8)
+                    }
                     if !r.summary.isEmpty { Text(r.summary).cvText(15, color: CV.cream.opacity(0.9), lineHeight: 22, inter: true).padding(.top, 14) }
 
                     HStack(spacing: 10) {
@@ -380,8 +550,9 @@ struct DetailHero<Actions: View>: View {
                 .padding(.horizontal, 20).padding(.top, 58)
             }
             .clipped()
-            if let credit = all.indices.contains(page) ? all[page].credit : nil, !credit.isEmpty {
-                Attribution(text: credit).padding(.horizontal, 20)
+            if let activePhoto = all.indices.contains(page) ? all[page] : nil, !activePhoto.credit.isEmpty {
+                let licSuffix = activePhoto.license.map { " · \($0)" } ?? ""
+                Attribution(text: "Photo: \(activePhoto.credit)\(licSuffix)").padding(.horizontal, 20)
             } else if all.isEmpty {
                 Attribution(text: "No photo yet — showing its map. We never use stock images for a real place.").padding(.horizontal, 20)
             }

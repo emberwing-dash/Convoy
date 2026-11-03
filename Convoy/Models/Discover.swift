@@ -82,18 +82,146 @@ nonisolated struct PhotoRef: Codable, Hashable, Sendable {
     enum Source: Codable, Hashable, Sendable { case asset(String), remote(URL) }
     var source: Source
     var credit: String
+    var license: String?
+    var licenseUrl: URL?
+    var descriptionUrl: URL?
+
+    init(source: Source, credit: String, license: String? = nil, licenseUrl: URL? = nil, descriptionUrl: URL? = nil) {
+        self.source = source
+        self.credit = credit
+        self.license = license
+        self.licenseUrl = licenseUrl
+        self.descriptionUrl = descriptionUrl
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case source, credit, url, license, license_url, description_url
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.credit = try c.decodeIfPresent(String.self, forKey: .credit) ?? ""
+        self.license = try c.decodeIfPresent(String.self, forKey: .license)
+        if let licStr = try c.decodeIfPresent(String.self, forKey: .license_url), !licStr.isEmpty {
+            self.licenseUrl = URL(string: licStr)
+        } else {
+            self.licenseUrl = nil
+        }
+        if let descStr = try c.decodeIfPresent(String.self, forKey: .description_url), !descStr.isEmpty {
+            self.descriptionUrl = URL(string: descStr)
+        } else {
+            self.descriptionUrl = nil
+        }
+
+        if let s = try? c.decode(Source.self, forKey: .source) {
+            self.source = s
+        } else if let uStr = try? c.decode(String.self, forKey: .url), let u = URL(string: uStr) {
+            self.source = .remote(u)
+        } else {
+            self.source = .asset("")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(source, forKey: .source)
+        try c.encode(credit, forKey: .credit)
+        try c.encodeIfPresent(license, forKey: .license)
+        try c.encodeIfPresent(licenseUrl?.absoluteString, forKey: .license_url)
+        try c.encodeIfPresent(descriptionUrl?.absoluteString, forKey: .description_url)
+    }
 }
 
 /// Two-wheeler road distance and time. Never a straight-line guess.
 nonisolated struct RideEstimate: Codable, Hashable, Sendable {
     var distanceM: Double
     var durationS: Double
+    var totalDurationS: Double? = nil
+    var uncertaintyRange: String? = nil
+    var terrain: String? = nil
+    var avoidedExpressway: String? = nil
+    var legalCitation: String? = nil
+    var providerRawDurationS: Double? = nil
+    var fuelStopsDurationS: Double? = nil
+    var restStopsDurationS: Double? = nil
+    var mealStopsDurationS: Double? = nil
+    var pacingProfileName: String? = nil
+    var provenance: String? = nil
+    var calculatedAt: Date? = nil
+
+    init(
+        distanceM: Double,
+        durationS: Double,
+        totalDurationS: Double? = nil,
+        uncertaintyRange: String? = nil,
+        terrain: String? = nil,
+        avoidedExpressway: String? = nil,
+        legalCitation: String? = nil,
+        providerRawDurationS: Double? = nil,
+        fuelStopsDurationS: Double? = nil,
+        restStopsDurationS: Double? = nil,
+        mealStopsDurationS: Double? = nil,
+        pacingProfileName: String? = nil,
+        provenance: String? = nil,
+        calculatedAt: Date? = nil
+    ) {
+        self.distanceM = distanceM
+        self.durationS = durationS
+        self.totalDurationS = totalDurationS
+        self.uncertaintyRange = uncertaintyRange
+        self.terrain = terrain
+        self.avoidedExpressway = avoidedExpressway
+        self.legalCitation = legalCitation
+        self.providerRawDurationS = providerRawDurationS
+        self.fuelStopsDurationS = fuelStopsDurationS
+        self.restStopsDurationS = restStopsDurationS
+        self.mealStopsDurationS = mealStopsDurationS
+        self.pacingProfileName = pacingProfileName
+        self.provenance = provenance
+        self.calculatedAt = calculatedAt
+    }
 
     enum TripLength: String { case day = "Day ride", weekend = "Weekend", multiDay = "Multi-day" }
     var tripLength: TripLength { durationS <= 8 * 3600 ? .day : durationS <= 16 * 3600 ? .weekend : .multiDay }
 
     var distanceText: String { "\(Int((distanceM / 1000).rounded()).formatted()) km" }
     var durationText: String { let m = Int(durationS / 60); return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m" }
+    var saddleDurationText: String { durationText }
+    var totalDurationText: String? {
+        guard let t = totalDurationS else { return nil }
+        let m = Int(t / 60)
+        return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m"
+    }
+    var providerRawDurationText: String? {
+        guard let t = providerRawDurationS else { return nil }
+        let m = Int(t / 60)
+        return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m"
+    }
+
+    var totalStopsDurationText: String? {
+        let totalStopsS = (fuelStopsDurationS ?? 0) + (restStopsDurationS ?? 0) + (mealStopsDurationS ?? 0)
+        guard totalStopsS > 0 else { return nil }
+        let m = Int(totalStopsS / 60)
+        return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m"
+    }
+
+    var fuelDurationText: String? {
+        guard let s = fuelStopsDurationS, s > 0 else { return nil }
+        return "\(Int(s / 60))m"
+    }
+
+    var restDurationText: String? {
+        guard let s = restStopsDurationS, s > 0 else { return nil }
+        let m = Int(s / 60)
+        return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m"
+    }
+
+    var mealDurationText: String? {
+        guard let s = mealStopsDurationS, s > 0 else { return nil }
+        let m = Int(s / 60)
+        return m >= 60 ? "\(m / 60)h \(m % 60)m" : "\(m)m"
+    }
+
     /// Card line: "58 km · 1h 25m", or a trip-length bucket for long rides.
     var cardText: String {
         switch tripLength {

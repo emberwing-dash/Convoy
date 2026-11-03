@@ -38,6 +38,11 @@ struct PlanDetailsView: View {
         .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
         .onTapGesture { focused = false }
+        .task {
+            if app.draft.selected == nil && (!app.draft.from.isEmpty || app.draft.startCoord != nil) && (!app.draft.to.isEmpty || app.draft.endCoord != nil) {
+                await app.findRoutes()
+            }
+        }
     }
 
     // MARK: - Map card
@@ -52,6 +57,25 @@ struct PlanDetailsView: View {
                             Text("\(app.draft.from.components(separatedBy: ",")[0]) → \(app.draft.to.components(separatedBy: ",")[0])")
                                 .cvText(15, .semibold, inter: true).lineLimit(1)
                             Text("\(app.draft.distanceText(app.draft.style)) · \(app.draft.durationText(app.draft.style)) · \(app.draft.style.rawValue)")
+                                .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                        }
+                        Spacer()
+                        Text("Change").cvText(13, .semibold, inter: true)
+                            .padding(.horizontal, 14).frame(height: 32)
+                            .background(Color.white.opacity(0.1), in: Capsule())
+                    }
+                    .padding(.horizontal, 16).frame(width: 321, height: 64)
+                    .background(Color(hex: 0x1A1A1D, opacity: 0.92),
+                                in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .offset(x: 16, y: 16)
+                } else if let sc = app.draft.startCoord, let ec = app.draft.endCoord {
+                    let waypoints = [sc] + app.draft.stopCoords + [ec]
+                    RouteSnapshotView(coords: waypoints, size: CGSize(width: 353, height: 280))
+                    HStack {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("\(app.draft.from.components(separatedBy: ",")[0]) → \(app.draft.to.components(separatedBy: ",")[0])")
+                                .cvText(15, .semibold, inter: true).lineLimit(1)
+                            Text("Setting route…")
                                 .cvText(12, color: CV.cream.opacity(0.55), inter: true)
                         }
                         Spacer()

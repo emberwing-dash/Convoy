@@ -1,4 +1,5 @@
 // PlanHandoffTests.swift — Discover → existing planner hand-off keeps route stops.
+import Foundation
 import Testing
 @testable import Convoy
 
@@ -33,5 +34,39 @@ import Testing
         var seed = ecr; seed.stops = []
         let d = PlanDraft(seed: seed)
         #expect(d.stops.isEmpty && d.stopCoords.isEmpty && d.effectiveName == "ECR Coastal Run")
+    }
+
+    @Test func customPlanInitiationStartsCleanAndEmpty() {
+        let app = AppState()
+        // Simulate leftover discover draft
+        app.startPlan(ecr)
+        #expect(app.draft.name == "ECR Coastal Run")
+        #expect(app.draft.routeSet)
+
+        // Custom plan initiation must reset draft to completely empty state
+        app.startNewPlan()
+        #expect(app.draft.name.isEmpty)
+        #expect(app.draft.from.isEmpty)
+        #expect(app.draft.to.isEmpty)
+        #expect(app.draft.routes.isEmpty)
+        #expect(app.draft.selected == nil)
+        #expect(!app.draft.routeSet)
+        #expect(app.draft.startCoord == nil)
+        #expect(app.draft.endCoord == nil)
+        #expect(app.draft.discoverRoute == nil)
+    }
+
+    @Test func customPlanInitiationKeepsCrewWhenRequested() {
+        let app = AppState()
+        let testCrewId = UUID()
+        app.selectedCrew = testCrewId
+        app.selectedFriends = ["rider1"]
+
+        app.startNewPlan(keepCrew: true)
+        #expect(app.selectedCrew == testCrewId)
+        #expect(app.selectedFriends == ["rider1"])
+        #expect(app.draft.name.isEmpty)
+        #expect(app.draft.selected == nil)
+        #expect(!app.draft.routeSet)
     }
 }

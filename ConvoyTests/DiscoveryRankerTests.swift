@@ -34,6 +34,33 @@ import Testing
         #expect(tight.radiusKm == 25 && !tight.widened)
     }
 
+    @Test func geographicRadiusIncludesPlacesEvenWhenRankingProxyExceedsRadius() {
+        // Candidate 20.0 km geographically north of origin
+        let placeCoord = Coord(lat: chennai.lat + 20.0 / 111.0, lon: chennai.lon)
+        let geoDistance = placeCoord.distanceKm(to: chennai)
+        #expect(abs(geoDistance - 20.0) < 0.5, "Geographic distance must be ~20 km")
+
+        // Candidate with NO rideKm: ranking proxy is straight line * 1.3 = ~26 km
+        let candidate = RankCandidate(
+            id: "geo-20km-place",
+            category: .viewpoint,
+            coord: placeCoord,
+            popularity: 0.8,
+            fame: 0.9,
+            scenic: 0.9,
+            rideKm: nil
+        )
+
+        let rankingDistance = DiscoveryRanker.rankingDistanceKm(candidate, chennai)
+        #expect(rankingDistance >= 25.5, "Ranking distance proxy must be ~26 km (> 25 km)")
+
+        // Geographic expansion with radius 25 km MUST include the candidate
+        let expanded = DiscoveryRanker.expand([candidate], from: chennai, steps: [25, 50, 100, 250], minimum: 1)
+        #expect(expanded.radiusKm == 25.0, "Must be included in 25 km geographic radius")
+        #expect(expanded.items.map(\.id) == ["geo-20km-place"], "Candidate must be found in 25 km radius")
+        #expect(!expanded.widened, "Must not widen to 50 km since candidate is within 25 km")
+    }
+
     @Test func noMoreThanTwoOfACategoryInARow() {
         let ordered = ["l1", "l2", "l3", "l4", "f1", "b1"].map { c($0, $0.hasPrefix("l") ? .lake : $0.hasPrefix("f") ? .forest : .beach, km: 50) }
         let out = DiscoveryRanker.diversify(ordered, maxRun: 2).map(\.category)
@@ -114,13 +141,13 @@ import Testing
         }
     }
 
-    @Test func rideTimesOnlyFromChennai() async throws {
+    @Test func originSelectionChangesEstimates() async throws {
         let places = try await repo.places(PlaceQuery(limit: 500)).items
         let routing = MockRoutingProvider()
         let fromChennai = await routing.estimates(from: DiscoveryOrigin(name: "Chennai", coord: Coord(lat: 13.0827, lon: 80.2707)), to: places)
         #expect(fromChennai["shore-temple"]?.distanceM == 58_000)
         let fromBengaluru = await routing.estimates(from: DiscoveryOrigin(name: "Bengaluru", coord: Coord(lat: 12.9716, lon: 77.5946)), to: places)
-        #expect(fromBengaluru.isEmpty)
+        #expect(fromBengaluru["shore-temple"] == nil)
     }
 
     @Test func routeSeedKeepsStopsInOrder() async throws {

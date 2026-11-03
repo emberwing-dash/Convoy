@@ -200,6 +200,89 @@ final class AppState {
         self.fillUps = StorageService.shared.loadFillUps().map { FillUp(odo: $0.odo, litres: $0.litres, price: $0.price) }
 
         (savedRoutes, savedPlaces) = Self.savedItems(from: StorageService.shared.loadSavedRoutes())
+
+        if ProcessInfo.processInfo.arguments.contains("-initialTabDiscover") || ProcessInfo.processInfo.arguments.contains("-pushRoute") {
+            self.phase = .main
+            self.tab = .discover
+        }
+        if let idx = ProcessInfo.processInfo.arguments.firstIndex(of: "-pushRoute"),
+           idx + 1 < ProcessInfo.processInfo.arguments.count {
+            let routeName = ProcessInfo.processInfo.arguments[idx + 1]
+            switch routeName {
+            case "discoverMap": self.path.append(.discoverMap)
+            case "discoverPlaces": self.path.append(.discoverPlaces)
+            case "discoverSaved": self.path.append(.discoverSaved)
+            case "scenic": self.path.append(.scenic)
+            case "surprise": self.path.append(.surprise)
+            case "placeDetail":
+                if idx + 2 < ProcessInfo.processInfo.arguments.count {
+                    let pid = ProcessInfo.processInfo.arguments[idx + 2]
+                    self.path.append(.placeDetail(pid))
+                }
+            case "routeDetail":
+                if idx + 2 < ProcessInfo.processInfo.arguments.count {
+                    let rid = ProcessInfo.processInfo.arguments[idx + 2]
+                    self.path.append(.routeDetail(rid))
+                }
+            case "planHandoff":
+                if idx + 3 < ProcessInfo.processInfo.arguments.count {
+                    let kind = ProcessInfo.processInfo.arguments[idx + 1]
+                    let kindArg = ProcessInfo.processInfo.arguments[idx + 2]
+                    let targetId = ProcessInfo.processInfo.arguments[idx + 3]
+                    if kindArg == "route" {
+                        self.path.append(.planHandoff(.route(targetId)))
+                    } else {
+                        self.path.append(.planHandoff(.place(targetId)))
+                    }
+                } else if idx + 2 < ProcessInfo.processInfo.arguments.count {
+                    let pid = ProcessInfo.processInfo.arguments[idx + 2]
+                    self.path.append(.planHandoff(.place(pid)))
+                }
+            case "planDetails":
+                if idx + 3 < ProcessInfo.processInfo.arguments.count {
+                    let kindArg = ProcessInfo.processInfo.arguments[idx + 2]
+                    let targetId = ProcessInfo.processInfo.arguments[idx + 3]
+                    if kindArg == "route" {
+                        let r = DiscoverStore.shared.route(targetId)
+                            ?? MockDiscoverRepository().routesList.first { $0.id == targetId }
+                        if let r {
+                            let seed = r.planSeed(start: r.start.name, startCoord: r.start.coord)
+                            self.startPlan(seed)
+                        }
+                    }
+                }
+                self.path.append(.planDetails)
+            case "planMap":
+                if idx + 3 < ProcessInfo.processInfo.arguments.count {
+                    let kindArg = ProcessInfo.processInfo.arguments[idx + 2]
+                    let targetId = ProcessInfo.processInfo.arguments[idx + 3]
+                    if kindArg == "route" {
+                        let r = DiscoverStore.shared.route(targetId)
+                            ?? MockDiscoverRepository().routesList.first { $0.id == targetId }
+                        if let r {
+                            let seed = r.planSeed(start: r.start.name, startCoord: r.start.coord)
+                            self.startPlan(seed)
+                        }
+                    }
+                }
+                self.path.append(.planMap)
+            case "planReview":
+                if idx + 3 < ProcessInfo.processInfo.arguments.count {
+                    let kindArg = ProcessInfo.processInfo.arguments[idx + 2]
+                    let targetId = ProcessInfo.processInfo.arguments[idx + 3]
+                    if kindArg == "route" {
+                        let r = DiscoverStore.shared.route(targetId)
+                            ?? MockDiscoverRepository().routesList.first { $0.id == targetId }
+                        if let r {
+                            let seed = r.planSeed(start: r.start.name, startCoord: r.start.coord)
+                            self.startPlan(seed)
+                        }
+                    }
+                }
+                self.path.append(.planReview)
+            default: break
+            }
+        }
     }
 
     /// Saved routes and places from the local store. Rows saved before Discover v2 have no payload
@@ -696,6 +779,17 @@ final class AppState {
             return .joined(target.id)
         }
         return .failed
+    }
+
+    /// Initiates a fresh, empty custom ride plan from scratch (for Home screen or Crew flows).
+    /// Ensures ride name and route are empty until the rider specifies them.
+    func startNewPlan(keepCrew: Bool = false) {
+        draft = PlanDraft()
+        if !keepCrew {
+            selectedCrew = nil
+            selectedFriends = []
+        }
+        planner.reset()
     }
 
     /// Opens the existing planner pre-filled from Discover. Route stops are carried over in order.

@@ -23,7 +23,18 @@ struct DiscoverImage: View {
                 if let image = UIImage(named: name) { Image(uiImage: image).resizable().scaledToFill() }
                 else { MapThumb(center: coord, path: path) }   // asset not shipped in this build
             case .remote(let url)?:
-                AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { CV.surface }
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        MapThumb(center: coord, path: path)
+                    case .empty:
+                        CV.surface
+                    @unknown default:
+                        MapThumb(center: coord, path: path)
+                    }
+                }
             case nil: MapThumb(center: coord, path: path)
             }
         }

@@ -71,6 +71,11 @@ struct PlanReviewView: View {
         .onTapGesture { focused = false }
         .sheet(isPresented: $showingDatePicker) { dateSheet }
         .sheet(isPresented: $showingTimePicker) { timeSheet }
+        .task {
+            if app.draft.selected == nil && (!app.draft.from.isEmpty || app.draft.startCoord != nil) && (!app.draft.to.isEmpty || app.draft.endCoord != nil) {
+                await app.findRoutes()
+            }
+        }
     }
 
     // MARK: - Route map
@@ -79,6 +84,9 @@ struct PlanReviewView: View {
         ZStack(alignment: .topLeading) {
             if let r = app.draft.selected {
                 RouteSnapshotView(coords: r.coords, size: CGSize(width: 353, height: 160))
+            } else if let sc = app.draft.startCoord, let ec = app.draft.endCoord {
+                let waypoints = [sc] + app.draft.stopCoords + [ec]
+                RouteSnapshotView(coords: waypoints, size: CGSize(width: 353, height: 160))
             } else {
                 Rectangle().fill(Color(hex: 0x101013))
             }

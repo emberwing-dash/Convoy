@@ -12,7 +12,7 @@ nonisolated struct RankingConfig: Codable, Hashable, Sendable {
     var explorationShare = 0.30
     /// No more than this many items of the same category in a row.
     var maxSameCategoryRun = 2
-    var radiusStepsKm: [Double] = [25, 50, 100, 350]
+    var radiusStepsKm: [Double] = [25, 50, 100, 250]
     var minResults = 12
     var skipCooldownDays: Double = 30
     var dedupeMeters: Double = 150
@@ -69,18 +69,31 @@ nonisolated enum DiscoveryRanker {
 
     // MARK: Radius expansion
 
+    /// True geodesic / coordinate distance between candidate and origin.
+    /// Used for geographic radius filtering and effective radius determination.
+    static func geographicDistanceKm(_ c: RankCandidate, _ origin: Coord) -> Double {
+        c.coord.distanceKm(to: origin)
+    }
+
+    /// Ordering-only ranking distance: real ride km if known, else straight line × 1.3.
+    /// Used ONLY for recommendation scoring and distanceFit.
+    static func rankingDistanceKm(_ c: RankCandidate, _ origin: Coord) -> Double {
+        c.rideKm ?? (c.coord.distanceKm(to: origin) * 1.3)
+    }
+
     /// Smallest radius step that yields `minimum` items; the last step otherwise.
+    /// Uses GEOGRAPHIC coordinate distance (no ordering multiplier).
     static func expand(_ items: [RankCandidate], from origin: Coord, steps: [Double], minimum: Int) -> (items: [RankCandidate], radiusKm: Double, widened: Bool) {
         var last: [RankCandidate] = []
         for (i, r) in steps.enumerated() {
-            last = items.filter { km($0, origin) <= r }
+            last = items.filter { geographicDistanceKm($0, origin) <= r }
             if last.count >= minimum { return (last, r, i > 0) }
         }
         return (last, steps.last ?? 0, steps.count > 1)
     }
 
-    /// Ordering-only distance: real ride km if known, else straight line × 1.3.
-    static func km(_ c: RankCandidate, _ origin: Coord) -> Double { c.rideKm ?? c.coord.distanceKm(to: origin) * 1.3 }
+    /// Ordering-only distance alias: real ride km if known, else straight line × 1.3.
+    static func km(_ c: RankCandidate, _ origin: Coord) -> Double { rankingDistanceKm(c, origin) }
 
     // MARK: Scoring
 
@@ -97,7 +110,7 @@ nonisolated enum DiscoveryRanker {
     }
 
     static func score(_ c: RankCandidate, origin: Coord?, mode: SurpriseMode, history: HistorySnapshot, maxPopularity: Double, config: RankingConfig) -> Double {
-        let dist = origin.map { distanceFit(km(c, $0), mode: mode) } ?? (mode == .anywhere ? 1 : 0.5)
+        let dist = origin.map { distanceFit(rankingDistanceKm(c, $0), mode: mode) } ?? (mode == .anywhere ? 1 : 0.5)
         let pop = maxPopularity > 0 ? max(c.popularity ?? 0, c.fame ?? 0) / maxPopularity : 0
         let novelty = history.saved.contains(c.id) ? 0 : history.viewed[c.id] != nil ? 0.3 : 1
         let personal = history.affinity[c.category] ?? 0

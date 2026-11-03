@@ -37,13 +37,12 @@ final class DiscoverStore {
     init(repo: DiscoverRepository? = nil, routing: RoutingProvider? = nil,
          history: DiscoveryHistory = .shared, defaults: UserDefaults = .standard,
          cacheFile: URL = URL.cachesDirectory.appending(path: "discover-catalogue.json")) {
+        let defaultRepo = SupabaseDiscoverRepository()
+        self.repo = repo ?? defaultRepo
         #if DEBUG
-        let mock = MockDiscoverRepository()
-        self.repo = repo ?? mock
         self.routing = routing ?? MockRoutingProvider()
         #else
         let empty = EmptyDiscoverRepository()
-        self.repo = repo ?? empty
         self.routing = routing ?? empty
         #endif
         self.history = history
@@ -51,8 +50,18 @@ final class DiscoverStore {
         self.cacheFile = cacheFile
         #if DEBUG
         if Debug.resetOrigin { defaults.removeObject(forKey: Keys.origin) }
-        #endif
+        if let originArg = ProcessInfo.processInfo.arguments.firstIndex(of: "-DiscoverOrigin"),
+           originArg + 3 < ProcessInfo.processInfo.arguments.count {
+            let name = ProcessInfo.processInfo.arguments[originArg + 1]
+            let lat = Double(ProcessInfo.processInfo.arguments[originArg + 2]) ?? 0
+            let lon = Double(ProcessInfo.processInfo.arguments[originArg + 3]) ?? 0
+            origin = DiscoveryOrigin(name: name, coord: .init(lat: lat, lon: lon), isCurrentLocation: false)
+        } else {
+            origin = DiscoverJSON.decode(DiscoveryOrigin.self, from: defaults.string(forKey: Keys.origin) ?? "")
+        }
+        #else
         origin = DiscoverJSON.decode(DiscoveryOrigin.self, from: defaults.string(forKey: Keys.origin) ?? "")
+        #endif
         recentOrigins = DiscoverJSON.decode([DiscoveryOrigin].self, from: defaults.string(forKey: Keys.recents) ?? "") ?? []
         trip = DiscoverJSON.decode([DiscoverPlace].self, from: defaults.string(forKey: Keys.trip) ?? "") ?? []
         monitor.pathUpdateHandler = { [weak self] path in
@@ -248,7 +257,7 @@ final class DiscoverStore {
         let e = DiscoveryRanker.expand(filtered, from: o, steps: config.radiusStepsKm, minimum: minimum)
         let maxPop = e.items.map { max($0.popularity ?? 0, $0.fame ?? 0) }.max() ?? 0
         let order = (nearestFirst
-            ? e.items.sorted { DiscoveryRanker.km($0, o) < DiscoveryRanker.km($1, o) }
+            ? e.items.sorted { DiscoveryRanker.geographicDistanceKm($0, o) < DiscoveryRanker.geographicDistanceKm($1, o) }
             : e.items.map { ($0, DiscoveryRanker.score($0, origin: o, mode: .nearMe, history: history.snapshot, maxPopularity: maxPop, config: config)) }
                 .sorted { $0.1 > $1.1 }.map(\.0)
         ).map(\.id)
