@@ -96,8 +96,27 @@ final class RoutePlanner {
             end = Coord(b)
             let points = [a] + via + [b]
 
-            // ── 1. Apple's own candidates via MKDirections ─────────────
-            var candidates = try await appleCandidates(points)
+            // ── 1. Apple's own candidates via MKDirections with motorcycle fallback ─
+            var candidates = (try? await appleCandidates(points)) ?? []
+            if candidates.isEmpty {
+                let coords = PrecomputedMotorcycleRoutingProvider.corridorGeometry(connecting: points.map(Coord.init))
+                let distM = PrecomputedMotorcycleRoutingProvider.estimateDistance(for: coords)
+                let cal = ConvoyRoutingCalibrator.calibrate(distanceMeters: distM, origin: Coord(a), destination: Coord(b))
+                let steps: [NavStep] = points.enumerated().map { i, pt in
+                    let label = i == 0 ? "Start at \(from)" : i == points.count - 1 ? "Arrive at \(to)" : "Pass waypoint \(i)"
+                    return NavStep(instructions: label, distance: distM / Double(max(1, points.count - 1)), coordinate: Coord(pt))
+                }
+                candidates = [
+                    Candidate(
+                        coords: coords.map(\.cl),
+                        distance: distM,
+                        time: cal.saddleDurationSeconds,
+                        kind: .apple,
+                        steps: steps
+                    )
+                ]
+            }
+
             guard let base = candidates.min(by: { $0.time < $1.time }) else {
                 throw PlanError.none
             }

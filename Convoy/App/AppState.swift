@@ -74,7 +74,10 @@ enum Route: Hashable {
     case mileageIntro, logFillUp, mileageProgress, mileageResults
     case crewDetail(UUID), newCrew, crewInvite(UUID), inviteFriends
     case discoverSearch, discoverSaved, discoverMap
-    case routeDetail(DiscoverRoute), routeStart(DiscoverRoute)
+    case discoverRoutes(RouteCollection?), discoverPlaces, placeCategory(PlaceCategory)
+    case placeDetail(String), routeDetail(String)
+    case scenic, scenicCollection(String), surprise, surpriseFeed(SurpriseMode)
+    case planHandoff(PlanTarget)
     case planWho, pickCrews, pickFriends
     case planDetails, planMap, planRoutes, planReview, planCreated
     case rideDetails(UUID), pastRide(UUID)
@@ -153,6 +156,7 @@ final class AppState {
     // Crews & saved routes
     var crews: [CrewGroup] = []
     var savedRoutes: [DiscoverRoute] = []
+    var savedPlaces: [DiscoverPlace] = []
     var selectedCrew: UUID? = nil
     var selectedFriends: Set<String> = []
 
@@ -195,28 +199,106 @@ final class AppState {
         self.notifications = StorageService.shared.loadCachedNotifications()
         self.fillUps = StorageService.shared.loadFillUps().map { FillUp(odo: $0.odo, litres: $0.litres, price: $0.price) }
 
-        self.savedRoutes = StorageService.shared.loadSavedRoutes().map { e in
-            var coords: [Coord] = []
-            if let data = e.coordsJSON.data(using: .utf8),
-               let pairs = try? JSONSerialization.jsonObject(with: data) as? [[Double]] {
-                coords = pairs.compactMap { pair in
-                    guard pair.count == 2 else { return nil }
-                    return Coord(lat: pair[0], lon: pair[1])
-                }
-            }
-            let start = Coord(lat: e.startLat, lon: e.startLon)
-            let end = Coord(lat: e.endLat, lon: e.endLon)
-            if coords.isEmpty { coords = [start, end] }
-            return DiscoverRoute(
-                id: e.id, title: e.title, tag: e.tag,
-                from: e.from, to: e.to, km: e.km, time: e.time,
-                style: e.style, blurb: e.blurb,
-                startPlace: e.startPlace, finishPlace: e.finishPlace,
-                stops: e.stops,
-                startCoord: start, endCoord: end, coords: coords,
-                categories: Set(e.categoriesRaw.split(separator: ",").compactMap { RouteCategory(rawValue: String($0)) })
-            )
+        (savedRoutes, savedPlaces) = Self.savedItems(from: StorageService.shared.loadSavedRoutes())
+
+        if ProcessInfo.processInfo.arguments.contains("-initialTabDiscover") || ProcessInfo.processInfo.arguments.contains("-pushRoute") {
+            self.phase = .main
+            self.tab = .discover
         }
+        if let idx = ProcessInfo.processInfo.arguments.firstIndex(of: "-pushRoute"),
+           idx + 1 < ProcessInfo.processInfo.arguments.count {
+            let routeName = ProcessInfo.processInfo.arguments[idx + 1]
+            switch routeName {
+            case "discoverMap": self.path.append(.discoverMap)
+            case "discoverPlaces": self.path.append(.discoverPlaces)
+            case "discoverSaved": self.path.append(.discoverSaved)
+            case "scenic": self.path.append(.scenic)
+            case "surprise": self.path.append(.surprise)
+            case "placeDetail":
+                if idx + 2 < ProcessInfo.processInfo.arguments.count {
+                    let pid = ProcessInfo.processInfo.arguments[idx + 2]
+                    self.path.append(.placeDetail(pid))
+                }
+            case "routeDetail":
+                if idx + 2 < ProcessInfo.processInfo.arguments.count {
+                    let rid = ProcessInfo.processInfo.arguments[idx + 2]
+                    self.path.append(.routeDetail(rid))
+                }
+            case "planHandoff":
+                if idx + 3 < ProcessInfo.processInfo.arguments.count {
+                    let kind = ProcessInfo.processInfo.arguments[idx + 1]
+                    let kindArg = ProcessInfo.processInfo.arguments[idx + 2]
+                    let targetId = ProcessInfo.processInfo.arguments[idx + 3]
+                    if kindArg == "route" {
+                        self.path.append(.planHandoff(.route(targetId)))
+                    } else {
+                        self.path.append(.planHandoff(.place(targetId)))
+                    }
+                } else if idx + 2 < ProcessInfo.processInfo.arguments.count {
+                    let pid = ProcessInfo.processInfo.arguments[idx + 2]
+                    self.path.append(.planHandoff(.place(pid)))
+                }
+            case "planDetails":
+                if idx + 3 < ProcessInfo.processInfo.arguments.count {
+                    let kindArg = ProcessInfo.processInfo.arguments[idx + 2]
+                    let targetId = ProcessInfo.processInfo.arguments[idx + 3]
+                    if kindArg == "route" {
+                        let r = DiscoverStore.shared.route(targetId)
+                            ?? MockDiscoverRepository().routesList.first { $0.id == targetId }
+                        if let r {
+                            let seed = r.planSeed(start: r.start.name, startCoord: r.start.coord)
+                            self.startPlan(seed)
+                        }
+                    }
+                }
+                self.path.append(.planDetails)
+            case "planMap":
+                if idx + 3 < ProcessInfo.processInfo.arguments.count {
+                    let kindArg = ProcessInfo.processInfo.arguments[idx + 2]
+                    let targetId = ProcessInfo.processInfo.arguments[idx + 3]
+                    if kindArg == "route" {
+                        let r = DiscoverStore.shared.route(targetId)
+                            ?? MockDiscoverRepository().routesList.first { $0.id == targetId }
+                        if let r {
+                            let seed = r.planSeed(start: r.start.name, startCoord: r.start.coord)
+                            self.startPlan(seed)
+                        }
+                    }
+                }
+                self.path.append(.planMap)
+            case "planReview":
+                if idx + 3 < ProcessInfo.processInfo.arguments.count {
+                    let kindArg = ProcessInfo.processInfo.arguments[idx + 2]
+                    let targetId = ProcessInfo.processInfo.arguments[idx + 3]
+                    if kindArg == "route" {
+                        let r = DiscoverStore.shared.route(targetId)
+                            ?? MockDiscoverRepository().routesList.first { $0.id == targetId }
+                        if let r {
+                            let seed = r.planSeed(start: r.start.name, startCoord: r.start.coord)
+                            self.startPlan(seed)
+                        }
+                    }
+                }
+                self.path.append(.planReview)
+            default: break
+            }
+        }
+    }
+
+    /// Saved routes and places from the local store. Rows saved before Discover v2 have no payload
+    /// and are rebuilt from their columns; place rows carry the "place:" id prefix.
+    static func savedItems(from rows: [SavedRouteEntity]) -> (routes: [DiscoverRoute], places: [DiscoverPlace]) {
+        var routes: [DiscoverRoute] = [], places: [DiscoverPlace] = []
+        for e in rows {
+            if e.id.hasPrefix(DiscoverPlace.savedPrefix) {
+                if let p = DiscoverJSON.decode(DiscoverPlace.self, from: e.payloadJSON) ?? DiscoverPlace(legacy: e) {
+                    places.append(p)
+                }
+            } else {
+                routes.append(DiscoverJSON.decode(DiscoverRoute.self, from: e.payloadJSON) ?? DiscoverRoute(legacy: e))
+            }
+        }
+        return (routes, places)
     }
 
     // MARK: - Session helper
@@ -576,6 +658,7 @@ final class AppState {
         rides = []
         completedRides = []
         savedRoutes = []
+        savedPlaces = []
         fillUps = []
         activeRideMedia = []
         draft = PlanDraft()
@@ -698,32 +781,74 @@ final class AppState {
         return .failed
     }
 
-    func startPlan(from route: DiscoverRoute, startAt: String) {
-        draft = PlanDraft(name: route.title, from: startAt, to: route.finishPlace,
-                          stops: [], routeSet: true, style: .scenic)
-        draft.startCoord = route.startCoord
-        draft.endCoord = route.endCoord
+    /// Initiates a fresh, empty custom ride plan from scratch (for Home screen or Crew flows).
+    /// Ensures ride name and route are empty until the rider specifies them.
+    func startNewPlan(keepCrew: Bool = false) {
+        draft = PlanDraft()
+        if !keepCrew {
+            selectedCrew = nil
+            selectedFriends = []
+        }
+        planner.reset()
+    }
+
+    /// Opens the existing planner pre-filled from Discover. Route stops are carried over in order.
+    func startPlan(_ seed: PlanSeed) {
+        draft = PlanDraft(seed: seed)
         planner.reset()
     }
 
     func toggleSaved(_ route: DiscoverRoute) {
-        if let idx = savedRoutes.firstIndex(where: { $0.id == route.id }) {
-            savedRoutes.remove(at: idx)
-            StorageService.shared.removeSavedRoute(id: route.id)
-            if let userId = backendUserId {
-                Task { try? await SupabaseManager.shared.deleteSavedRoute(userId: userId, routeId: route.id) }
-            }
-        } else {
-            savedRoutes.append(route)
-            StorageService.shared.saveSavedRoute(route)
-            if let userId = backendUserId {
-                Task { try? await SupabaseManager.shared.saveSavedRoute(userId: userId, route: route) }
+        let saving = !isSaved(route)
+        if saving { savedRoutes.insert(route, at: 0); StorageService.shared.saveSavedRoute(route) }
+        else { savedRoutes.removeAll { $0.id == route.id }; StorageService.shared.removeSavedRoute(id: route.id) }
+        DiscoveryHistory.shared.setSaved(route.id, category: route.scenery.first, saved: saving)
+        syncSaved(id: route.id, saving: saving) { try await SupabaseManager.shared.saveSavedRoute(userId: $0, route: route) }
+    }
+
+    func toggleSaved(_ place: DiscoverPlace) {
+        let saving = !isSaved(place)
+        if saving { savedPlaces.insert(place, at: 0); StorageService.shared.saveSavedPlace(place) }
+        else { savedPlaces.removeAll { $0.id == place.id }; StorageService.shared.removeSavedRoute(id: place.savedId) }
+        DiscoveryHistory.shared.setSaved(place.id, category: place.category, saved: saving)
+        syncSaved(id: place.savedId, saving: saving) { try await SupabaseManager.shared.saveSavedPlace(userId: $0, place: place) }
+    }
+
+    func isSaved(_ route: DiscoverRoute) -> Bool { savedRoutes.contains { $0.id == route.id } }
+    func isSaved(_ place: DiscoverPlace) -> Bool { savedPlaces.contains { $0.id == place.id } }
+
+    private static let pendingSavedKey = "discover.pendingSavedSync"
+    private var pendingSaved: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: Self.pendingSavedKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: Self.pendingSavedKey) }
+    }
+
+    /// Mirrors one saved item to Supabase. A failure (e.g. offline) queues the id; the retry
+    /// later applies whatever the current local state is, so repeated toggles stay correct.
+    private func syncSaved(id: String, saving: Bool, upsert: @escaping (UUID) async throws -> Void) {
+        guard let userId = backendUserId else { return }
+        Task {
+            do {
+                if saving { try await upsert(userId) }
+                else { try await SupabaseManager.shared.deleteSavedRoute(userId: userId, routeId: id) }
+                pendingSaved.remove(id)
+            } catch {
+                pendingSaved.insert(id)
             }
         }
     }
 
-    func isSaved(_ route: DiscoverRoute) -> Bool {
-        savedRoutes.contains { $0.id == route.id }
+    /// Re-sends saves/unsaves that failed while offline.
+    func retryPendingSavedSync() {
+        for id in pendingSaved {
+            if let r = savedRoutes.first(where: { $0.id == id }) {
+                syncSaved(id: id, saving: true) { try await SupabaseManager.shared.saveSavedRoute(userId: $0, route: r) }
+            } else if let p = savedPlaces.first(where: { $0.savedId == id }) {
+                syncSaved(id: id, saving: true) { try await SupabaseManager.shared.saveSavedPlace(userId: $0, place: p) }
+            } else {
+                syncSaved(id: id, saving: false) { _ in }
+            }
+        }
     }
 
     func loadCrewInvites() async { }

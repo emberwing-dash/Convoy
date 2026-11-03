@@ -61,7 +61,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
 
     // MARK: - Permission & Tracking
     func requestPermission() {
-        if authorizationStatus == .notDetermined {
+        if authorizationStatus == .notDetermined && !ProcessInfo.processInfo.arguments.contains("-pushRoute") {
             manager.requestWhenInUseAuthorization()
         }
     }

@@ -73,7 +73,10 @@ struct HomeView: View {
     // MARK: - Actions
     private var actions: some View {
         VStack(spacing: 12) {
-            Button { app.push(.planWho) } label: {
+            Button {
+                app.startNewPlan()
+                app.push(.planWho)
+            } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "map").font(.system(size: 18, weight: .semibold))
                     Text("Initiate Plan").cvText(17, .semibold, color: CV.ink, tracking: -0.17, lineHeight: 22, inter: true)

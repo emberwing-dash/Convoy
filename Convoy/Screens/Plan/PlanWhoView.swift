@@ -42,6 +42,12 @@ struct PlanWhoView: View {
             await app.loadFriends()
             await app.loadCrews()
         }
+        .onAppear {
+            // When initiating a custom plan via "Who's riding?", ensure any leftover Discover draft is cleared.
+            if app.draft.discoverRoute != nil || !app.draft.routes.isEmpty || !app.draft.name.isEmpty {
+                app.startNewPlan(keepCrew: true)
+            }
+        }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
@@ -446,6 +452,9 @@ struct PlanWhoView: View {
             }
 
             PrimaryButton(title: "Continue") {
+                if app.draft.discoverRoute != nil {
+                    app.startNewPlan(keepCrew: true)
+                }
                 app.push(.planDetails)
             }
         }

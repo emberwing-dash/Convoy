@@ -36,11 +36,10 @@ struct MainShell: View {
                 case .newCrew:            NewCrewView()
                 case .crewInvite(let id): CrewInviteView(crewID: id)
                 case .inviteFriends:      InviteFriendsView()
-                case .discoverSearch:     DiscoverSearchView()
-                case .discoverSaved:      SavedRoutesView()
-                case .discoverMap:        ExploreMapView()
-                case .routeDetail(let r): RouteDetailView(route: r)
-                case .routeStart(let r):  RouteStartView(route: r)
+                case .discoverSearch, .discoverSaved, .discoverMap, .discoverRoutes, .discoverPlaces,
+                     .placeCategory, .placeDetail, .routeDetail, .scenic, .scenicCollection,
+                     .surprise, .surpriseFeed, .planHandoff:
+                    DiscoverDestination(route: route)
                 case .garage:             GarageView()
                 case .document(let n):    DocumentView(name: n)
                 case .mileageIntro:       MileageIntroView()

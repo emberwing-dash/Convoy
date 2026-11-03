@@ -15,8 +15,19 @@
 		8DADA5E6308B4C3F001B9A60 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 8DADA5E5308B4C3F001B9A60 /* Supabase */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		AA10000000000000000000A7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 567FF9E430800B73007FC40B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 567FF9EB30800B73007FC40B;
+			remoteInfo = Convoy;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		567FF9EC30800B73007FC40B /* Convoy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Convoy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA10000000000000000000A2 /* ConvoyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ConvoyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -38,6 +49,11 @@
 			path = Convoy;
 			sourceTree = "<group>";
 		};
+		AA10000000000000000000A3 /* ConvoyTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ConvoyTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -54,6 +70,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA10000000000000000000A5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -61,6 +84,7 @@
 			isa = PBXGroup;
 			children = (
 				567FF9EE30800B73007FC40B /* Convoy */,
+				AA10000000000000000000A3 /* ConvoyTests */,
 				567FF9ED30800B73007FC40B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -69,6 +93,7 @@
 			isa = PBXGroup;
 			children = (
 				567FF9EC30800B73007FC40B /* Convoy.app */,
+				AA10000000000000000000A2 /* ConvoyTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -104,6 +129,27 @@
 			productReference = 567FF9EC30800B73007FC40B /* Convoy.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AA10000000000000000000A1 /* ConvoyTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA10000000000000000000A9 /* Build configuration list for PBXNativeTarget "ConvoyTests" */;
+			buildPhases = (
+				AA10000000000000000000A4 /* Sources */,
+				AA10000000000000000000A5 /* Frameworks */,
+				AA10000000000000000000A6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA10000000000000000000A8 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AA10000000000000000000A3 /* ConvoyTests */,
+			);
+			name = ConvoyTests;
+			productName = ConvoyTests;
+			productReference = AA10000000000000000000A2 /* ConvoyTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -116,6 +162,10 @@
 				TargetAttributes = {
 					567FF9EB30800B73007FC40B = {
 						CreatedOnToolsVersion = 27.0;
+					};
+					AA10000000000000000000A1 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 567FF9EB30800B73007FC40B;
 					};
 				};
 			};
@@ -137,12 +187,20 @@
 			projectRoot = "";
 			targets = (
 				567FF9EB30800B73007FC40B /* Convoy */,
+				AA10000000000000000000A1 /* ConvoyTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		567FF9EA30800B73007FC40B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA10000000000000000000A6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -159,7 +217,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA10000000000000000000A4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA10000000000000000000A8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 567FF9EB30800B73007FC40B /* Convoy */;
+			targetProxy = AA10000000000000000000A7 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		567FF9F730800B75007FC40B /* Debug */ = {
@@ -292,7 +365,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = F5M6B8W4Y3;
+				DEVELOPMENT_TEAM = HF9BJNMGMK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Convoy/Info.plist;
@@ -310,7 +383,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.kevingodfrey.ConvoyPrototype;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joydip.ConvoyPrototype;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -329,8 +402,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = F5M6B8W4Y3;
+				DEVELOPMENT_TEAM = HF9BJNMGMK;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_SOURCE_FILE_NAMES = DiscoverMock.xcassets;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Convoy/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Convoy uses the camera for ride photos.";
@@ -347,7 +421,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.kevingodfrey.ConvoyPrototype;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joydip.ConvoyPrototype;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -356,6 +430,46 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		AA10000000000000000000AA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevingodfrey.ConvoyPrototypeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Convoy.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Convoy";
+			};
+			name = Debug;
+		};
+		AA10000000000000000000AB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevingodfrey.ConvoyPrototypeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Convoy.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Convoy";
 			};
 			name = Release;
 		};
@@ -376,6 +490,15 @@
 			buildConfigurations = (
 				567FF9FA30800B75007FC40B /* Debug */,
 				567FF9FB30800B75007FC40B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA10000000000000000000A9 /* Build configuration list for PBXNativeTarget "ConvoyTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA10000000000000000000AA /* Debug */,
+				AA10000000000000000000AB /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

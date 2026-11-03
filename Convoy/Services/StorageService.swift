@@ -146,6 +146,8 @@ final class SavedRouteEntity {
     var categoriesRaw: String = ""
     var createdAt: Date = Date()
     var coordsJSON: String = "[]"
+    /// Full Discover payload (route or place JSON). Empty for rows saved before Discover v2.
+    var payloadJSON: String = ""
 
     init(id: String, title: String, tag: String, from: String, to: String,
          km: Int, time: String, style: String, blurb: String,
@@ -198,32 +200,49 @@ final class StorageService {
     static let shared = StorageService()
     var container: ModelContainer?
 
-    init() {
-        let schema = Schema([
-            UserProfileEntity.self,
-            PersistedRideEntity.self,
-            CrewEntity.self,
-            SavedRouteEntity.self,
-            FillUpEntity.self,
-        ])
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    /// True if the store is operating in an in-memory session (either requested or as fallback).
+    private(set) var isEphemeral: Bool = false
+    /// True if the store fell back to an in-memory session because persistent storage failed to open.
+    private(set) var isEphemeralFallback: Bool = false
+    /// Captured error if persistent store initialization failed.
+    private(set) var initializationError: Error?
+
+    static let schema = Schema([
+        UserProfileEntity.self,
+        PersistedRideEntity.self,
+        CrewEntity.self,
+        SavedRouteEntity.self,
+        FillUpEntity.self,
+    ])
+
+    init(inMemory: Bool = false) {
+        let schema = Self.schema
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         do {
-            container = try ModelContainer(for: schema, configurations: config)
+            self.container = try ModelContainer(for: schema, configurations: config)
+            self.isEphemeral = inMemory
         } catch {
-            print("⚠️ ModelContainer init failed: \(error). Resetting store.")
-            Self.resetStore()
-            container = try? ModelContainer(for: schema, configurations: config)
+            print("🚨 [StorageService] Persistent ModelContainer initialization failed: \(error). Preserving existing database files on disk without deletion.")
+            self.initializationError = error
+            if !inMemory {
+                self.isEphemeral = true
+                self.isEphemeralFallback = true
+                let fallbackConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+                self.container = try? ModelContainer(for: schema, configurations: fallbackConfig)
+            }
         }
     }
 
-    private static func resetStore() {
-        let fm = FileManager.default
-        guard let dir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
-        let urls = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
-        for u in urls where u.pathExtension == "store"
-            || u.pathExtension == "store-shm"
-            || u.pathExtension == "store-wal" {
-            try? fm.removeItem(at: u)
+    init(container: ModelContainer) {
+        self.container = container
+        self.isEphemeral = false
+        self.isEphemeralFallback = false
+        self.initializationError = nil
+    }
+
+    private func warnIfEphemeralFallback(action: String) {
+        if isEphemeralFallback {
+            print("⚠️ [StorageService] Warning: '\(action)' occurred in an ephemeral fallback session. Changes will NOT persist across app relaunch because the persistent store failed to open.")
         }
     }
 
@@ -390,30 +409,34 @@ final class StorageService {
     }
 
     func saveSavedRoute(_ route: DiscoverRoute) {
+        saveSavedItem(id: route.id, title: route.title, start: route.start, end: route.end,
+                      payload: DiscoverJSON.encode(route), category: route.scenery.first?.rawValue)
+    }
+
+    func saveSavedPlace(_ place: DiscoverPlace) {
+        let stop = RouteStop(name: place.name, category: place.category, coord: place.coord)
+        saveSavedItem(id: place.savedId, title: place.name, start: stop, end: stop,
+                      payload: DiscoverJSON.encode(place), category: place.category.rawValue)
+    }
+
+    private func saveSavedItem(id: String, title: String, start: RouteStop, end: RouteStop, payload: String, category: String? = nil) {
         guard let context else { return }
-        let catsRaw = route.categories.map(\.rawValue).joined(separator: ",")
-
+        warnIfEphemeralFallback(action: "saveSavedItem(\(id))")
+        removeSavedRoute(id: id)
         let entity = SavedRouteEntity(
-            id: route.id, title: route.title, tag: route.tag,
-            from: route.from, to: route.to, km: route.km, time: route.time,
-            style: route.style, blurb: route.blurb,
-            startPlace: route.startPlace, finishPlace: route.finishPlace,
-            stops: route.stops,
-            startLat: route.startCoord.lat, startLon: route.startCoord.lon,
-            endLat: route.endCoord.lat, endLon: route.endCoord.lon,
-            categoriesRaw: catsRaw
+            id: id, title: title, tag: "", from: start.name, to: end.name, km: 0, time: "",
+            style: "", blurb: "", startPlace: start.name, finishPlace: end.name, stops: 0,
+            startLat: start.coord.lat, startLon: start.coord.lon, endLat: end.coord.lat, endLon: end.coord.lon,
+            categoriesRaw: category ?? ""
         )
-
-        let coordsPairs = route.coords.map { [$0.lat, $0.lon] }
-        let coordsData = (try? JSONSerialization.data(withJSONObject: coordsPairs)) ?? Data("[]".utf8)
-        entity.coordsJSON = String(data: coordsData, encoding: .utf8) ?? "[]"
-
+        entity.payloadJSON = payload
         context.insert(entity)
         try? context.save()
     }
 
     func removeSavedRoute(id: String) {
         guard let context else { return }
+        warnIfEphemeralFallback(action: "removeSavedRoute(\(id))")
         let d = FetchDescriptor<SavedRouteEntity>()
         if let all = try? context.fetch(d) {
             for r in all where r.id == id { context.delete(r) }
@@ -444,5 +467,37 @@ final class StorageService {
     func loadCachedFriends() -> [ProfileRow] {
         guard let data = UserDefaults.standard.data(forKey: "cached_friends") else { return [] }
         return (try? JSONDecoder().decode([ProfileRow].self, from: data)) ?? []
+    }
+}
+
+extension DiscoverRoute {
+    /// Rows saved before Discover v2. Their stored km/time weren't road estimates, so they're dropped.
+    init(legacy e: SavedRouteEntity) {
+        let pairs = (try? JSONSerialization.jsonObject(with: Data(e.coordsJSON.utf8))) as? [[Double]] ?? []
+        self.init(id: e.id, title: e.title, summary: e.blurb,
+                  start: RouteStop(name: e.startPlace.isEmpty ? e.from : e.startPlace, coord: Coord(lat: e.startLat, lon: e.startLon)),
+                  end: RouteStop(name: e.finishPlace.isEmpty ? e.to : e.finishPlace, coord: Coord(lat: e.endLat, lon: e.endLon)),
+                  geometry: pairs.compactMap { $0.count == 2 ? Coord(lat: $0[0], lon: $0[1]) : nil },
+                  source: "legacy")
+    }
+}
+
+extension DiscoverPlace {
+    /// Fallback decoder if a saved place row has empty or corrupt payloadJSON.
+    init?(legacy e: SavedRouteEntity) {
+        guard e.id.hasPrefix(Self.savedPrefix) else { return nil }
+        let rawId = String(e.id.dropFirst(Self.savedPrefix.count))
+        let name = e.title.isEmpty ? (e.startPlace.isEmpty ? e.from : e.startPlace) : e.title
+        guard !name.isEmpty || !rawId.isEmpty else { return nil }
+        let cat = PlaceCategory(rawValue: e.categoriesRaw) ?? .viewpoint
+        self.init(
+            id: rawId.isEmpty ? e.id : rawId,
+            name: name.isEmpty ? "Saved Place" : name,
+            region: e.from,
+            category: cat,
+            coord: Coord(lat: e.startLat, lon: e.startLon),
+            summary: e.blurb,
+            source: "legacy"
+        )
     }
 }

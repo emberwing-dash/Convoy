@@ -3,7 +3,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var app
-    @State private var showLaunchSplash = true
+    @State private var showLaunchSplash = !ProcessInfo.processInfo.arguments.contains("-pushRoute") && !ProcessInfo.processInfo.arguments.contains("-initialTabDiscover")
 
     var body: some View {
         Group {
