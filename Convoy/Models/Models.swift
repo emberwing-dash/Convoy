@@ -29,13 +29,21 @@ struct Ride: Identifiable, Hashable {
     var lockText: String
     var ridersGoing: Int
     var listMeta: String
+    var code: String
     var media: [RideMediaItem] = []
+
+    static func generateUniqueCode() -> String {
+        // 32 unambiguous characters (no 0/O or 1/I confusion)
+        let chars = Array("23456789ABCDEFGHJKLMNPQRSTUVWXYZ")
+        return String((0..<6).compactMap { _ in chars.randomElement() })
+    }
 
     init(id: UUID = UUID(), title: String, place: String, subtitle: String,
          tag: String, departs: Date, riders: [Rider], plan: PlanDraft = PlanDraft(),
          distance: String, duration: String, displayDate: String, displayTime: String,
          organiser: String = "you", rsvp: RSVP = .organizing, whenTag: String? = nil,
-         lockText: String = "Start ride", ridersGoing: Int = 1, listMeta: String = "") {
+         lockText: String = "Start ride", ridersGoing: Int = 1, listMeta: String = "",
+         code: String? = nil, media: [RideMediaItem] = []) {
         self.id = id
         self.title = title
         self.place = place
@@ -54,13 +62,9 @@ struct Ride: Identifiable, Hashable {
         self.lockText = lockText
         self.ridersGoing = ridersGoing
         self.listMeta = listMeta
-    }
-
-    var code: String {
-        let cons = place.uppercased().filter { $0.isLetter && !"AEIOU".contains($0) }.prefix(3)
-        let h = Calendar.current.component(.hour, from: departs)
-        let h12 = h % 12 == 0 ? 12 : h % 12
-        return String(cons) + "\(h12)" + (h < 12 ? "AM" : "PM")
+        let trimmed = code?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.code = trimmed.isEmpty ? Self.generateUniqueCode() : trimmed.uppercased()
+        self.media = media
     }
 
     var daysAway: Int {
@@ -136,7 +140,8 @@ extension PersistedRideEntity {
             displayDate: displayDate, displayTime: displayTime,
             organiser: organiser, rsvp: .organizing,
             whenTag: nil, lockText: "Start ride",
-            ridersGoing: 1, listMeta: "\(distance) · \(fromLocation) → \(toLocation)"
+            ridersGoing: 1, listMeta: "\(distance) · \(fromLocation) → \(toLocation)",
+            code: code
         )
     }
 }

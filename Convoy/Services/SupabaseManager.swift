@@ -466,6 +466,71 @@ final class SupabaseManager {
     /// Throws if no ride exists with that code.
     enum RideJoinStatus { case alreadyMember, requestSent }
 
+    func fetchRideByCode(_ code: String, userId: UUID) async throws -> (Ride, RideMembershipStatus) {
+        let rows: [RideRow] = try await client.from("rides")
+            .select()
+            .eq("code", value: code.uppercased())
+            .execute()
+            .value
+
+        guard let row = rows.first else {
+            throw NSError(domain: "Convoy", code: 404,
+                          userInfo: [NSLocalizedDescriptionKey: "No ride with code \(code)"])
+        }
+
+        let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
+        let ride = row.toRide(members: members)
+
+        if row.organiser_id == userId {
+            return (ride, .isOrganiser)
+        }
+
+        let existing: [RideMemberRow] = try await client.from("ride_members")
+            .select()
+            .eq("ride_id", value: row.id)
+            .eq("user_id", value: userId)
+            .execute()
+            .value
+
+        if let current = existing.first {
+            if current.status == "accepted" {
+                return (ride, .accepted)
+            } else if current.status == "pending" {
+                return (ride, .pending)
+            }
+        }
+
+        return (ride, .notMember)
+    }
+
+    func requestToJoinRide(rideId: UUID, userId: UUID) async throws -> RideMembershipStatus {
+        let existing: [RideMemberRow] = try await client.from("ride_members")
+            .select()
+            .eq("ride_id", value: rideId)
+            .eq("user_id", value: userId)
+            .execute()
+            .value
+
+        if let current = existing.first {
+            if current.status == "accepted" {
+                return .accepted
+            }
+            if current.status == "declined" {
+                try await client.from("ride_members")
+                    .update(["status": "pending"])
+                    .eq("id", value: current.id)
+                    .execute()
+                return .pending
+            }
+            return .pending
+        }
+
+        let member = RideMemberInsert(ride_id: rideId, user_id: userId,
+                                      role: "rider", status: "pending")
+        try await client.from("ride_members").insert(member).execute()
+        return .pending
+    }
+
     func joinRideByCode(_ code: String, userId: UUID) async throws -> (Ride, RideJoinStatus) {
         let rows: [RideRow] = try await client.from("rides")
             .select()
@@ -915,7 +980,8 @@ extension RideRow {
             displayDate: display_date ?? "", displayTime: display_time ?? "",
             organiser: "host", rsvp: .going,
             lockText: "Start ride", ridersGoing: max(1, riders.count),
-            listMeta: "\(distance ?? "") · \(from_location ?? "") → \(to_location ?? "")"
+            listMeta: "\(distance ?? "") · \(from_location ?? "") → \(to_location ?? "")",
+            code: code
         )
     }
 }
