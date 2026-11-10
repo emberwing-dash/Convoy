@@ -13,139 +13,133 @@ struct RideDetailsView: View {
         }
     }
 
-    // MARK: - Main content
     private func content(ride: Ride) -> some View {
         let isRideDay = ride.daysAway == 0 || app.rideDay
         let solo = ride.isSolo
-        let invited = { if case .invited = ride.rsvp { return true } else { return false } }()
-        let organisedByYou = ride.organiser == "you"
+        let invited: Bool = { if case .invited = ride.rsvp { return true } else { return false } }()
+        let organisedByYou = ride.organiserId == app.backendUserId || ride.organiser == "you"
+        let canEdit = organisedByYou && !isRideDay
 
-        return DesignCanvas {
-            if let summary = ride.plan.selected {
-                RouteSnapshotView(
-                    coords: summary.coords,
-                    size: CGSize(width: 393, height: 290)
-                )
-                .frame(width: 393, height: 290)
-                .clipped()
-            } else {
-                LinearGradient(
-                    colors: [Color(hex: 0x2A2A2E), Color(hex: 0x0B0B0C)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-                .frame(width: 393, height: 290)
+        return ZStack(alignment: .top) {
+            CV.bg.ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    heroSection(ride: ride, isRideDay: isRideDay)
+
+                    VStack(spacing: 20) {
+                        stats(ride: ride)
+                        routeSection(ride: ride)
+                        RouteSummaryCard(draft: ride.plan, numberedStops: false)
+                        riders(ride: ride, solo: solo, isRideDay: isRideDay,
+                               organisedByYou: organisedByYou)
+                        cta(ride: ride, isRideDay: isRideDay, invited: invited)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6)
+                    .padding(.bottom, 40)
+                }
             }
+            .scrollIndicators(.hidden)
+
+            topButtons(ride: ride, canEdit: canEdit)
+        }
+        .navigationBarBackButtonHidden()
+        .toolbar(.hidden, for: .navigationBar)
+        .background(SwipeBackEnabler())
+    }
+
+    // MARK: - Hero (image + tag + title + subtitle, gradient fade)
+
+    private func heroSection(ride: Ride, isRideDay: Bool) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Group {
+                if let summary = ride.plan.selected {
+                    RouteSnapshotView(coords: summary.coords, size: CGSize(width: 393, height: 290))
+                } else {
+                    LinearGradient(
+                        colors: [Color(hex: 0x2A2A2E), Color(hex: 0x0B0B0C)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                }
+            }
+            .frame(height: 290)
+            .clipped()
 
             LinearGradient(
                 stops: [
-                    .init(color: CV.bg.opacity(0), location: 0.45),
+                    .init(color: .clear, location: 0.45),
                     .init(color: CV.bg, location: 1),
                 ],
                 startPoint: .top, endPoint: .bottom
             )
-            .frame(width: 393, height: 292)
             .allowsHitTesting(false)
 
-            Circle().fill(Color.black.opacity(0.35)).frame(width: 44, height: 44)
-                .overlay(Image(systemName: "chevron.left")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(CV.cream))
-                .onTapGesture { app.pop() }
-                .at(20, 58)
-
-            ShareLink(item: "Join my ride on Convoy: convoy.app/r/\(ride.code)") {
-                Circle().fill(Color.black.opacity(0.35)).frame(width: 44, height: 44)
-                    .overlay(Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(CV.cream))
-            }
-            .at(329, 58)
-
-            tag(ride: ride, isRideDay: isRideDay).at(20, 184)
-
-            Text(ride.title)
-                .cvText(26, .bold, tracking: -0.52, inter: true)
-                .lineLimit(2)
-                .frame(width: 353, alignment: .leading)
-                .at(20, 218)
-
-            HStack(spacing: 6) {
-                Image(systemName: "mappin.circle.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(CV.red)
-                Text(ride.subtitle)
-                    .cvText(14, .medium, color: CV.cream.opacity(0.75), inter: true)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .clipped()
-            }
-            .at(20, 258)
-
-            stats(ride: ride).at(20, 290)
-
-            Text("Route").cvText(17, .semibold, inter: true).at(20, 378)
-            Text(ride.plan.style.rawValue)
-                .cvText(13, .semibold, color: CV.red, inter: true)
-                .frame(width: 100, alignment: .trailing)
-                .at(273, 380)
-
-            Group {
-                if let r = ride.plan.selected {
-                    RouteSnapshotView(coords: r.coords, size: CGSize(width: 353, height: 120))
-                } else {
-                    Rectangle().fill(Color(hex: 0x101013))
+            VStack(alignment: .leading, spacing: 8) {
+                tag(ride: ride, isRideDay: isRideDay)
+                Text(ride.title)
+                    .cvText(26, .bold, tracking: -0.52, inter: true)
+                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(CV.red)
+                    Text(ride.subtitle)
+                        .cvText(14, .medium, color: CV.cream.opacity(0.75), inter: true)
+                        .lineLimit(1)
                 }
             }
-            .frame(width: 353, height: 120)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-            .at(20, 408)
-
-            RouteSummaryCard(draft: ride.plan, numberedStops: false).at(20, 538)
-
-            riders(ride: ride, solo: solo, isRideDay: isRideDay,
-                   organisedByYou: organisedByYou).at(20, 688)
-
-            LinearGradient(colors: [CV.bg.opacity(0), CV.bg],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(width: 393, height: 120)
-                .at(0, 732)
-                .allowsHitTesting(false)
-
-            cta(ride: ride, isRideDay: isRideDay, invited: invited).at(20, 752)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
         }
-        .navigationBarBackButtonHidden()
-        .toolbar(.hidden, for: .navigationBar)
-        .background(SwipeBackEnabler())
+        .frame(height: 290)
     }
 
-    // MARK: - Not found
-
-    private var notFound: some View {
-        ZStack {
-            ContourBackdrop()
-            CircleBackButton { app.pop() }
-                .padding(.leading, 20).padding(.top, 4)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            VStack(spacing: 10) {
-                Image(systemName: "questionmark.circle")
-                    .font(.system(size: 30))
-                    .foregroundStyle(CV.cream.opacity(0.5))
-                Text("Ride not found")
-                    .cvText(18, .semibold, inter: true)
-                Text("This ride may have been completed or removed.")
-                    .cvText(13, color: CV.muted, inter: true)
-                    .multilineTextAlignment(.center)
+    private func topButtons(ride: Ride, canEdit: Bool) -> some View {
+        HStack(spacing: 10) {
+            Button { app.pop() } label: {
+                Circle().fill(Color.black.opacity(0.35))
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(CV.cream)
+                    )
             }
-            .padding(.horizontal, 40)
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            if canEdit {
+                Button { app.beginEditingRide(ride.id) } label: {
+                    Circle().fill(Color.black.opacity(0.35))
+                        .frame(width: 44, height: 44)
+                        .overlay(
+                            Image(systemName: "pencil")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(CV.cream)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Edit ride")
+            }
+
+            ShareLink(item: "Join my ride on Convoy: convoy://ride/\(ride.code)") {
+                Circle().fill(Color.black.opacity(0.35))
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(CV.cream)
+                    )
+            }
         }
-        .navigationBarBackButtonHidden()
-        .toolbar(.hidden, for: .navigationBar)
-        .background(SwipeBackEnabler())
+        .padding(.horizontal, 20)
+        .safeAreaPadding(.top)
+        .padding(.top, 4)
     }
 
-    // MARK: - Subviews
+    // MARK: - Sub-sections
 
     private func tag(ride: Ride, isRideDay: Bool) -> some View {
         let fallback = "In \(ride.daysAway) day\(ride.daysAway == 1 ? "" : "s")"
@@ -166,7 +160,8 @@ struct RideDetailsView: View {
             statCell(ride.displayDate.replacingOccurrences(of: ",", with: ""),
                      "\(ride.displayTime) start")
         }
-        .frame(width: 353, height: 68)
+        .frame(maxWidth: .infinity)
+        .frame(height: 68)
         .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
             .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
@@ -181,6 +176,30 @@ struct RideDetailsView: View {
             Text(l).cvText(12, color: CV.cream.opacity(0.45), inter: true)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func routeSection(ride: Ride) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Route").cvText(17, .semibold, inter: true)
+                Spacer()
+                Text(ride.plan.style.rawValue)
+                    .cvText(13, .semibold, color: CV.red, inter: true)
+            }
+
+            Group {
+                if let r = ride.plan.selected {
+                    RouteSnapshotView(coords: r.coords, size: CGSize(width: 353, height: 120))
+                } else {
+                    Rectangle().fill(Color(hex: 0x101013))
+                }
+            }
+            .frame(height: 120)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+        }
     }
 
     private func riders(ride: Ride, solo: Bool, isRideDay: Bool,
@@ -222,7 +241,7 @@ struct RideDetailsView: View {
             }
             .buttonStyle(.plain)
         }
-        .frame(width: 353, height: 52)
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -235,7 +254,8 @@ struct RideDetailsView: View {
                         .cvText(17, .semibold, color: CV.ink, tracking: -0.17, inter: true)
                 }
                 .foregroundStyle(CV.ink)
-                .frame(width: 353, height: 56)
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
                 .background(CV.cream, in: Capsule())
             }
             .buttonStyle(.plain)
@@ -253,10 +273,36 @@ struct RideDetailsView: View {
                         .cvText(15, .semibold, color: CV.cream.opacity(0.5), inter: true)
                 }
                 .foregroundStyle(CV.cream.opacity(0.5))
-                .frame(width: 353, height: 56)
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
                 .background(Color.white.opacity(0.1), in: Capsule())
             }
             .buttonStyle(.plain)
         }
+    }
+
+    // MARK: - Not found
+
+    private var notFound: some View {
+        ZStack {
+            ContourBackdrop()
+            CircleBackButton { app.pop() }
+                .padding(.leading, 20).padding(.top, 4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            VStack(spacing: 10) {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 30))
+                    .foregroundStyle(CV.cream.opacity(0.5))
+                Text("Ride not found")
+                    .cvText(18, .semibold, inter: true)
+                Text("This ride may have been completed or removed.")
+                    .cvText(13, color: CV.muted, inter: true)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 40)
+        }
+        .navigationBarBackButtonHidden()
+        .toolbar(.hidden, for: .navigationBar)
+        .background(SwipeBackEnabler())
     }
 }

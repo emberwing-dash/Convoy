@@ -1,6 +1,7 @@
 {
-  "colors" : [
+  "images" : [
     {
+      "filename" : "dm_key.jpg",
       "idiom" : "universal"
     }
   ],

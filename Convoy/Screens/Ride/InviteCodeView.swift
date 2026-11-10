@@ -6,9 +6,11 @@ struct InviteCodeView: View {
     @State private var copied = false
 
     private var ride: Ride? { app.upcomingRide }
+
+    /// Uses `convoy://` so taps open the app. Swap to https:// when Universal Links are ready.
     private var link: String {
-        guard let ride else { return "convoy.app" }
-        return "convoy.app/r/\(ride.code.lowercased())"
+        guard let ride else { return "convoy://ride" }
+        return "convoy://ride/\(ride.code.lowercased())"
     }
 
     var body: some View {
@@ -63,8 +65,7 @@ struct InviteCodeView: View {
                         .cvText(13, color: CV.muted, inter: true)
                         .multilineTextAlignment(.center)
                 }
-                .frame(width: 353)
-                .at(20, 360)
+                .frame(width: 353).at(20, 360)
             }
         }
         .navigationBarBackButtonHidden()
@@ -84,8 +85,7 @@ struct InviteCodeView: View {
                 Text("\(ride.departs.formatted(.dateTime.weekday(.abbreviated))) · \(ride.displayTime) · \(ride.place)")
                     .cvText(11, .semibold, inter: true)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 10).padding(.vertical, 5)
             .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .offset(x: 157, y: 12)
 

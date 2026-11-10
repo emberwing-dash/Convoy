@@ -57,7 +57,13 @@ struct MainShell: View {
                 case .planCreated:        PlanCreatedView()
                 case .notifications:      NotificationView()
                 case .userSearch(let ctx): UserSearchView(context: ctx)
+                case .chatbot:            ChatbotView()
                 case .placeholder(let t): PlaceholderScreen(title: t, canPop: true)
+                }
+            }
+            .onChange(of: app.path.isEmpty) { _, isEmpty in
+                if isEmpty {
+                    Task { await app.refreshEverything(force: true) }
                 }
             }
         }
@@ -75,9 +81,7 @@ struct PlaceholderScreen: View {
                 .cvText(24, .semibold)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if canPop {
-                CircleBackButton { app.pop() }
-                    .padding(.leading, 20)
-                    .padding(.top, 4)
+                CircleBackButton { app.pop() }.padding(.leading, 20).padding(.top, 4)
             }
         }
         .navigationBarBackButtonHidden()

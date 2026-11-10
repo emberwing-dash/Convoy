@@ -1,4 +1,4 @@
-// JoinViews.swift
+// JoinCodeView.swift
 import SwiftUI
 
 struct JoinCodeView: View {
@@ -8,6 +8,7 @@ struct JoinCodeView: View {
     @State private var successMessage: String?
     @State private var isSubmitting = false
     @FocusState private var focused: Bool
+    @State private var pollingTask: Task<Void, Never>? = nil
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -18,28 +19,22 @@ struct JoinCodeView: View {
                         .cvText(30, .bold, color: Color(hex: 0xF5EDDE), inter: true)
                         .padding(.top, 64)
                     Text("Enter the 6-character code the organiser shared.\nYou'll see the ride before you join.")
-                        .cvText(15, color: CV.muted, inter: true)
-                        .padding(.top, 6)
-
+                        .cvText(15, color: CV.muted, inter: true).padding(.top, 6)
                     boxes.padding(.top, 36)
-
                     if let errorMessage {
-                        Text(errorMessage)
-                            .cvText(12, color: CV.red, inter: true)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 14)
+                        Text(errorMessage).cvText(12, color: CV.red, inter: true)
+                            .frame(maxWidth: .infinity).padding(.top, 14)
                     } else if let successMessage {
-                        Text(successMessage)
-                            .cvText(12, color: CV.green, inter: true)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 14)
+                        HStack(spacing: 8) {
+                            ProgressView().tint(CV.green).scaleEffect(0.7)
+                            Text(successMessage).cvText(12, color: CV.green, inter: true)
+                        }
+                        .frame(maxWidth: .infinity).padding(.top, 14)
                     } else {
                         Text("Codes look like ABC123 · not case sensitive")
                             .cvText(12, color: CV.muted, inter: true)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 14)
+                            .frame(maxWidth: .infinity).padding(.top, 14)
                     }
-
                     HStack(spacing: 15) {
                         Button { paste() } label: {
                             Text("Paste from clipboard")
@@ -57,15 +52,11 @@ struct JoinCodeView: View {
                             .background(Color(hex: 0x1C1C1F), in: Capsule())
                             .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                         }
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 22)
+                    }.buttonStyle(.plain).padding(.top, 22)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
+                .padding(.horizontal, 24).padding(.bottom, 24)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively).scrollIndicators(.hidden)
 
             CircleBackButton { app.pop() }
                 .padding(.leading, 20).padding(.top, 4)
@@ -76,13 +67,11 @@ struct JoinCodeView: View {
                 .keyboardType(.asciiCapable)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
-                .opacity(0.01)
-                .frame(width: 1, height: 1)
+                .opacity(0.01).frame(width: 1, height: 1)
                 .onChange(of: code) { _, v in
                     let f = String(v.uppercased().filter { $0.isLetter || $0.isNumber }.prefix(6))
                     if f != v { code = f }
-                    errorMessage = nil
-                    successMessage = nil
+                    errorMessage = nil; successMessage = nil
                 }
         }
         .safeAreaInset(edge: .bottom) {
@@ -92,8 +81,7 @@ struct JoinCodeView: View {
                         .frame(maxWidth: .infinity).frame(height: 50)
                         .background(CV.cream, in: Capsule())
                 } else {
-                    Text("Find ride")
-                        .cvText(17, .semibold, color: CV.ink, inter: true)
+                    Text("Find ride").cvText(17, .semibold, color: CV.ink, inter: true)
                         .frame(maxWidth: .infinity).frame(height: 50)
                         .background(CV.cream, in: Capsule())
                 }
@@ -101,13 +89,12 @@ struct JoinCodeView: View {
             .buttonStyle(.plain)
             .opacity(code.count == 6 ? 1 : 0.4)
             .disabled(code.count != 6 || isSubmitting)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            .padding(.horizontal, 16).padding(.bottom, 8)
         }
-        .navigationBarBackButtonHidden()
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
         .onAppear { focused = true }
+        .onDisappear { pollingTask?.cancel(); pollingTask = nil }
     }
 
     private var boxes: some View {
@@ -145,8 +132,7 @@ struct JoinCodeView: View {
         guard code.count == 6 else { return }
         isSubmitting = true
         defer { isSubmitting = false }
-        errorMessage = nil
-        successMessage = nil
+        errorMessage = nil; successMessage = nil
 
         switch await app.joinRideByCode(code) {
         case .joined(let rideId):
@@ -157,19 +143,39 @@ struct JoinCodeView: View {
 
         case .requestPending:
             focused = false
-            successMessage = "Request sent. You'll see the ride once the organiser accepts."
+            successMessage = "Request sent. Waiting for the organiser…"
+            startPollingForApproval()
 
         case .failed:
             errorMessage = "No ride found for that code."
         }
     }
+
+    /// Poll every 5 seconds for up to 5 minutes. If the organiser accepts,
+    /// navigate straight to the ride. Otherwise let the user pull-to-refresh Home.
+    private func startPollingForApproval() {
+        pollingTask?.cancel()
+        pollingTask = Task {
+            for _ in 0..<60 {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                await app.refreshRides(force: true)
+                if let joined = app.rides.first(where: { $0.code.uppercased() == code.uppercased() }) {
+                    await MainActor.run {
+                        app.popToRoot()
+                        app.tab = .ride
+                        app.push(.rideDetails(joined.id))
+                    }
+                    return
+                }
+            }
+        }
+    }
 }
 
-// MARK: - JoinFoundView (kept for backward compat, unused after JoinCodeView pushes rideDetails directly)
-
+// JoinFoundView preserved for compatibility
 struct JoinFoundView: View {
     @Environment(AppState.self) private var app
-
     private var ride: Ride? {
         guard let id = app.lastJoinedRideID else { return nil }
         return app.rides.first { $0.id == id }
@@ -179,84 +185,34 @@ struct JoinFoundView: View {
         DesignCanvas {
             ContourBackdrop()
             CircleBackButton { app.pop() }.at(20, 58)
-
             if let ride {
-                Text("Ride found")
-                    .cvText(13, .semibold, color: CV.red, inter: true)
-                    .at(24, 120)
-
-                Text(ride.title)
-                    .cvText(28, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.4, inter: true)
-                    .lineLimit(2)
-                    .frame(width: 345, alignment: .leading)
-                    .at(24, 142)
-
-                Text(ride.subtitle)
-                    .cvText(14, color: CV.muted, inter: true)
-                    .frame(width: 345, alignment: .leading)
-                    .at(24, 196)
-
+                Text("Ride found").cvText(13, .semibold, color: CV.red, inter: true).at(24, 120)
+                Text(ride.title).cvText(28, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.4, inter: true)
+                    .lineLimit(2).frame(width: 345, alignment: .leading).at(24, 142)
+                Text(ride.subtitle).cvText(14, color: CV.muted, inter: true)
+                    .frame(width: 345, alignment: .leading).at(24, 196)
                 if let summary = ride.plan.selected {
-                    RouteSnapshotView(
-                        coords: summary.coords,
-                        size: CGSize(width: 345, height: 160),
-                        corner: 20
-                    )
-                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-                    .at(24, 232)
+                    RouteSnapshotView(coords: summary.coords, size: CGSize(width: 345, height: 160), corner: 20)
+                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                        .at(24, 232)
                 }
-
-                HStack(spacing: 0) {
-                    stat(ride.displayDate, "Date")
-                    stat(ride.displayTime, "Start")
-                    stat(ride.distance, "Distance")
-                }
-                .frame(width: 345, height: 72)
-                .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
-                .at(24, 410)
-
                 Button {
-                    app.popToRoot()
-                    app.tab = .ride
-                    app.push(.rideDetails(ride.id))
+                    app.popToRoot(); app.tab = .ride; app.push(.rideDetails(ride.id))
                 } label: {
-                    Text("View ride")
-                        .cvText(15, .semibold, color: CV.ink, inter: true)
-                        .frame(width: 345, height: 52)
-                        .background(Color(hex: 0xF5EDDE), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .at(24, 720)
+                    Text("View ride").cvText(15, .semibold, color: CV.ink, inter: true)
+                        .frame(width: 345, height: 52).background(Color(hex: 0xF5EDDE), in: Capsule())
+                }.buttonStyle(.plain).at(24, 720)
             } else {
                 VStack(spacing: 10) {
-                    Image(systemName: "questionmark.circle")
-                        .font(.system(size: 30))
+                    Image(systemName: "questionmark.circle").font(.system(size: 30))
                         .foregroundStyle(CV.cream.opacity(0.5))
-                    Text("No ride with that code")
-                        .cvText(17, .semibold, inter: true)
-                    Text("Ask your friend for the code again.")
-                        .cvText(14, color: CV.muted, inter: true)
-                }
-                .frame(width: 353)
-                .at(20, 380)
+                    Text("No ride with that code").cvText(17, .semibold, inter: true)
+                    Text("Ask your friend for the code again.").cvText(14, color: CV.muted, inter: true)
+                }.frame(width: 353).at(20, 380)
             }
         }
-        .navigationBarBackButtonHidden()
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
-    }
-
-    private func stat(_ v: String, _ l: String) -> some View {
-        VStack(spacing: 5) {
-            Text(v)
-                .cvText(16, .bold, color: Color(hex: 0xF5EDDE), inter: true)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(l).cvText(12, color: CV.muted, inter: true)
-        }
-        .frame(maxWidth: .infinity)
     }
 }

@@ -24,6 +24,7 @@ struct Ride: Identifiable, Hashable {
     var displayDate: String
     var displayTime: String
     var organiser: String
+    var organiserId: UUID?
     var rsvp: RSVP
     var whenTag: String?
     var lockText: String
@@ -34,7 +35,8 @@ struct Ride: Identifiable, Hashable {
     init(id: UUID = UUID(), title: String, place: String, subtitle: String,
          tag: String, departs: Date, riders: [Rider], plan: PlanDraft = PlanDraft(),
          distance: String, duration: String, displayDate: String, displayTime: String,
-         organiser: String = "you", rsvp: RSVP = .organizing, whenTag: String? = nil,
+         organiser: String = "you", organiserId: UUID? = nil, rsvp: RSVP = .organizing,
+         whenTag: String? = nil,
          lockText: String = "Start ride", ridersGoing: Int = 1, listMeta: String = "") {
         self.id = id
         self.title = title
@@ -49,6 +51,7 @@ struct Ride: Identifiable, Hashable {
         self.displayDate = displayDate
         self.displayTime = displayTime
         self.organiser = organiser
+        self.organiserId = organiserId
         self.rsvp = rsvp
         self.whenTag = whenTag
         self.lockText = lockText
@@ -112,7 +115,6 @@ extension PersistedRideEntity {
             plan.endCoord = Coord(lat: endLat, lon: endLon)
         }
 
-        // ✅ Restore the polyline so the map thumbnail survives relaunch
         if let data = routeCoordsJSON.data(using: .utf8),
            let pairs = try? JSONSerialization.jsonObject(with: data) as? [[Double]] {
             let coords: [Coord] = pairs.compactMap { pair in
