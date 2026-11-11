@@ -1,465 +1,253 @@
 // ChatTools.swift
 import Foundation
+import MapKit
 
-/// Tool schemas exposed to Groq + the dispatcher that runs each tool against
-/// the app's existing AppState / SupabaseManager / DiscoverStore methods.
-///
-/// Two categories:
-///   - Read-only / navigate → executed immediately, result fed back to model
-///   - Write → produces a confirmation card; execution deferred until user taps Confirm
 enum ChatTools {
+    static let allToolNames: [String] = [
+        "search_places", "search_routes", "list_my_rides", "list_my_crews", "list_my_friends",
+        "suggest_checkpoints", "begin_ride_planning", "set_ride_companions", "set_ride_start",
+        "set_ride_checkpoints", "set_ride_time", "finalize_ride_plan",
+        "join_ride", "send_friend_request", "create_crew", "invite_to_crew"
+    ]
 
-    // MARK: - Schemas sent to Groq
+    static let writeTools: Set<String> = [
+        "join_ride", "send_friend_request", "create_crew", "invite_to_crew", "finalize_ride_plan"
+    ]
+
+    static func requiresConfirmation(_ name: String) -> Bool { writeTools.contains(name) }
+    static func isNavigating(_ name: String) -> Bool { name == "finalize_ride_plan" }
 
     static let schemas: [[String: Any]] = [
-        searchPlacesSchema,
-        searchRoutesSchema,
-        listMyRidesSchema,
-        listMyCrewsSchema,
-        findUserSchema,
-        planRideSchema,
-        joinRideSchema,
-        sendFriendRequestSchema,
-        createCrewSchema,
-        inviteToCrewSchema
+        searchPlacesSchema, searchRoutesSchema, listMyRidesSchema, listMyCrewsSchema, listFriendsSchema,
+        findUserSchema, suggestCheckpointsSchema,
+        beginRideSchema, setCompanionsSchema, setStartSchema,
+        setCheckpointsSchema, setTimeSchema, finalizeRideSchema,
+        joinRideSchema, sendFriendSchema, createCrewSchema, inviteToCrewSchema
     ]
 
-    private static let searchPlacesSchema: [String: Any] = [
-        "type": "function",
-        "function": [
-            "name": "search_places",
-            "description": "Find places to ride to — lakes, waterfalls, viewpoints, beaches, cafes, hill roads, hill stations, historical sites. Can filter by category or search by name/region.",
-            "parameters": [
-                "type": "object",
-                "properties": [
-                    "query": ["type": "string", "description": "Free-text search (place name or region). Optional."],
-                    "category": [
-                        "type": "string",
-                        "enum": ["lake", "waterfall", "viewpoint", "beach", "forest", "cafe", "historical", "hillRoad", "hillStation", "waterfront"],
-                        "description": "Restrict results to one category. Optional."
-                    ]
-                ]
-            ]
-        ]
-    ]
-
-    private static let searchRoutesSchema: [String: Any] = [
-        "type": "function",
-        "function": [
-            "name": "search_routes",
-            "description": "Find curated motorcycle routes. Useful when the user asks for route ideas or rides in a region.",
-            "parameters": [
-                "type": "object",
-                "properties": [
-                    "query": ["type": "string", "description": "Free-text search across route titles, regions, tags. Optional."]
-                ]
-            ]
-        ]
-    ]
-
-    private static let listMyRidesSchema: [String: Any] = [
-        "type": "function",
-        "function": [
-            "name": "list_my_rides",
-            "description": "List the rides the current user is going on (accepted memberships). Returns title, date, time, place.",
-            "parameters": ["type": "object", "properties": [:]]
-        ]
-    ]
-
-    private static let listMyCrewsSchema: [String: Any] = [
-        "type": "function",
-        "function": [
-            "name": "list_my_crews",
-            "description": "List the crews (groups) the user belongs to with member counts.",
-            "parameters": ["type": "object", "properties": [:]]
-        ]
-    ]
-
-    private static let findUserSchema: [String: Any] = [
-        "type": "function",
-        "function": [
-            "name": "find_user",
-            "description": "Look up a Convoy user by their @handle. Always use this before referring to a user by name.",
-            "parameters": [
-                "type": "object",
-                "properties": [
-                    "username": ["type": "string", "description": "The handle without @ prefix."]
-                ],
-                "required": ["username"]
-            ]
-        ]
-    ]
-
-    private static let planRideSchema: [String: Any] = [
-        "type": "function",
-        "function": [
-            "name": "plan_ride",
-            "description": "Open the ride planner with this destination pre-filled. The user reviews and confirms in the planner. Use whenever the user wants to plan or create a ride.",
-            "parameters": [
-                "type": "object",
-                "properties": [
-                    "destination": ["type": "string", "description": "Where the ride ends. City, place, or address — the planner will geocode it."],
-                    "from": ["type": "string", "description": "Where the ride starts. Optional; uses the user's Discover origin if not provided."],
-                    "stops": ["type": "array", "items": ["type": "string"], "description": "Intermediate stop names, in order. Optional."],
-                    "title": ["type": "string", "description": "Optional ride title. Defaults to 'Ride to <destination>'."]
-                ],
-                "required": ["destination"]
-            ]
-        ]
-    ]
-
-    private static let joinRideSchema: [String: Any] = [
-        "type": "function",
-        "function": [
-            "name": "join_ride",
-            "description": "Join a ride using its 6-character code. Sends a join request; the organiser approves.",
-            "parameters": [
-                "type": "object",
-                "properties": [
-                    "code": ["type": "string", "description": "The 6-character ride code."]
-                ],
-                "required": ["code"]
-            ]
-        ]
-    ]
-
-    private static let sendFriendRequestSchema: [String: Any] = [
-        "type": "function",
-        "function": [
-            "name": "send_friend_request",
-            "description": "Send a friend request to another Convoy user by @handle.",
-            "parameters": [
-                "type": "object",
-                "properties": [
-                    "username": ["type": "string", "description": "The handle without @ prefix."]
-                ],
-                "required": ["username"]
-            ]
-        ]
-    ]
-
-    private static let createCrewSchema: [String: Any] = [
-        "type": "function",
-        "function": [
-            "name": "create_crew",
-            "description": "Create a new crew (group of riders). The user becomes admin.",
-            "parameters": [
-                "type": "object",
-                "properties": [
-                    "name": ["type": "string", "description": "Crew name, e.g. 'Weekend Riders'."]
-                ],
-                "required": ["name"]
-            ]
-        ]
-    ]
-
-    private static let inviteToCrewSchema: [String: Any] = [
-        "type": "function",
-        "function": [
-            "name": "invite_to_crew",
-            "description": "Invite a Convoy user to one of the caller's crews. Both must be identified.",
-            "parameters": [
-                "type": "object",
-                "properties": [
-                    "crew_name": ["type": "string", "description": "Exact crew name, from list_my_crews."],
-                    "username": ["type": "string", "description": "Handle without @ prefix."]
-                ],
-                "required": ["crew_name", "username"]
-            ]
-        ]
-    ]
-
-    // MARK: - Classification
-
-    private static let writeTools: Set<String> = [
-        "join_ride", "send_friend_request", "create_crew", "invite_to_crew",
-        "plan_ride"
-    ]
-
-    /// True if this tool must be confirmed by the user before running.
-    static func requiresConfirmation(_ name: String) -> Bool {
-        writeTools.contains(name)
+    private static func fn(_ name: String, _ desc: String, _ props: [String: Any] = [:], _ required: [String] = []) -> [String: Any] {
+        ["type": "function", "function": ["name": name, "description": desc, "parameters": ["type": "object", "properties": props, "required": required]]]
     }
 
-    /// When confirmed, does this tool navigate away (closing chat) instead of writing?
-    static func isNavigating(_ name: String) -> Bool {
-        name == "plan_ride"
-    }
+    private static let searchPlacesSchema = fn("search_places", "Find places to ride to. Filter by category or search by name.", ["query": ["type": "string"], "category": ["type": "string", "enum": ["lake","waterfall","viewpoint","beach","forest","cafe","historical","hillRoad","hillStation","waterfront"]]])
+    private static let searchRoutesSchema = fn("search_routes", "Find curated routes.", ["query": ["type": "string"]])
+    private static let listMyRidesSchema = fn("list_my_rides", "List the current user's accepted upcoming rides.")
+    private static let listMyCrewsSchema = fn("list_my_crews", "List crews the current user belongs to.")
+    private static let listFriendsSchema = fn("list_my_friends", "List the user's friends (name and handle).")
+    private static let findUserSchema = fn("find_user", "Look up a Convoy user by @handle.", ["username": ["type": "string"]], ["username"])
+    
+    private static let suggestCheckpointsSchema = fn("suggest_checkpoints", "Suggest real cafes or scenic stops along the route between start and destination.", ["start": ["type": "string"], "destination": ["type": "string"], "category": ["type": "string", "enum": ["cafe", "viewpoint", "restaurant", "waterfall"]]], ["start", "destination", "category"])
 
-    // MARK: - Confirmation card content
+    private static let beginRideSchema = fn("begin_ride_planning", "Start a new ride-planning session.", ["destination": ["type": "string"]], ["destination"])
+    private static let setCompanionsSchema = fn("set_ride_companions", "Record who's riding.", ["crew_name": ["type": "string"], "friend_usernames": ["type": "array", "items": ["type": "string"]], "solo": ["type": "boolean"]])
+    private static let setStartSchema = fn("set_ride_start", "Record the starting point.", ["location": ["type": "string"], "use_current_location": ["type": "boolean"]], ["location"])
+    private static let setCheckpointsSchema = fn("set_ride_checkpoints", "Record chosen intermediate stops.", ["checkpoints": ["type": "array", "items": ["type": "string"]]], ["checkpoints"])
+    private static let setTimeSchema = fn("set_ride_time", "Record start time. Must be ISO8601 (e.g. 2026-11-15T07:00:00+05:30).", ["iso8601": ["type": "string"]], ["iso8601"])
+    private static let finalizeRideSchema = fn("finalize_ride_plan", "Call ONLY after all details are set. Calculates route and opens review screen.")
 
+    private static let joinRideSchema = fn("join_ride", "Join a ride by 6-character code.", ["code": ["type": "string"]], ["code"])
+    private static let sendFriendSchema = fn("send_friend_request", "Send a friend request.", ["username": ["type": "string"]], ["username"])
+    private static let createCrewSchema = fn("create_crew", "Create a new crew.", ["name": ["type": "string"]], ["name"])
+    private static let inviteToCrewSchema = fn("invite_to_crew", "Invite a user to a crew.", ["crew_name": ["type": "string"], "username": ["type": "string"]], ["crew_name", "username"])
+
+    // MARK: - Confirmation UI
     static func confirmationTitle(_ name: String, _ args: [String: Any]) -> String {
         switch name {
-        case "join_ride":            return "Join this ride?"
-        case "send_friend_request":  return "Send friend request?"
-        case "create_crew":          return "Create this crew?"
-        case "invite_to_crew":       return "Invite to crew?"
-        case "plan_ride":            return "Open ride planner?"
-        default:                     return "Confirm action"
+        case "join_ride": return "Join this ride?"
+        case "send_friend_request": return "Send friend request?"
+        case "create_crew": return "Create this crew?"
+        case "invite_to_crew": return "Invite to crew?"
+        case "finalize_ride_plan": return "Open ride review?"
+        default: return "Confirm action"
         }
     }
 
-    static func confirmationDetail(_ name: String, _ args: [String: Any]) -> String {
+    static func confirmationDetail(_ name: String, _ args: [String: Any], _ engine: ChatbotEngine) -> String {
         switch name {
-        case "join_ride":
-            return "Code: \(args["code"] as? String ?? "—")"
-        case "send_friend_request":
-            return "to @\(args["username"] as? String ?? "—")"
-        case "create_crew":
-            return "\"\(args["name"] as? String ?? "—")\""
-        case "invite_to_crew":
-            return "@\(args["username"] as? String ?? "—") → \"\(args["crew_name"] as? String ?? "—")\""
-        case "plan_ride":
-            let to = args["destination"] as? String ?? "—"
-            let from = args["from"] as? String ?? ""
-            let stops = (args["stops"] as? [String]) ?? []
-            var detail = from.isEmpty ? "to \(to)" : "\(from) → \(to)"
-            if !stops.isEmpty { detail += " · \(stops.count) stop\(stops.count == 1 ? "" : "s")" }
-            return detail
-        default:
-            return ""
+        case "join_ride": return "Code: \(args["code"] as? String ?? "—")"
+        case "send_friend_request": return "to @\(args["username"] as? String ?? "—")"
+        case "create_crew": return "\"\(args["name"] as? String ?? "—")\""
+        case "invite_to_crew": return "@\(args["username"] as? String ?? "—") → \"\(args["crew_name"] as? String ?? "—")\""
+        case "finalize_ride_plan":
+            let d = engine.rideDraft
+            var lines: [String] = []
+            if let dest = d.destination { lines.append("To: \(dest)") }
+            if let s = d.startLocation { lines.append("From: \(s)") }
+            if !d.checkpoints.isEmpty { lines.append("Stops: \(d.checkpoints.joined(separator: ", "))") }
+            if let when = d.scheduledAt { lines.append("When: \(when.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute()))") }
+            if let crew = d.crewName { lines.append("Crew: \(crew)") }
+            if !d.friendUsernames.isEmpty { lines.append("Friends: \(d.friendUsernames.map { "@\($0)" }.joined(separator: ", "))") }
+            return lines.joined(separator: " · ")
+        default: return ""
         }
     }
 
     static func statusLabel(_ name: String) -> String {
         switch name {
-        case "search_places":       return "Searching places…"
-        case "search_routes":       return "Searching routes…"
-        case "list_my_rides":       return "Looking up rides…"
-        case "list_my_crews":       return "Looking up crews…"
-        case "find_user":           return "Finding user…"
-        case "join_ride":           return "Joining ride…"
-        case "send_friend_request": return "Sending request…"
-        case "create_crew":         return "Creating crew…"
-        case "invite_to_crew":      return "Sending invite…"
-        default:                    return "Working…"
+        case "search_places": return "Searching places…"
+        case "list_my_friends": return "Checking friends…"
+        case "suggest_checkpoints": return "Searching MapKit…"
+        case "finalize_ride_plan": return "Calculating route…"
+        default: return "Working…"
         }
     }
 
     // MARK: - Execute
-
-    /// Executes a tool and returns a JSON-encoded string (Groq requires string content).
     @MainActor
-    static func execute(name: String, args: [String: Any], app: AppState) async -> String {
+    static func execute(name: String, args: [String: Any], app: AppState, engine: ChatbotEngine) async -> String {
         do {
             switch name {
             case "search_places":
-                let query = (args["query"] as? String)?.trimmingCharacters(in: .whitespaces)
-                let categoryStr = args["category"] as? String
-                let category = categoryStr.flatMap { PlaceCategory(rawValue: $0) }
-                return await searchPlaces(query: query, category: category)
-
+                return await searchPlaces(query: args["query"] as? String, category: (args["category"] as? String).flatMap(PlaceCategory.init(rawValue:)))
             case "search_routes":
-                let query = (args["query"] as? String)?.trimmingCharacters(in: .whitespaces)
-                return await searchRoutes(query: query)
-
+                return await searchRoutes(query: args["query"] as? String)
             case "list_my_rides":
                 await app.refreshRides(force: true)
-                let rides = app.rides.prefix(6).map { r -> [String: String] in
-                    [
-                        "title": r.title,
-                        "place": r.place,
-                        "date": r.displayDate,
-                        "time": r.displayTime,
-                        "organiser": r.organiser
-                    ]
-                }
-                if rides.isEmpty { return jsonEncode(["note": "No upcoming rides"]) }
-                return jsonEncode(["rides": Array(rides)])
-
+                return jsonEncode(app.rides.prefix(6).map { ["title": $0.title, "date": $0.displayDate] })
             case "list_my_crews":
                 await app.loadCrews(force: true)
-                let crews = app.crews.map { c -> [String: Any] in
-                    ["name": c.name, "member_count": c.memberCount, "code": c.code]
-                }
-                if crews.isEmpty { return jsonEncode(["note": "No crews yet"]) }
-                return jsonEncode(["crews": crews])
-
-            case "find_user":
-                let username = args["username"] as? String ?? ""
-                guard !username.isEmpty else { return jsonEncode(["error": "Missing username"]) }
-                if let p = try await SupabaseManager.shared.fetchProfile(username: username) {
-                    return jsonEncode([
-                        "user": [
-                            "username": p.username,
-                            "display_name": p.display_name
-                        ]
-                    ])
-                }
-                return jsonEncode(["error": "No user with @\(username)"])
-
-            case "plan_ride":
-                let destination = (args["destination"] as? String ?? "").trimmingCharacters(in: .whitespaces)
-                guard !destination.isEmpty else { return jsonEncode(["error": "Missing destination"]) }
-                let from = (args["from"] as? String) ?? ""
-                let stops = (args["stops"] as? [String]) ?? []
-                let title = args["title"] as? String
-                let seed = PlanSeed(
-                    name: title ?? "Ride to \(destination)",
-                    start: from,
-                    startCoord: nil,
-                    destination: destination,
-                    destinationCoord: nil,
-                    stops: stops.map { .init(name: $0, coord: nil) }
-                )
-                app.startPlan(seed)
-                // Atomically replace the nav stack: closes chat, opens planner.
-                app.path = [.planDetails]
-                return jsonEncode(["status": "opened_planner", "destination": destination])
-
-            case "join_ride":
-                let code = (args["code"] as? String ?? "").uppercased().trimmingCharacters(in: .whitespaces)
-                guard code.count == 6 else { return jsonEncode(["error": "Code must be 6 characters"]) }
-                let outcome = await app.joinRideByCode(code)
-                switch outcome {
-                case .joined(let id):
-                    await MainActor.run {
-                        app.tab = .ride
-                        app.popToRoot()
-                        app.push(.rideDetails(id))
-                    }
-                    return jsonEncode(["status": "joined", "note": "You're in. Check the Ride tab."])
-                case .requestPending:
-                    return jsonEncode(["status": "pending_approval",
-                                       "note": "Request sent. The organiser will approve shortly."])
-                case .failed:
-                    return jsonEncode(["error": "No ride found for code \(code)"])
-                }
-
-            case "send_friend_request":
-                let username = args["username"] as? String ?? ""
-                guard !username.isEmpty else { return jsonEncode(["error": "Missing username"]) }
-                let userId: UUID
-                if let existing = app.backendUserId {
-                    userId = existing
-                } else if let restored = await SupabaseManager.shared.getOrRestoreUserId() {
-                    userId = restored
-                } else {
-                    return jsonEncode(["error": "Not signed in"])
-                }
-                try await SupabaseManager.shared.sendFriendRequest(senderId: userId, receiverUsername: username)
+                return jsonEncode(app.crews.map { ["name": $0.name, "code": $0.code] })
+            case "list_my_friends":
                 await app.loadFriends(force: true)
-                return jsonEncode(["status": "sent", "to": username])
+                return jsonEncode(app.friends.map { ["name": $0.display_name, "handle": "@\($0.username)"] })
+            case "find_user":
+                let u = (args["username"] as? String ?? "").lowercased().replacingOccurrences(of: "@", with: "")
+                if let p = try await SupabaseManager.shared.fetchProfile(username: u) { return jsonEncode(["user": p.display_name, "handle": "@\(p.username)"]) }
+                return jsonEncode(["error": "No user found"])
+                
+            case "suggest_checkpoints":
+                return await suggestCheckpoints(
+                    start: args["start"] as? String ?? "",
+                    destination: args["destination"] as? String ?? "",
+                    category: args["category"] as? String ?? "cafe"
+                )
 
+            case "begin_ride_planning":
+                let dest = (args["destination"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+                engine.rideDraft = RidePlanDraft(destination: dest)
+                return jsonEncode(["status": "started", "missing": engine.rideDraft.missingFields, "hint": nextHint(engine.rideDraft)])
+                
+            case "set_ride_companions":
+                let crew = args["crew_name"] as? String
+                let friends = args["friend_usernames"] as? [String] ?? []
+                let solo = args["solo"] as? Bool ?? false
+                if solo { engine.rideDraft.crewName = nil; engine.rideDraft.friendUsernames = [] }
+                else { engine.rideDraft.crewName = crew; engine.rideDraft.friendUsernames = friends }
+                return jsonEncode(["status": "ok", "missing": engine.rideDraft.missingFields, "hint": nextHint(engine.rideDraft)])
+                
+            case "set_ride_start":
+                let loc = (args["location"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+                let useCurrent = args["use_current_location"] as? Bool ?? false
+                engine.rideDraft.startLocation = useCurrent ? "Current Location" : loc
+                return jsonEncode(["status": "ok", "missing": engine.rideDraft.missingFields, "hint": nextHint(engine.rideDraft)])
+                
+            case "set_ride_checkpoints":
+                engine.rideDraft.checkpoints = args["checkpoints"] as? [String] ?? []
+                return jsonEncode(["status": "ok", "missing": engine.rideDraft.missingFields, "hint": nextHint(engine.rideDraft)])
+                
+            case "set_ride_time":
+                let iso = args["iso8601"] as? String ?? ""
+                if let date = parseISO(iso), date > Date() { engine.rideDraft.scheduledAt = date; return jsonEncode(["status": "ok", "missing": engine.rideDraft.missingFields, "hint": nextHint(engine.rideDraft)]) }
+                return jsonEncode(["error": "Date must be in the future and ISO8601 format."])
+                
+            case "finalize_ride_plan":
+                guard engine.rideDraft.isComplete else { return jsonEncode(["error": "Missing fields. Ask user."]) }
+                let d = engine.rideDraft
+                
+                if let crewName = d.crewName, let crew = app.crews.first(where: { $0.name.lowercased() == crewName.lowercased() }) { app.selectedCrew = crew.id }
+                app.selectedFriends = Set(d.friendUsernames.filter { u in app.friends.contains { $0.username.lowercased() == u.lowercased() } })
+
+                let seed = PlanSeed(name: "Ride to \(d.destination ?? "")", start: d.startLocation ?? "", startCoord: nil, destination: d.destination ?? "", destinationCoord: nil, stops: d.checkpoints.map { .init(name: $0, coord: nil) })
+                
+                app.startPlan(seed)
+                if let when = d.scheduledAt { app.draft.starts = when }
+                
+                // ✅ Calculate route BEFORE navigating so map isn't a straight line
+                await app.findRoutes()
+                app.push(.planReview) // ✅ Jump to final review screen
+                
+                engine.rideDraft = RidePlanDraft()
+                return jsonEncode(["status": "opened_review"])
+
+            case "join_ride": return jsonEncode(["error": "Use manual flow"])
+            case "send_friend_request":
+                guard let u = await resolveUserId(app) else { return jsonEncode(["error": "Not signed in"]) }
+                try await SupabaseManager.shared.sendFriendRequest(senderId: u, receiverUsername: args["username"] as? String ?? "")
+                return jsonEncode(["status": "sent"])
             case "create_crew":
-                let crewName = (args["name"] as? String ?? "").trimmingCharacters(in: .whitespaces)
-                guard !crewName.isEmpty else { return jsonEncode(["error": "Missing crew name"]) }
-                let userId: UUID
-                if let existing = app.backendUserId {
-                    userId = existing
-                } else if let restored = await SupabaseManager.shared.getOrRestoreUserId() {
-                    userId = restored
-                } else {
-                    return jsonEncode(["error": "Not signed in"])
-                }
-                let code = CrewGroup.makeCode(name: crewName)
-                let crewId = try await SupabaseManager.shared.createCrew(
-                    name: crewName, code: code, creatorId: userId,
-                    memberIds: [], avatarData: nil
-                )
-                await app.loadCrews(force: true)
-                return jsonEncode([
-                    "status": "created",
-                    "name": crewName,
-                    "code": code,
-                    "id": crewId.uuidString
-                ])
-
+                guard let u = await resolveUserId(app) else { return jsonEncode(["error": "Not signed in"]) }
+                let name = args["name"] as? String ?? ""
+                do {
+                    _ = try await SupabaseManager.shared.createCrew(name: name, code: CrewGroup.makeCode(name: name), creatorId: u, memberIds: [], avatarData: nil)
+                    await app.loadCrews(force: true) // ✅ Refresh UI immediately
+                    return jsonEncode(["status": "created"])
+                } catch {
+                    print("🚨 [ChatTools] create_crew failed: \(error)") // ✅ Print actual error
+                    return jsonEncode(["error": error.localizedDescription])
+                } 
             case "invite_to_crew":
-                let crewName = (args["crew_name"] as? String ?? "").trimmingCharacters(in: .whitespaces)
-                let username = args["username"] as? String ?? ""
-                guard !crewName.isEmpty, !username.isEmpty else {
-                    return jsonEncode(["error": "Missing crew name or username"])
+                guard let u = await resolveUserId(app) else { return jsonEncode(["error": "Not signed in"]) }
+                let crewName = args["crew_name"] as? String ?? ""
+                if let crew = app.crews.first(where: { $0.name.lowercased() == crewName.lowercased() }) {
+                    try await SupabaseManager.shared.inviteToCrew(crewId: crew.id, receiverUsername: args["username"] as? String ?? "", invitedBy: u)
+                    return jsonEncode(["status": "invited"])
                 }
-                let userId: UUID
-                if let existing = app.backendUserId {
-                    userId = existing
-                } else if let restored = await SupabaseManager.shared.getOrRestoreUserId() {
-                    userId = restored
-                } else {
-                    return jsonEncode(["error": "Not signed in"])
-                }
-                await app.loadCrews(force: true)
-                guard let crew = app.crews.first(where: {
-                    $0.name.lowercased() == crewName.lowercased()
-                }) else {
-                    let names = app.crews.map(\.name).joined(separator: ", ")
-                    return jsonEncode(["error": "No crew named '\(crewName)'. You have: \(names.isEmpty ? "none" : names)"])
-                }
-                try await SupabaseManager.shared.inviteToCrew(
-                    crewId: crew.id, receiverUsername: username, invitedBy: userId
-                )
-                return jsonEncode(["status": "invited", "to": username, "crew": crew.name])
+                return jsonEncode(["error": "Crew not found"])
 
-            default:
-                return jsonEncode(["error": "Unknown tool \(name)"])
+            default: return jsonEncode(["error": "Unknown tool"])
             }
-        } catch {
-            return jsonEncode(["error": error.localizedDescription])
-        }
+        } catch { return jsonEncode(["error": error.localizedDescription]) }
     }
 
-    // MARK: - Individual implementations
+    private static func resolveUserId(_ app: AppState) async -> UUID? {
+        if let id = app.backendUserId { return id }
+        return await SupabaseManager.shared.getOrRestoreUserId()
+    }
+
+    private static func nextHint(_ draft: RidePlanDraft) -> String {
+        if draft.destination == nil { return "Ask for destination." }
+        if draft.startLocation == nil { return "Ask where it starts." }
+        if draft.scheduledAt == nil { return "Ask when they want to leave." }
+        return "Ask if they want checkpoints, or finalize."
+    }
+
+    private static func parseISO(_ s: String) -> Date? {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = iso.date(from: s) { return d }
+        iso.formatOptions = [.withInternetDateTime]
+        return iso.date(from: s)
+    }
 
     @MainActor
     private static func searchPlaces(query: String?, category: PlaceCategory?) async -> String {
         let store = DiscoverStore.shared
         await store.loadIfNeeded()
-
-        var results: [DiscoverPlace] = []
-        if let q = query, !q.isEmpty {
-            results = store.search(q).places
-        } else if let c = category {
-            results = store.placesNear([c], minimum: 6).items
-        } else {
-            results = store.placesNear().items
-        }
-
-        if results.isEmpty {
-            let scope = query ?? category?.label ?? "places"
-            return jsonEncode(["error": "No \(scope) found. Try a different name or category."])
-        }
-
-        let top = results.prefix(5).map { p -> [String: String] in
-            [
-                "name": p.name,
-                "region": p.region,
-                "category": p.category.label,
-                "summary": String(p.summary.prefix(140))
-            ]
-        }
-        return jsonEncode(["places": Array(top)])
+        let results = query?.isEmpty == false ? store.search(query!).places : (category != nil ? store.placesNear([category!], minimum: 6).items : store.placesNear().items)
+        return jsonEncode(["places": results.prefix(5).map { ["name": $0.name, "region": $0.region] }])
     }
 
     @MainActor
     private static func searchRoutes(query: String?) async -> String {
         let store = DiscoverStore.shared
         await store.loadIfNeeded()
-
-        var results: [DiscoverRoute] = []
-        if let q = query, !q.isEmpty {
-            results = store.search(q).routes
-        } else {
-            results = Array(store.routes.prefix(5))
-        }
-
-        if results.isEmpty {
-            return jsonEncode(["error": "No routes found matching \(query ?? "any query")."])
-        }
-
-        let top = results.prefix(5).map { r -> [String: String] in
-            [
-                "title": r.title,
-                "from_to": r.fromTo,
-                "length": r.estimate?.distanceText ?? "—",
-                "tags": r.tags.joined(separator: ", ")
-            ]
-        }
-        return jsonEncode(["routes": Array(top)])
+        let results = query?.isEmpty == false ? store.search(query!).routes : Array(store.routes.prefix(5))
+        return jsonEncode(["routes": results.prefix(5).map { ["title": $0.title, "from_to": $0.fromTo] }])
     }
 
-    private static func jsonEncode(_ value: Any) -> String {
-        (try? JSONSerialization.data(withJSONObject: value))
-            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+    @MainActor
+    private static func suggestCheckpoints(start: String, destination: String, category: String) async -> String {
+        // ✅ Use MKLocalSearch to actually find cafes/viewpoints in the real world
+        let req = MKLocalSearch.Request()
+        req.naturalLanguageQuery = "\(category) near \(destination)"
+        guard let res = try? await MKLocalSearch(request: req).start() else {
+            return jsonEncode(["suggestions": [], "note": "No results found."])
+        }
+        let items = res.mapItems.prefix(3).compactMap { $0.name }
+        return jsonEncode(["suggestions": Array(items), "note": "Suggest these to the user."])
+    }
+
+    private static func jsonEncode(_ v: Any) -> String {
+        (try? JSONSerialization.data(withJSONObject: v)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
     }
 }

@@ -652,7 +652,15 @@ final class AppState {
         rides.sort { $0.departs < $1.departs }
 
         if let userId = backendUserId {
-            Task { try? await SupabaseManager.shared.createRide(ride, userId: userId) }
+            Task {
+                try? await SupabaseManager.shared.createRide(ride, userId: userId)
+                
+                // ✅ Send invites to selected friends automatically
+                let friendIds = friends.filter { selectedFriends.contains($0.username) }.map { $0.id }
+                if !friendIds.isEmpty {
+                    try? await SupabaseManager.shared.inviteFriendsToRide(rideId: ride.id, userIds: friendIds)
+                }
+            }
         }
 
         rideDay = false

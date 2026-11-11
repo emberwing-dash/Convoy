@@ -161,6 +161,14 @@ final class SupabaseManager {
     func declineFriendRequest(requestId: UUID) async throws {
         try await client.from("friendships").delete().eq("id", value: requestId).execute()
     }
+    
+    /// Sends pending ride invites to selected friends.
+    func inviteFriendsToRide(rideId: UUID, userIds: [UUID]) async throws {
+        for userId in userIds {
+            let member = RideMemberInsert(ride_id: rideId, user_id: userId, role: "rider", status: "pending")
+            try? await client.from("ride_members").insert(member).execute()
+        }
+    }
 
     // MARK: - Crews (ATOMIC create)
     func createCrew(name: String, code: String, creatorId: UUID,
@@ -172,13 +180,30 @@ final class SupabaseManager {
             let p_avatar_data: String?
             let p_member_ids: [UUID]
         }
-        let params = Params(
-            p_name: name, p_code: code, p_creator_id: creatorId,
-            p_avatar_data: avatarData?.base64EncodedString(),
-            p_member_ids: memberIds
-        )
-        let crewId: UUID = try await client.rpc("create_crew_atomic", params: params).execute().value
-        return crewId
+        
+        var currentCode = code
+        for attempt in 0..<2 {
+            let params = Params(
+                p_name: name, p_code: currentCode, p_creator_id: creatorId,
+                p_avatar_data: avatarData?.base64EncodedString(),
+                p_member_ids: memberIds
+            )
+            do {
+                let crewId: UUID = try await client.rpc("create_crew_atomic", params: params).execute().value
+                return crewId
+            } catch {
+                let errString = "\(error)"
+                // ✅ Only retry if it's a unique constraint violation (code 23505)
+                if attempt == 0 && errString.contains("23505") {
+                    print("⚠️ Crew code collided, retrying with a new code...")
+                    currentCode = CrewGroup.makeCode(name: name)
+                } else {
+                    print("🚨 Crew creation failed: \(error)")
+                    throw error
+                }
+            }
+        }
+        throw NSError(domain: "Convoy", code: 500, userInfo: [NSLocalizedDescriptionKey: "Crew creation failed"])
     }
 
     func fetchCrewByCode(_ code: String) async throws -> CrewGroup? {

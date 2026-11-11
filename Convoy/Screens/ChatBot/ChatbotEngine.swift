@@ -2,35 +2,48 @@
 import Foundation
 import SwiftUI
 
-/// One message in the chat transcript.
+struct RidePlanDraft: Equatable {
+    var destination: String? = nil
+    var startLocation: String? = nil
+    var startIsCurrentLocation: Bool = false
+    var checkpoints: [String] = []
+    var scheduledAt: Date? = nil
+    var crewName: String? = nil
+    var friendUsernames: [String] = []
+
+    var missingFields: [String] {
+        var m: [String] = []
+        if destination == nil { m.append("destination") }
+        if startLocation == nil { m.append("start") }
+        if scheduledAt == nil { m.append("time") }
+        return m
+    }
+    var isComplete: Bool { missingFields.isEmpty }
+    var isActive: Bool { destination != nil }
+}
+
 struct ChatMessage: Identifiable, Hashable {
-    enum Kind: Hashable { case user, assistant, confirmation, error }
+    enum Kind: Hashable { case user, assistant, confirmation, error, system }
     let id = UUID()
     var kind: Kind
     var text: String
     var pendingConfirmation: PendingConfirmation? = nil
 }
 
-/// A tool call paused awaiting user approval.
 struct PendingConfirmation: Identifiable, Hashable {
     let id = UUID()
     let toolCallId: String
     let toolName: String
-    let args: [String: AnyHashable]  // store as Hashable wrapper for equatability
+    let args: [String: AnyHashable]
     let displayTitle: String
     let displayDetail: String
     let isNavigating: Bool
     let buttonLabel: String
-
-    var rawArgs: [String: Any] {
-        args.mapValues { $0.base as Any }
-    }
-
+    var rawArgs: [String: Any] { args.mapValues { $0.base as Any } }
     static func == (l: PendingConfirmation, r: PendingConfirmation) -> Bool { l.id == r.id }
     func hash(into h: inout Hasher) { h.combine(id) }
 }
 
-/// Runs the Groq chat loop with tool support.
 @MainActor
 @Observable
 final class ChatbotEngine {
@@ -41,9 +54,10 @@ final class ChatbotEngine {
     private(set) var thinkingStatus: String? = nil
     private(set) var promptsRemaining: Int = 50
     private(set) var errorMessage: String? = nil
-
-    /// The tool call the user is currently confirming, if any.
     private(set) var pendingConfirmation: PendingConfirmation? = nil
+
+    /// Live ride planning state, filled by ChatTools.set_* calls.
+    var rideDraft = RidePlanDraft()
 
     // MARK: - Private
     private var apiMessages: [[String: Any]] = []
@@ -51,15 +65,13 @@ final class ChatbotEngine {
     private let endpoint = URL(string: "https://avykoruhcgwpmvmddlta.supabase.co/functions/v1/groq-proxy")!
     private let supabaseKey = "sb_publishable_4cTQxSHnQbUtxLE_n2Rz7A_YDCuQ5-0"
     private var didInitSystemPrompt = false
+    private var toolFailureRetries = 0
+    private var rateLimitRetries = 0
 
     private static let countKey = "chat.promptsToday"
     private static let dateKey  = "chat.promptsDate"
 
-    // MARK: - Init
-
-    init() {
-        refreshRateLimit()
-    }
+    init() { refreshRateLimit() }
 
     // MARK: - Public API
 
@@ -70,68 +82,65 @@ final class ChatbotEngine {
             errorMessage = "You've used all \(dailyLimit) prompts today. Come back tomorrow."
             return
         }
-
-        // Consume one prompt
         consumePrompt()
 
-        // Append to display + API history
         messages.append(ChatMessage(kind: .user, text: trimmed))
-        ensureSystemPrompt()
         apiMessages.append(["role": "user", "content": trimmed])
 
+        // Trim history to prevent hitting the token-per-minute limit
+        trimHistoryIfNeeded()
+
         errorMessage = nil
+        toolFailureRetries = 0
+        rateLimitRetries = 0
         await runLoop(app: app)
     }
 
-    func confirmPending(app: AppState) async {
-        guard let pending = pendingConfirmation else { return }
-        // Clear immediately to prevent double-tap
-        pendingConfirmation = nil
+    private var isExecutingTool = false // ✅ Add this variable near the top of the class
 
-        // Replace the confirmation card in the UI with a resolved state
+        func confirmPending(app: AppState) async {
+            guard let pending = pendingConfirmation else { return }
+            guard !isExecutingTool else { return } // ✅ Prevents double-taps
+            
+            isExecutingTool = true
+            defer { isExecutingTool = false }
+            
+            pendingConfirmation = nil
+
         if let idx = messages.lastIndex(where: { $0.pendingConfirmation?.id == pending.id }) {
             messages[idx].pendingConfirmation = nil
             messages[idx].text = "Confirmed: \(pending.displayTitle)"
         }
 
-        // Execute (or navigate) and append tool result so history stays valid.
         isThinking = true
         thinkingStatus = ChatTools.statusLabel(pending.toolName)
-
         let result = await ChatTools.execute(
-            name: pending.toolName, args: pending.rawArgs, app: app
-        )
+            name: pending.toolName, args: pending.rawArgs,
+            app: app, engine: self)
         apiMessages.append([
             "role": "tool",
             "tool_call_id": pending.toolCallId,
             "content": result
         ])
-
         isThinking = false
         thinkingStatus = nil
 
-        // If the tool navigated away (closed the chat), stop here.
         if pending.isNavigating { return }
-
-        // Otherwise let the model react to the result.
         await runLoop(app: app)
     }
 
     func cancelPending(app: AppState) async {
         guard let pending = pendingConfirmation else { return }
         pendingConfirmation = nil
-
         if let idx = messages.lastIndex(where: { $0.pendingConfirmation?.id == pending.id }) {
             messages[idx].pendingConfirmation = nil
             messages[idx].text = "Cancelled"
         }
-
         apiMessages.append([
             "role": "tool",
             "tool_call_id": pending.toolCallId,
-            "content": "{\"error\": \"User declined this action\"}"
+            "content": "{\"error\": \"User declined\"}"
         ])
-
         await runLoop(app: app)
     }
 
@@ -143,20 +152,26 @@ final class ChatbotEngine {
         isThinking = true
         defer { isThinking = false; thinkingStatus = nil }
 
-        for _ in 0..<6 {
-            thinkingStatus = "Thinking…"
+        // ✅ Inject fresh system prompt on EVERY turn
+        let sysPrompt: [String: Any] = ["role": "system", "content": buildSystemPrompt(app: app)]
+        if apiMessages.first?["role"] as? String == "system" {
+            apiMessages[0] = sysPrompt
+        } else {
+            apiMessages.insert(sysPrompt, at: 0)
+        }
 
+        for _ in 0..<8 {
+            thinkingStatus = "Thinking…"
             do {
                 let response = try await callGroq()
+
                 guard let choice = (response["choices"] as? [[String: Any]])?.first,
                       let message = choice["message"] as? [String: Any] else {
                     errorMessage = "The assistant didn't respond. Try again."
                     return
                 }
 
-                // Tool call(s)?
                 if let toolCalls = message["tool_calls"] as? [[String: Any]], !toolCalls.isEmpty {
-                    // Save the assistant tool_calls message into history
                     apiMessages.append(message)
 
                     for call in toolCalls {
@@ -164,53 +179,98 @@ final class ChatbotEngine {
                               let fn = call["function"] as? [String: Any],
                               let name = fn["name"] as? String,
                               let argsStr = fn["arguments"] as? String,
-                              let argsData = argsStr.data(using: .utf8),
-                              let parsed = (try? JSONSerialization.jsonObject(with: argsData)) as? [String: Any]
+                              let data = argsStr.data(using: .utf8),
+                              let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
                         else { continue }
 
                         if ChatTools.requiresConfirmation(name) {
-                            // Pause — show a confirmation card
-                            let hashableArgs = parsed.compactMapValues { $0 as? AnyHashable }
+                            let hashable = parsed.compactMapValues { $0 as? AnyHashable }
                             let pending = PendingConfirmation(
                                 toolCallId: id,
                                 toolName: name,
-                                args: hashableArgs,
+                                args: hashable,
                                 displayTitle: ChatTools.confirmationTitle(name, parsed),
-                                displayDetail: ChatTools.confirmationDetail(name, parsed),
+                                displayDetail: ChatTools.confirmationDetail(name, parsed, self),
                                 isNavigating: ChatTools.isNavigating(name),
-                                buttonLabel: ChatTools.isNavigating(name) ? "Open planner" : "Confirm"
-                            )
+                                buttonLabel: ChatTools.isNavigating(name) ? "Open planner" : "Confirm")
                             self.pendingConfirmation = pending
                             messages.append(ChatMessage(kind: .confirmation, text: "", pendingConfirmation: pending))
                             return
                         }
 
-                        // Read-only / navigation → execute now
                         thinkingStatus = ChatTools.statusLabel(name)
-                        let result = await ChatTools.execute(name: name, args: parsed, app: app)
+                        let result = await ChatTools.execute(
+                            name: name, args: parsed, app: app, engine: self)
                         apiMessages.append([
-                            "role": "tool",
-                            "tool_call_id": id,
-                            "content": result
+                            "role": "tool", "tool_call_id": id, "content": result
                         ])
                     }
-                    // Loop to let the model see the tool results and reply
                     continue
                 }
 
-                // Plain text reply
                 if let text = message["content"] as? String, !text.isEmpty {
                     apiMessages.append(["role": "assistant", "content": text])
                     messages.append(ChatMessage(kind: .assistant, text: text))
                 }
                 return
             } catch {
+                // ── Tool hallucination retry ────────────────────────
+                if isToolHallucinationError(error), toolFailureRetries == 0 {
+                    toolFailureRetries += 1
+                    apiMessages.append([
+                        "role": "system",
+                        "content": "IMPORTANT: The previous tool call was invalid. Only use these exact tool names: \(ChatTools.allToolNames.joined(separator: ", ")). Do not invent tool names. If no tool fits, respond in plain text asking the user to rephrase."
+                    ])
+                    continue
+                }
+                // ── Rate limit retry ──────────────────────────────
+                if isRateLimitError(error), rateLimitRetries == 0 {
+                    rateLimitRetries += 1
+                    thinkingStatus = "Rate limited. Waiting 20s…"
+                    do {
+                        try await Task.sleep(for: .seconds(21))
+                    } catch {
+                        errorMessage = "Cancelled."
+                        return
+                    }
+                    continue
+                }
                 errorMessage = error.localizedDescription
                 return
             }
         }
-
         errorMessage = "The assistant took too long. Try rephrasing."
+    }
+
+    private func isToolHallucinationError(_ error: Error) -> Bool {
+        let msg = error.localizedDescription.lowercased()
+        return msg.contains("tool call validation failed") || msg.contains("tool_use_failed")
+    }
+
+    private func isRateLimitError(_ error: Error) -> Bool {
+        let msg = error.localizedDescription.lowercased()
+        return msg.contains("429") || msg.contains("rate limit")
+    }
+
+    /// Keeps the conversation under Groq's 7,000 ITPM limit.
+    /// Trims from the top but keeps the system prompt and the last complete turn.
+    private func trimHistoryIfNeeded() {
+        // Keep system prompt (index 0) + last ~8 messages
+        guard apiMessages.count > 10 else { return }
+
+        // Find a safe cut point — the start of a user message (not a tool result)
+        var cutIndex = apiMessages.count - 8
+        while cutIndex < apiMessages.count {
+            let role = apiMessages[cutIndex]["role"] as? String ?? ""
+            if role == "user" { break }
+            cutIndex += 1
+        }
+        // Don't trim if we can't find a safe point
+        guard cutIndex < apiMessages.count, cutIndex > 1 else { return }
+
+        let systemPrompt = apiMessages[0]
+        let recent = Array(apiMessages[cutIndex...])
+        apiMessages = [systemPrompt] + recent
     }
 
     // MARK: - Groq
@@ -234,7 +294,8 @@ final class ChatbotEngine {
 
         let (data, response) = try await URLSession.shared.data(for: req)
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
-            let snippet = String(data: data, encoding: .utf8)?.prefix(200) ?? ""
+            let bodyStr = String(data: data, encoding: .utf8) ?? ""
+            let snippet = bodyStr.prefix(280)
             throw NSError(domain: "Chat", code: http.statusCode,
                           userInfo: [NSLocalizedDescriptionKey: "Server \(http.statusCode): \(snippet)"])
         }
@@ -246,36 +307,58 @@ final class ChatbotEngine {
         return json
     }
 
-    private func ensureSystemPrompt() {
-        guard !didInitSystemPrompt else { return }
-        didInitSystemPrompt = true
-        apiMessages.insert([
-            "role": "system",
-            "content": """
-            You are Convoy's ride assistant. Convoy is a motorcycle group-ride app for India.
+    // Call this at the start of runLoop, NOT just once in init.
+    private func buildSystemPrompt(app: AppState) -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
+        let currentDate = dateFormatter.string(from: Date())
 
-            Users can: find places (lakes, waterfalls, viewpoints, beaches, cafes, hill roads, hill stations, historical sites), plan multi-stop rides, create crews and invite friends, join rides by 6-character code, track rides on a live map.
-
-            Rules:
-            1. Keep replies SHORT — 1–2 sentences when possible. Users are on a phone.
-            2. When the user wants to DO something (plan a ride, send a friend request, join a ride, create a crew, invite someone), call the matching tool. The app handles confirmation — do NOT ask "shall I?" in text first.
-            3. When the user asks a question, call read-only tools (search_places, list_my_rides, etc.) and answer using the results.
-            4. Never invent place names, usernames, ride codes, or crew names. If you're not sure, use a search tool.
-            5. If a tool returns an error, tell the user plainly and suggest what to do.
-            6. Do not output URLs, markdown links, or code blocks. Plain text only.
-            7. If the user asks for something Convoy can't do yet, say so honestly and suggest the closest thing it can do.
-            8. For "plan a ride to X" — call plan_ride with destination X. Don't try to invent route stops unless the user provides them.
+        let crews = app.crews.map(\.name).joined(separator: ", ")
+        let friends = app.friends.map { "\($0.display_name) (@\($0.username))" }.joined(separator: ", ")
+        
+        var draftStatus = "No active ride plan."
+        if rideDraft.isActive {
+            draftStatus = """
+            ACTIVE RIDE PLAN:
+            - Destination: \(rideDraft.destination ?? "Not set")
+            - Start: \(rideDraft.startLocation ?? "Not set")
+            - Time: \(rideDraft.scheduledAt != nil ? "\(rideDraft.scheduledAt!)" : "Not set")
+            - Companions: \(rideDraft.crewName ?? "") \(rideDraft.friendUsernames.joined(separator: ", "))
+            - Checkpoints: \(rideDraft.checkpoints.joined(separator: ", "))
+            - Missing Fields: \(rideDraft.missingFields.joined(separator: ", "))
             """
-        ], at: 0)
+        }
+        
+        let toolList = ChatTools.allToolNames.joined(separator: ", ")
+
+        return """
+                You are Convoy's ride assistant.
+                TODAY'S DATE IS: \(currentDate)
+                
+                USER CONTEXT:
+                - Crews: \(crews.isEmpty ? "None" : crews)
+                - Friends: \(friends.isEmpty ? "None" : friends)
+                
+                \(draftStatus)
+                
+                TOOLS: \(toolList)
+                
+                MULTI-ACTION PROMPTS:
+                If the user says "Create a crew and invite X", you must:
+                1. Call create_crew.
+                2. After it succeeds, call invite_to_crew.
+                
+                RIDE PLANNING FLOW:
+                ...
+                """
     }
 
-    // MARK: - Rate limiting (per-device, resets at midnight)
+    // MARK: - Rate limiting
 
     private func refreshRateLimit() {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: .now)
-        let storedDate = UserDefaults.standard.object(forKey: Self.dateKey) as? Date ?? .distantPast
-        if !calendar.isDate(storedDate, inSameDayAs: today) {
+        let today = Calendar.current.startOfDay(for: .now)
+        let stored = UserDefaults.standard.object(forKey: Self.dateKey) as? Date ?? .distantPast
+        if !Calendar.current.isDate(stored, inSameDayAs: today) {
             promptsRemaining = dailyLimit
             return
         }
@@ -284,16 +367,11 @@ final class ChatbotEngine {
     }
 
     private func consumePrompt() {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: .now)
-        let storedDate = UserDefaults.standard.object(forKey: Self.dateKey) as? Date ?? .distantPast
-
-        let newCount: Int
-        if !calendar.isDate(storedDate, inSameDayAs: today) {
-            newCount = 1
-        } else {
-            newCount = UserDefaults.standard.integer(forKey: Self.countKey) + 1
-        }
+        let today = Calendar.current.startOfDay(for: .now)
+        let stored = UserDefaults.standard.object(forKey: Self.dateKey) as? Date ?? .distantPast
+        let newCount: Int = Calendar.current.isDate(stored, inSameDayAs: today)
+            ? UserDefaults.standard.integer(forKey: Self.countKey) + 1
+            : 1
         UserDefaults.standard.set(newCount, forKey: Self.countKey)
         UserDefaults.standard.set(today, forKey: Self.dateKey)
         promptsRemaining = max(0, dailyLimit - newCount)
