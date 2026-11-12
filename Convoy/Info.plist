@@ -19,6 +19,8 @@
 	<string>sb_publishable_4cTQxSHnQbUtxLE_n2Rz7A_YDCuQ5-0</string>
 	<key>SUPABASE_URL</key>
 	<string>https://avykoruhcgwpmvmddlta.supabase.co</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Convoy needs camera access to scan ride QR codes.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

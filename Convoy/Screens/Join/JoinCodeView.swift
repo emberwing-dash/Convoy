@@ -1,14 +1,18 @@
 // JoinCodeView.swift
 import SwiftUI
+import AVFoundation
 
 struct JoinCodeView: View {
     @Environment(AppState.self) private var app
+    var initialCode: String? = nil
+    
     @State private var code = ""
     @State private var errorMessage: String?
     @State private var successMessage: String?
     @State private var isSubmitting = false
     @FocusState private var focused: Bool
     @State private var pollingTask: Task<Void, Never>? = nil
+    @State private var showScanner = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -43,7 +47,7 @@ struct JoinCodeView: View {
                                 .background(Color(hex: 0x1C1C1F), in: Capsule())
                                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                         }
-                        Button { paste() } label: {
+                        Button { showScanner = true } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "qrcode.viewfinder").font(.system(size: 16))
                                 Text("Scan QR").cvText(14, .semibold, inter: true)
@@ -81,7 +85,7 @@ struct JoinCodeView: View {
                         .frame(maxWidth: .infinity).frame(height: 50)
                         .background(CV.cream, in: Capsule())
                 } else {
-                    Text("Find ride").cvText(17, .semibold, color: CV.ink, inter: true)
+                    Text("Join Ride").cvText(17, .semibold, color: CV.ink, inter: true)
                         .frame(maxWidth: .infinity).frame(height: 50)
                         .background(CV.cream, in: Capsule())
                 }
@@ -93,7 +97,24 @@ struct JoinCodeView: View {
         }
         .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
-        .onAppear { focused = true }
+        .sheet(isPresented: $showScanner) {
+            QRScannerView(isPresented: $showScanner) { scannedValue in
+                if let extracted = extractCode(from: scannedValue) {
+                    code = extracted
+                    // ✅ Just fills the code, user must tap "Find ride"
+                }
+            }
+            .ignoresSafeArea()
+        }
+        .onAppear {
+            if let initial = initialCode, !initial.isEmpty {
+                if let extracted = extractCode(from: initial) {
+                    code = extracted
+                }
+            } else {
+                focused = true
+            }
+        }
         .onDisappear { pollingTask?.cancel(); pollingTask = nil }
     }
 
@@ -121,11 +142,29 @@ struct JoinCodeView: View {
         .onTapGesture { focused = true }
     }
 
+    private func extractCode(from text: String) -> String? {
+        // 1. Try parsing as a URL first (e.g., convoy://ride/crg435)
+        if let url = URL(string: text) {
+            let last = url.lastPathComponent
+            let clean = last.uppercased().filter { $0.isLetter || $0.isNumber }
+            if clean.count >= 6 {
+                return String(clean.prefix(6))
+            }
+        }
+        
+        // 2. Fallback: Strip everything and take the LAST 6 valid characters
+        let clean = text.uppercased().filter { $0.isLetter || $0.isNumber }
+        guard clean.count >= 6 else { return nil }
+        return String(clean.suffix(6))
+    }
+
     private func paste() {
-        let clip = (UIPasteboard.general.string ?? "").uppercased()
-            .filter { $0.isLetter || $0.isNumber }
-        code = String(clip.prefix(6))
-        Task { await submit() }
+        let clip = UIPasteboard.general.string ?? ""
+        if let extracted = extractCode(from: clip) {
+            code = extracted
+            focused = true // Bring focus back so the user sees the pasted code
+            // ✅ No auto-submit, user must tap "Find ride"
+        }
     }
 
     private func submit() async {
@@ -151,8 +190,6 @@ struct JoinCodeView: View {
         }
     }
 
-    /// Poll every 5 seconds for up to 5 minutes. If the organiser accepts,
-    /// navigate straight to the ride. Otherwise let the user pull-to-refresh Home.
     private func startPollingForApproval() {
         pollingTask?.cancel()
         pollingTask = Task {
@@ -170,49 +207,5 @@ struct JoinCodeView: View {
                 }
             }
         }
-    }
-}
-
-// JoinFoundView preserved for compatibility
-struct JoinFoundView: View {
-    @Environment(AppState.self) private var app
-    private var ride: Ride? {
-        guard let id = app.lastJoinedRideID else { return nil }
-        return app.rides.first { $0.id == id }
-    }
-
-    var body: some View {
-        DesignCanvas {
-            ContourBackdrop()
-            CircleBackButton { app.pop() }.at(20, 58)
-            if let ride {
-                Text("Ride found").cvText(13, .semibold, color: CV.red, inter: true).at(24, 120)
-                Text(ride.title).cvText(28, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.4, inter: true)
-                    .lineLimit(2).frame(width: 345, alignment: .leading).at(24, 142)
-                Text(ride.subtitle).cvText(14, color: CV.muted, inter: true)
-                    .frame(width: 345, alignment: .leading).at(24, 196)
-                if let summary = ride.plan.selected {
-                    RouteSnapshotView(coords: summary.coords, size: CGSize(width: 345, height: 160), corner: 20)
-                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-                        .at(24, 232)
-                }
-                Button {
-                    app.popToRoot(); app.tab = .ride; app.push(.rideDetails(ride.id))
-                } label: {
-                    Text("View ride").cvText(15, .semibold, color: CV.ink, inter: true)
-                        .frame(width: 345, height: 52).background(Color(hex: 0xF5EDDE), in: Capsule())
-                }.buttonStyle(.plain).at(24, 720)
-            } else {
-                VStack(spacing: 10) {
-                    Image(systemName: "questionmark.circle").font(.system(size: 30))
-                        .foregroundStyle(CV.cream.opacity(0.5))
-                    Text("No ride with that code").cvText(17, .semibold, inter: true)
-                    Text("Ask your friend for the code again.").cvText(14, color: CV.muted, inter: true)
-                }.frame(width: 353).at(20, 380)
-            }
-        }
-        .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
-        .background(SwipeBackEnabler())
     }
 }

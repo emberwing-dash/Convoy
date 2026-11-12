@@ -55,7 +55,8 @@ struct AppNotification: Identifiable, Codable, Hashable {
 enum SearchContext: Hashable { case friends, crew(UUID) }
 
 enum Route: Hashable {
-    case profile, joinCode, joinFound, myRides, garage
+    case profile, joinFound, myRides, garage
+    case joinCode(String? = nil)
     case document(String)
     case mileageIntro, logFillUp, mileageProgress, mileageResults
     case crewDetail(UUID), newCrew, crewInvite(UUID), inviteFriends
@@ -68,7 +69,7 @@ enum Route: Hashable {
     case planDetails, planMap, planRoutes, planReview, planCreated
     case rideDetails(UUID), pastRide(UUID)
     case shareCard, rideStart, rideNav, rideComplete
-    case inviteCode
+    case inviteCode(UUID)
     case notifications
     case userSearch(SearchContext)
     case chatbot
@@ -781,6 +782,19 @@ final class AppState {
         StorageService.shared.saveFillUp(odo: f.odo, litres: f.litres, price: f.price)
         if let userId = backendUserId {
             Task { try? await SupabaseManager.shared.insertFillUp(userId: userId, odo: f.odo, litres: f.litres, price: f.price) }
+        }
+    }
+    
+    func deleteRide(_ id: UUID) async {
+        do {
+            try await SupabaseManager.shared.deleteRide(id: id)
+            await MainActor.run {
+                self.rides.removeAll { $0.id == id }
+                StorageService.shared.removeRide(id: id)
+                self.popToRoot()
+            }
+        } catch {
+            print("Failed to delete ride: \(error)")
         }
     }
 

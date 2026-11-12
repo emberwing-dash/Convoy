@@ -1,13 +1,15 @@
 // InviteCodeView.swift
 import SwiftUI
+import CoreImage.CIFilterBuiltins
 
 struct InviteCodeView: View {
     @Environment(AppState.self) private var app
+    let rideID: UUID // ✅ Accept specific ride ID
     @State private var copied = false
 
-    private var ride: Ride? { app.upcomingRide }
+    // ✅ Find the exact ride instead of always the first one
+    private var ride: Ride? { app.rides.first(where: { $0.id == rideID }) }
 
-    /// Uses `convoy://` so taps open the app. Swap to https:// when Universal Links are ready.
     private var link: String {
         guard let ride else { return "convoy://ride" }
         return "convoy://ride/\(ride.code.lowercased())"
@@ -27,26 +29,35 @@ struct InviteCodeView: View {
                     .frame(width: 345, alignment: .leading)
                     .at(24, 152)
 
+                // ✅ Ride Code Card
                 codeCard(ride: ride).at(20, 212)
 
-                ShareLink(item: "Join my ride on Convoy: \(link)") {
-                    Text("Share invite link")
-                        .cvText(14, .semibold, color: Color(hex: 0x121214), inter: true)
-                        .frame(width: 353, height: 50)
-                        .background(Color(hex: 0xF5EDDE), in: Capsule())
+                // ✅ Share Link Button
+                if let shareURL = URL(string: link) {
+                    ShareLink(item: shareURL) {
+                        Text("Share invite link")
+                            .cvText(14, .semibold, color: Color(hex: 0x121214), inter: true)
+                            .frame(width: 353, height: 50)
+                            .background(Color(hex: 0xF5EDDE), in: Capsule())
+                    }
+                    .at(20, 412)
                 }
-                .at(20, 412)
 
-                VStack(spacing: 8) {
-                    Text("No friends on Convoy yet.")
-                        .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
-                    Text("Share the code with anyone you ride with.")
-                        .cvText(13, color: Color(hex: 0x99948C), inter: true)
-                        .multilineTextAlignment(.center)
+                // ✅ QR Code Section
+                VStack(spacing: 12) {
+                    Text("SCAN TO JOIN")
+                        .cvText(11, .semibold, color: Color(hex: 0x99948C), tracking: 1.5, inter: true)
+                    
+                    QRCodeView(text: link)
+                        .frame(width: 140, height: 140)
+                        .padding(12)
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
+                        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
                 }
-                .frame(width: 353, alignment: .center)
-                .at(20, 496)
+                .frame(width: 393)
+                .at(0, 490)
 
+                // Done Button
                 Button { app.pop() } label: {
                     Text("Done")
                         .cvText(14, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
@@ -146,5 +157,39 @@ struct SplitFlap: View {
         .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
             .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
         .shadow(color: .black.opacity(0.45), radius: 3, y: 3)
+    }
+}
+
+// ✅ QR Code Generator
+struct QRCodeView: View {
+    let text: String
+    var body: some View {
+        if let image = generateQRCode(from: text) {
+            Image(uiImage: image)
+                .interpolation(.none) // Keeps it sharp when scaled
+                .resizable()
+                .scaledToFit()
+        } else {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(0.3))
+                .overlay(Image(systemName: "qrcode").foregroundStyle(.white))
+        }
+    }
+    
+    private func generateQRCode(from string: String) -> UIImage? {
+        let data = Data(string.utf8)
+        guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("H", forKey: "inputCorrectionLevel") // High error correction
+        
+        // Scale up the output for crisp rendering
+        let transform = CGAffineTransform(scaleX: 10, y: 10)
+        guard let output = filter.outputImage?.transformed(by: transform) else { return nil }
+        
+        // ✅ Render the CIImage into a CGImage so SwiftUI can display it
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(output, from: output.extent) else { return nil }
+        
+        return UIImage(cgImage: cgImage)
     }
 }

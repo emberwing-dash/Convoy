@@ -4,6 +4,7 @@ import SwiftUI
 struct RideDetailsView: View {
     @Environment(AppState.self) private var app
     let rideID: UUID
+    @State private var rideToDelete: Ride? = nil
 
     var body: some View {
         if let ride = app.rides.first(where: { $0.id == rideID }) {
@@ -47,9 +48,19 @@ struct RideDetailsView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
+        .confirmationDialog("Delete this ride?",
+                            isPresented: Binding(get: { rideToDelete != nil }, set: { if !$0 { rideToDelete = nil } }),
+                            titleVisibility: .visible) {
+            Button("Delete ride", role: .destructive) {
+                if let id = rideToDelete?.id {
+                    Task { await app.deleteRide(id) }
+                }
+            }
+            Button("Cancel", role: .cancel) { rideToDelete = nil }
+        } message: {
+            Text("This will permanently cancel the ride for everyone.")
+        }
     }
-
-    // MARK: - Hero (image + tag + title + subtitle, gradient fade)
 
     private func heroSection(ride: Ride, isRideDay: Bool) -> some View {
         ZStack(alignment: .bottomLeading) {
@@ -111,17 +122,18 @@ struct RideDetailsView: View {
             Spacer()
 
             if canEdit {
-                Button { app.beginEditingRide(ride.id) } label: {
+                Menu {
+                    Button { app.beginEditingRide(ride.id) } label: { Label("Edit ride", systemImage: "pencil") }
+                    Button(role: .destructive) { rideToDelete = ride } label: { Label("Delete ride", systemImage: "trash") }
+                } label: {
                     Circle().fill(Color.black.opacity(0.35))
                         .frame(width: 44, height: 44)
                         .overlay(
-                            Image(systemName: "pencil")
-                                .font(.system(size: 16, weight: .semibold))
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 17, weight: .semibold))
                                 .foregroundStyle(CV.cream)
                         )
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Edit ride")
             }
 
             ShareLink(item: "Join my ride on Convoy: convoy://ride/\(ride.code)") {
@@ -138,8 +150,6 @@ struct RideDetailsView: View {
         .safeAreaPadding(.top)
         .padding(.top, 4)
     }
-
-    // MARK: - Sub-sections
 
     private func tag(ride: Ride, isRideDay: Bool) -> some View {
         let fallback = "In \(ride.daysAway) day\(ride.daysAway == 1 ? "" : "s")"
@@ -231,8 +241,10 @@ struct RideDetailsView: View {
                 .padding(.leading, 18)
             }
             Spacer()
-            Button { app.push(.inviteCode) } label: {
-                Text(organisedByYou ? "Invite" : "Chat")
+            
+            // ✅ Always Invite
+            Button { app.push(.inviteCode(ride.id)) } label: {
+                Text("Invite")
                     .cvText(13, .semibold, inter: true)
                     .padding(.horizontal, 14)
                     .frame(height: 32)
@@ -260,28 +272,17 @@ struct RideDetailsView: View {
             }
             .buttonStyle(.plain)
         } else {
-            Button {
-                if invited {
-                    app.pop()
-                } else {
-                    withAnimation { app.rideDay = true }
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "lock").font(.system(size: 15, weight: .medium))
-                    Text(ride.lockText)
-                        .cvText(15, .semibold, color: CV.cream.opacity(0.5), inter: true)
-                }
-                .foregroundStyle(CV.cream.opacity(0.5))
-                .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(Color.white.opacity(0.1), in: Capsule())
+            HStack(spacing: 10) {
+                Image(systemName: "lock").font(.system(size: 15, weight: .medium))
+                Text("Starts \(ride.displayDate) at \(ride.displayTime)")
+                    .cvText(15, .semibold, color: CV.cream.opacity(0.5), inter: true)
             }
-            .buttonStyle(.plain)
+            .foregroundStyle(CV.cream.opacity(0.5))
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .background(Color.white.opacity(0.1), in: Capsule())
         }
     }
-
-    // MARK: - Not found
 
     private var notFound: some View {
         ZStack {

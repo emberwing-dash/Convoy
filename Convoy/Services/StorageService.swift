@@ -443,6 +443,15 @@ final class StorageService {
             try? context.save()
         }
     }
+    
+    func removeRide(id: UUID) {
+        guard let context else { return }
+        let d = FetchDescriptor<PersistedRideEntity>(predicate: #Predicate { $0.id == id })
+        if let all = try? context.fetch(d) {
+            for r in all { context.delete(r) }
+            try? context.save()
+        }
+    }
 
     // MARK: - Fill-ups
     func loadFillUps() -> [FillUpEntity] {
