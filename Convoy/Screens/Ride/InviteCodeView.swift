@@ -20,7 +20,7 @@ struct InviteCodeView: View {
                     .cvText(26, .bold, color: Color(hex: 0xF5EDDE), inter: true)
                     .at(24, 116)
 
-                Text("Share the ride code or link. Riders who join see the route, start time and live location.")
+                Text("Share the ride code or link. Riders who join see the route, scheduled stops and start time.")
                     .cvText(14, color: Color(hex: 0x99948C), inter: true)
                     .frame(width: 345, alignment: .leading)
                     .at(24, 152)
@@ -35,15 +35,51 @@ struct InviteCodeView: View {
                 }
                 .at(20, 412)
 
-                VStack(spacing: 8) {
-                    Text("No friends on Convoy yet.")
-                        .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
-                    Text("Share the code with anyone you ride with.")
-                        .cvText(13, color: Color(hex: 0x99948C), inter: true)
-                        .multilineTextAlignment(.center)
+                if app.friends.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("No friends on Convoy yet.")
+                            .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                        Text("Share the code with anyone you ride with.")
+                            .cvText(13, color: Color(hex: 0x99948C), inter: true)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(width: 353, alignment: .center)
+                    .at(20, 496)
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("INVITE FRIENDS")
+                            .cvText(11, .semibold, color: Color(hex: 0x99948C), tracking: 1.5, inter: true)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(app.friends) { friend in
+                                    let isInvited = ride.riders.contains(where: { $0.name == friend.display_name })
+                                    VStack(spacing: 6) {
+                                        AvatarChip(data: friend.avatar_data.flatMap { Data(base64Encoded: $0) }, name: friend.display_name, size: 44)
+                                        Text(friend.display_name)
+                                            .cvText(12, .medium, color: CV.cream, inter: true)
+                                            .lineLimit(1)
+                                        Button {
+                                            if !isInvited {
+                                                Task { await app.inviteFriendToRide(rideId: ride.id, friend: friend) }
+                                            }
+                                        } label: {
+                                            Text(isInvited ? "Invited" : "Invite")
+                                                .cvText(11, .semibold, color: isInvited ? CV.muted : CV.ink, inter: true)
+                                                .padding(.horizontal, 10)
+                                                .frame(height: 24)
+                                                .background(isInvited ? Color.white.opacity(0.1) : CV.cream, in: Capsule())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .disabled(isInvited)
+                                    }
+                                    .frame(width: 76)
+                                }
+                            }
+                        }
+                    }
+                    .frame(width: 353, alignment: .leading)
+                    .at(20, 480)
                 }
-                .frame(width: 353, alignment: .center)
-                .at(20, 496)
 
                 Button { app.pop() } label: {
                     Text("Done")

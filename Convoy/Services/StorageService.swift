@@ -60,6 +60,7 @@ final class PersistedRideEntity {
     var routeCoordsJSON: String = "[]"
     var routeKm: Double = 0
     var routeMinutes: Int = 0
+    var ridersJSON: String = "[]"
 
     var createdAt: Date = Date()
     var completedAt: Date?
@@ -197,7 +198,14 @@ final class FillUpEntity {
 
 @MainActor
 final class StorageService {
-    static let shared = StorageService()
+    static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
+            || ProcessInfo.processInfo.environment["XCInjectBundleInto"] != nil
+            || NSClassFromString("XCTestCase") != nil
+    }
+
+    static let shared = StorageService(inMemory: isRunningTests)
     var container: ModelContainer?
 
     /// True if the store is operating in an in-memory session (either requested or as fallback).
@@ -312,7 +320,7 @@ final class StorageService {
             tag: ride.tag, departs: ride.departs,
             distance: ride.distance, duration: ride.duration,
             displayDate: ride.displayDate, displayTime: ride.displayTime,
-            organiser: ride.organiser, isCompleted: false, code: ride.code,
+            organiser: ride.organiser, isCompleted: ride.isCompleted, code: ride.code,
             fromLocation: ride.plan.from, toLocation: ride.plan.to,
             stopsJSON: stopsJSON, styleRaw: ride.plan.style.rawValue,
             routeSet: ride.plan.routeSet,
@@ -322,6 +330,9 @@ final class StorageService {
         entity.routeCoordsJSON = coordsJSON
         entity.routeKm = selected?.km ?? 0
         entity.routeMinutes = selected?.minutes ?? 0
+
+        let ridersData = (try? JSONEncoder().encode(ride.riders)) ?? Data("[]".utf8)
+        entity.ridersJSON = String(data: ridersData, encoding: .utf8) ?? "[]"
 
         context.insert(entity)
         try? context.save()
@@ -348,7 +359,7 @@ final class StorageService {
 
     func saveCrew(_ crew: CrewGroup) {
         guard let context else { return }
-        let memberPayload = crew.members.map { ["name": $0.name, "detail": $0.detail] }
+        let memberPayload = crew.members.map { ["id": $0.id.uuidString, "name": $0.name, "detail": $0.detail] }
         let data = (try? JSONSerialization.data(withJSONObject: memberPayload)) ?? Data("[]".utf8)
         let membersJSON = String(data: data, encoding: .utf8) ?? "[]"
         let entity = CrewEntity(
@@ -367,7 +378,7 @@ final class StorageService {
             for e in existing { context.delete(e) }
         }
         for crew in crews {
-            let memberPayload = crew.members.map { ["name": $0.name, "detail": $0.detail] }
+            let memberPayload = crew.members.map { ["id": $0.id.uuidString, "name": $0.name, "detail": $0.detail] }
             let data = (try? JSONSerialization.data(withJSONObject: memberPayload)) ?? Data("[]".utf8)
             let membersJSON = String(data: data, encoding: .utf8) ?? "[]"
             let entity = CrewEntity(
@@ -389,6 +400,15 @@ final class StorageService {
         }
     }
 
+    func deleteCrew(id: UUID) {
+        guard let context else { return }
+        let d = FetchDescriptor<CrewEntity>()
+        if let all = try? context.fetch(d) {
+            for c in all where c.id == id { context.delete(c) }
+            try? context.save()
+        }
+    }
+
     // MARK: - Notifications Cache
     func loadCachedNotifications() -> [AppNotification] {
         guard let data = UserDefaults.standard.data(forKey: "cached_notifications") else { return [] }
@@ -398,6 +418,18 @@ final class StorageService {
     func saveNotifications(_ notifs: [AppNotification]) {
         if let data = try? JSONEncoder().encode(notifs) {
             UserDefaults.standard.set(data, forKey: "cached_notifications")
+        }
+    }
+
+    // MARK: - Ride Join Requests Cache
+    func loadCachedRideJoinRequests() -> [RideJoinRequest] {
+        guard let data = UserDefaults.standard.data(forKey: "cached_ride_join_requests") else { return [] }
+        return (try? JSONDecoder().decode([RideJoinRequest].self, from: data)) ?? []
+    }
+
+    func saveRideJoinRequests(_ reqs: [RideJoinRequest]) {
+        if let data = try? JSONEncoder().encode(reqs) {
+            UserDefaults.standard.set(data, forKey: "cached_ride_join_requests")
         }
     }
 

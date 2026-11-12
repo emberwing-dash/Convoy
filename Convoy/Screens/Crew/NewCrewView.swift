@@ -135,7 +135,6 @@ struct NewCrewView: View {
     }
 
     private func create() {
-        guard let userId = app.backendUserId else { return }
         let n = name.trimmingCharacters(in: .whitespaces)
         guard !n.isEmpty else { return }
         let code = CrewGroup.makeCode(name: n)
@@ -145,15 +144,25 @@ struct NewCrewView: View {
 
         Task {
             do {
+                let userId = try await SupabaseManager.shared.ensureAuthenticatedUser(
+                    displayName: app.displayName,
+                    handle: app.handle
+                )
+                if app.backendUserId != userId {
+                    await MainActor.run { app.backendUserId = userId }
+                }
+
                 let crewId = try await SupabaseManager.shared.createCrew(
                     name: n,
                     code: code,
                     creatorId: userId,
                     memberIds: [],
-                    avatarData: avatarData
+                    avatarData: avatarData,
+                    displayName: app.displayName,
+                    handle: app.handle
                 )
 
-                let hydrated = try await SupabaseManager.shared.fetchCrewsWithMembers(for: userId)
+                let hydrated = (try? await SupabaseManager.shared.fetchCrewsWithMembers(for: userId)) ?? []
 
                 await MainActor.run {
                     isCreating = false
@@ -170,6 +179,7 @@ struct NewCrewView: View {
                             accentHex: 0xFF3B30,
                             avatarData: avatarData,
                             members: [CrewMember(
+                                id: userId,
                                 name: app.displayName,
                                 detail: "Admin",
                                 avatarData: app.avatarImageData

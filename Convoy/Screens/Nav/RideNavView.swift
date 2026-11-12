@@ -523,7 +523,7 @@ struct RideNavView: View {
     }
 
     private func shareETA() {
-        let text = "Convoy ETA: arriving at \(destinationName) around \(arrivalTimeString) (\(durationStat.value) \(durationStat.unit) · \(distanceStat.value) \(distanceStat.unit) left). Tracking live on Convoy!"
+        let text = "Convoy ETA: arriving at \(destinationName) around \(arrivalTimeString) (\(durationStat.value) \(durationStat.unit) · \(distanceStat.value) \(distanceStat.unit) left)."
         let av = UIActivityViewController(activityItems: [text], applicationActivities: nil)
         if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let root = scene.windows.first?.rootViewController {
@@ -571,9 +571,9 @@ struct RideNavView: View {
                         .frame(width: 44, height: 44)
                         .background(kind.tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Stop added")
+                        Text("Planned stop added")
                             .cvText(15, .bold, inter: true)
-                        Text("\(place.name) is on your route.")
+                        Text("\(place.name) is saved to this ride\u{2019}s plan.")
                             .cvText(13, color: CV.cream.opacity(0.7), lineHeight: 18, inter: true)
                             .lineLimit(2)
                     }
@@ -634,8 +634,11 @@ struct RideNavView: View {
                 Spacer()
             }
             Button {
-                if let rideId = app.upcomingRide?.id {
-                    app.completeRide(id: rideId)
+                if let ride = app.upcomingRide {
+                    let isOrganiser = ride.organiser == "you" || ride.organiser.lowercased() == app.displayName.lowercased()
+                    Task {
+                        await app.completeRide(id: ride.id, isGroupClosure: isOrganiser)
+                    }
                 } else {
                     app.push(.rideComplete)
                 }
@@ -949,28 +952,23 @@ struct RideNavView: View {
 
     private func finish() {
         panel = .none
-        if let rideId = app.upcomingRide?.id {
-            app.completeRide(id: rideId)
+        if let ride = app.upcomingRide {
+            let isOrganiser = ride.organiser == "you" || ride.organiser.lowercased() == app.displayName.lowercased()
+            Task {
+                await app.completeRide(id: ride.id, isGroupClosure: isOrganiser)
+            }
         } else {
             app.pop()
         }
     }
 
-    // MARK: - SOS
+    // MARK: - Emergency Assistance (Honest & Safe)
+
+    @State private var copiedCoords = false
 
     private func startSOS() {
-        sosCount = 3
+        copiedCoords = false
         withAnimation { sos = .sending }
-        Task {
-            for n in [2, 1] {
-                try? await Task.sleep(for: .seconds(1))
-                guard sos == .sending else { return }
-                sosCount = n
-            }
-            try? await Task.sleep(for: .seconds(1))
-            guard sos == .sending else { return }
-            withAnimation { sos = .sent }
-        }
     }
 
     private var sosOverlay: some View {
@@ -979,67 +977,104 @@ struct RideNavView: View {
                 colors: [Color(hex: 0x8F1010), Color(hex: 0x4A0707), Color(hex: 0x1A0303)],
                 startPoint: .top, endPoint: .bottom
             ).ignoresSafeArea()
-            VStack(spacing: 24) {
+
+            VStack(spacing: 20) {
                 Spacer()
-                if sos == .sending {
-                    ZStack {
-                        Circle().fill(Color.white.opacity(0.06)).frame(width: 200, height: 200)
-                        Circle().fill(Color.white.opacity(0.08)).frame(width: 160, height: 160)
-                        Circle().fill(CV.red).frame(width: 120, height: 120)
-                        Text("\(sosCount)")
-                            .cvText(64, .bold, color: .white, inter: true)
-                    }
-                    VStack(spacing: 8) {
-                        Text("Sending SOS")
-                            .cvText(28, .bold, color: .white, inter: true)
-                        Text("Your group and emergency contacts get your live location and a call.")
-                            .cvText(15, color: .white.opacity(0.7), lineHeight: 21, inter: true)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                    }
-                    Spacer()
-                    VStack(spacing: 12) {
-                        Text("Sends automatically when countdown ends")
-                            .cvText(12, color: .white.opacity(0.55), inter: true)
+
+                ZStack {
+                    Circle().fill(Color.white.opacity(0.06)).frame(width: 140, height: 140)
+                    Circle().fill(CV.red).frame(width: 90, height: 90)
+                    Image(systemName: "phone.fill")
+                        .font(.system(size: 38, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+
+                VStack(spacing: 8) {
+                    Text("Emergency Assistance")
+                        .cvText(26, .bold, color: .white, inter: true)
+                    Text("In-app Convoy broadcast is not yet active. If you need urgent help, call emergency services directly from your device.")
+                        .cvText(14, color: .white.opacity(0.8), lineHeight: 20, inter: true)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+
+                // Current GPS Coordinates card for sharing with emergency responders
+                VStack(spacing: 6) {
+                    Text("YOUR CURRENT COORDINATES")
+                        .cvText(11, .semibold, color: .white.opacity(0.6), tracking: 1.2, inter: true)
+                    if let loc = locationService.currentLocation, loc.horizontalAccuracy >= 0 {
+                        let lat = loc.coordinate.latitude
+                        let lon = loc.coordinate.longitude
+                        let age = Date().timeIntervalSince(loc.timestamp)
+                        Text(String(format: "%.5f° N, %.5f° E", lat, lon))
+                            .cvText(16, .bold, color: .white, inter: true)
+                        if age > LocationService.staleFixThreshold {
+                            Text("Last known position \u{00B7} \(Int(age))s ago")
+                                .cvText(11, color: .white.opacity(0.65), inter: true)
+                        }
                         Button {
-                            withAnimation { sos = .off }
+                            UIPasteboard.general.string = String(format: "%.5f, %.5f", lat, lon)
+                            copiedCoords = true
                         } label: {
-                            Text("Cancel SOS")
-                                .cvText(16, .semibold, color: .white, inter: true)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 54)
-                                .background(Color.white.opacity(0.16),
-                                            in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            HStack(spacing: 6) {
+                                Image(systemName: copiedCoords ? "checkmark" : "doc.on.doc")
+                                    .font(.system(size: 13, weight: .bold))
+                                Text(copiedCoords ? "Coordinates Copied!" : "Copy Coordinates")
+                                    .cvText(13, .semibold, inter: true)
+                            }
+                            .foregroundStyle(copiedCoords ? CV.green : CV.cream)
+                            .padding(.horizontal, 14)
+                            .frame(height: 32)
+                            .background(Color.white.opacity(0.12), in: Capsule())
                         }
                         .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 20).padding(.bottom, 36)
-                } else {
-                    VStack(spacing: 16) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 64, weight: .bold))
-                            .foregroundStyle(CV.green)
-                        Text("SOS Sent")
-                            .cvText(28, .bold, color: .white, inter: true)
-                        Text("Stay where you are if it’s safe.\nEmergency contacts and convoy have your coordinates.")
-                            .cvText(15, color: .white.opacity(0.75), lineHeight: 21, inter: true)
+                        .padding(.top, 4)
+                    } else {
+                        Text("Location unavailable")
+                            .cvText(16, .bold, color: .white, inter: true)
+                        Text("Turn on location access, or move to open sky and try again.")
+                            .cvText(11, color: .white.opacity(0.65), inter: true)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
                     }
-                    Spacer()
+                }
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity)
+                .background(Color.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 24)
+
+                Spacer()
+
+                VStack(spacing: 12) {
+                    // Direct Phone Call to Emergency Services (112)
+                    Button {
+                        if let url = URL(string: "tel://112"), UIApplication.shared.canOpenURL(url) {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "phone.fill")
+                            Text("Call Emergency (112)")
+                        }
+                        .cvText(17, .bold, color: .white, inter: true)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(CV.red, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
                     Button {
                         withAnimation { sos = .off }
                     } label: {
-                        Text("I’m Safe · Dismiss SOS")
-                            .cvText(16, .semibold, color: .white, inter: true)
+                        Text("Dismiss")
+                            .cvText(16, .semibold, color: .white.opacity(0.7), inter: true)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 54)
-                            .background(Color.white.opacity(0.16),
-                                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .frame(height: 48)
+                            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .padding(.horizontal, 20).padding(.bottom, 36)
                 }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 36)
             }
         }
     }
@@ -1079,7 +1114,7 @@ struct RideStartingView: View {
                 .frame(width: 393).at(0, 356)
             VStack(alignment: .leading, spacing: 0) {
                 check("Route loaded", "\(rideDistance) · about \(rideDuration)").padding(.top, 16)
-                check("GPS Live Tracking", "High accuracy location enabled").padding(.top, 16)
+                check("Location", LocationService.shared.locationStatusText, ok: gpsCheckOK).padding(.top, 16)
                 check("Turn-by-turn maneuvers", "Real-time navigation ready").padding(.top, 16)
             }
             .padding(.horizontal, 16)
@@ -1112,13 +1147,18 @@ struct RideStartingView: View {
         }
     }
 
-    private func check(_ t: String, _ s: String) -> some View {
+    private var gpsCheckOK: Bool {
+        let q = LocationService.shared.locationQuality
+        return q == .live || q == .searching || q == .notDetermined
+    }
+
+    private func check(_ t: String, _ s: String, ok: Bool = true) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "checkmark")
+            Image(systemName: ok ? "checkmark" : "exclamationmark.triangle.fill")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(CV.red)
+                .foregroundStyle(ok ? CV.red : .orange)
                 .frame(width: 26, height: 26)
-                .background(CV.red.opacity(0.22), in: Circle())
+                .background((ok ? CV.red : .orange).opacity(0.22), in: Circle())
             VStack(alignment: .leading, spacing: 3) {
                 Text(t).cvText(15, .bold, inter: true)
                 Text(s).cvText(12, color: CV.cream.opacity(0.55), inter: true)
@@ -1180,7 +1220,10 @@ struct RideCompleteView: View {
 
             PrimaryButton(title: "See ride summary") {
                 if let r = app.upcomingRide {
-                    app.completeRide(id: r.id)
+                    let isOrganiser = r.organiser == "you" || r.organiser.lowercased() == app.displayName.lowercased()
+                    Task {
+                        await app.completeRide(id: r.id, isGroupClosure: isOrganiser)
+                    }
                 } else {
                     app.pop()
                 }

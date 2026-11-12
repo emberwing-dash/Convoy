@@ -332,7 +332,7 @@ struct AppleMapsBottomSheet: View {
                         divider
                         actionRow(icon: "person.3.fill", iconColor: Color(hex: 0xAF52DE),
                                   title: "Convoy Riders",
-                                  badge: riderCount > 1 ? "\(riderCount) live" : nil,
+                                  badge: riderCount > 1 ? "\(riderCount) riders" : nil,
                                   action: onRiders)
                         divider
                         actionRow(icon: "person.crop.circle.badge.plus", iconColor: Color(hex: 0x34C759),
@@ -340,7 +340,7 @@ struct AppleMapsBottomSheet: View {
                         divider
                         actionRow(icon: "exclamationmark.bubble.fill", iconColor: Color(hex: 0xFF3B30),
                                   title: "Report an Incident",
-                                  subtitle: "SOS Emergency & Convoy Alert", action: onSOS)
+                                  subtitle: "Emergency Call & Coordinates", action: onSOS)
                         divider
                         actionRow(icon: isVoiceMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                                   iconColor: Color(hex: 0x8E8E93),

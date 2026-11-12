@@ -51,6 +51,53 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways
     }
 
+    // MARK: - Honest location status (Phase 0: classification only; does not change tracking)
+
+    enum LocationQuality: Equatable {
+        case denied          // permission denied or restricted
+        case notDetermined   // permission not yet requested
+        case searching       // authorised but no usable fix yet
+        case reduced         // precise location off (approximate only)
+        case stale           // last fix too old to treat as live
+        case inaccurate      // fix present but horizontal accuracy poor
+        case live            // fresh, precise fix
+    }
+
+    static let staleFixThreshold: TimeInterval = 10
+    static let inaccurateThreshold: CLLocationDistance = 65
+
+    var locationQuality: LocationQuality {
+        switch authorizationStatus {
+        case .denied, .restricted: return .denied
+        case .notDetermined: return .notDetermined
+        default: break
+        }
+        if manager.accuracyAuthorization == .reducedAccuracy { return .reduced }
+        guard let loc = currentLocation else { return .searching }
+        if loc.horizontalAccuracy < 0 { return .searching }
+        if Date().timeIntervalSince(loc.timestamp) > Self.staleFixThreshold { return .stale }
+        if loc.horizontalAccuracy > Self.inaccurateThreshold { return .inaccurate }
+        return .live
+    }
+
+    var hasLiveFix: Bool { locationQuality == .live }
+
+    var liveCoordinate: CLLocationCoordinate2D? {
+        hasLiveFix ? currentLocation?.coordinate : nil
+    }
+
+    var locationStatusText: String {
+        switch locationQuality {
+        case .denied: return "Location permission is off"
+        case .notDetermined: return "Location permission needed"
+        case .searching: return "Acquiring GPS\u{2026}"
+        case .reduced: return "Precise location is off"
+        case .stale: return "GPS signal lost \u{2014} last position may be outdated"
+        case .inaccurate: return "GPS accuracy is low"
+        case .live: return "Location active"
+        }
+    }
+
     override init() {
         super.init()
         manager.delegate = self

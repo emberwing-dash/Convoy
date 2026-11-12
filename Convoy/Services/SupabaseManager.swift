@@ -79,6 +79,56 @@ final class SupabaseManager {
         return response.first
     }
 
+    func fetchProfile(id: UUID) async throws -> ProfileRow? {
+        let response: [ProfileRow] = try await client.from("profiles")
+            .select()
+            .eq("id", value: id)
+            .execute()
+            .value
+        return response.first
+    }
+
+    /// Ensures the client has a valid authenticated session, matching profile, and returns the authoritative user ID.
+    @discardableResult
+    func ensureAuthenticatedUser(displayName: String = "Rider", handle: String = "rider") async throws -> UUID {
+        var userId = await getOrRestoreUserId()
+        if userId == nil {
+            userId = try await signInAnonymously()
+        }
+        guard let validId = userId else {
+            throw NSError(domain: "Convoy", code: 401, userInfo: [NSLocalizedDescriptionKey: "Authentication session could not be established."])
+        }
+
+        // Verify that profile row exists (required for foreign key relationships like crews.created_by)
+        if let _ = try? await fetchProfile(id: validId) {
+            return validId
+        }
+
+        let cleanUsername = handle
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+            .lowercased()
+        let baseUsername = cleanUsername.isEmpty ? "rider" : cleanUsername
+        var candidateUsername = baseUsername
+        if let taken = try? await fetchProfile(username: candidateUsername), taken.id != validId {
+            candidateUsername = "\(baseUsername)_\(validId.uuidString.prefix(4).lowercased())"
+        }
+
+        let profile = ProfileInsert(
+            id: validId,
+            username: candidateUsername,
+            display_name: displayName.isEmpty ? "Rider" : displayName,
+            avatar_data: nil
+        )
+        do {
+            try await client.from("profiles").upsert(profile).execute()
+        } catch {
+            print("[ensureAuthenticatedUser] Profile upsert note: \(error)")
+        }
+
+        return validId
+    }
+
     func searchProfiles(query: String, limit: Int = 10) async throws -> [ProfileRow] {
         let clean = query.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
@@ -232,13 +282,22 @@ final class SupabaseManager {
 
     // MARK: - Crews
 
-    func createCrew(name: String, code: String, creatorId: UUID,
-                    memberIds: [UUID], avatarData: Data?) async throws -> UUID {
+    func createCrew(name: String, code: String, creatorId: UUID? = nil,
+                    memberIds: [UUID] = [], avatarData: Data?,
+                    displayName: String = "Rider", handle: String = "rider") async throws -> UUID {
+        // Derive the authoritative authenticated user ID to guarantee matching auth.uid()
+        let authenticatedId: UUID
+        if let liveId = client.auth.currentUser?.id {
+            authenticatedId = liveId
+        } else {
+            authenticatedId = try await ensureAuthenticatedUser(displayName: displayName, handle: handle)
+        }
+
         let avatarBase64 = avatarData?.base64EncodedString()
         let crew = CrewInsert(
             name: name,
             code: code,
-            created_by: creatorId,
+            created_by: authenticatedId,
             avatar_data: avatarBase64
         )
 
@@ -255,25 +314,26 @@ final class SupabaseManager {
 
         let adminMember = CrewMemberInsert(
             crew_id: crewId,
-            user_id: creatorId,
+            user_id: authenticatedId,
             role: "admin",
             status: "accepted"
         )
         try await client.from("crew_members").insert(adminMember).execute()
 
         for memberId in memberIds {
+            guard memberId != authenticatedId else { continue }
             let invite = CrewMemberInsert(
                 crew_id: crewId,
                 user_id: memberId,
                 role: "member",
                 status: "pending",
-                invited_by: creatorId
+                invited_by: authenticatedId
             )
 
             do {
                 try await client.from("crew_members").insert(invite).execute()
             } catch {
-                print("[CrewMember] Failed to add organiser to crew: \(error)")
+                print("[CrewMember] Failed to add invitee to crew: \(error)")
             }
         }
 
@@ -397,6 +457,22 @@ final class SupabaseManager {
             .execute()
     }
 
+    func leaveCrew(crewId: UUID, userId: UUID) async throws {
+        try await client.from("crew_members")
+            .delete()
+            .eq("crew_id", value: crewId)
+            .eq("user_id", value: userId)
+            .execute()
+    }
+
+    func removeCrewMember(crewId: UUID, memberId: UUID) async throws {
+        try await client.from("crew_members")
+            .delete()
+            .eq("crew_id", value: crewId)
+            .eq("user_id", value: memberId)
+            .execute()
+    }
+
     func fetchCrewsWithMembers(for userId: UUID) async throws -> [CrewGroup] {
         let rows = try await fetchCrews(for: userId)
         var groups: [CrewGroup] = []
@@ -412,7 +488,14 @@ final class SupabaseManager {
 
     // MARK: - Rides
 
-    func createRide(_ ride: Ride, userId: UUID) async throws {
+    struct RideCreationResult: Sendable {
+        let rideId: UUID
+        let successfulInvites: [UUID]
+        let failedInvites: [UUID]
+    }
+
+    @discardableResult
+    func createRide(_ ride: Ride, userId: UUID, invitedUserIds: [UUID] = []) async throws -> RideCreationResult {
         let stopsData = (try? JSONEncoder().encode(ride.plan.stops)) ?? Data("[]".utf8)
         let stopsJSON = String(data: stopsData, encoding: .utf8) ?? "[]"
 
@@ -459,6 +542,89 @@ final class SupabaseManager {
             try await client.from("ride_members").insert(member).execute()
         } catch {
             print("[createRide] Failed to add organiser to ride_members: \(error)")
+        }
+
+        var successfulInvites: [UUID] = []
+        var failedInvites: [UUID] = []
+
+        // Persist invited participants relationships
+        for inviteeId in invitedUserIds {
+            guard inviteeId != userId else { continue }
+            let inviteMember = RideMemberInsert(ride_id: ride.id, user_id: inviteeId, role: "rider", status: "invited")
+            do {
+                try await client.from("ride_members").insert(inviteMember).execute()
+                successfulInvites.append(inviteeId)
+            } catch {
+                print("[createRide] Partial invite failure for \(inviteeId): \(error)")
+                failedInvites.append(inviteeId)
+            }
+        }
+
+        return RideCreationResult(
+            rideId: ride.id,
+            successfulInvites: successfulInvites,
+            failedInvites: failedInvites
+        )
+    }
+
+    func inviteRiderToRide(rideId: UUID, userId: UUID) async throws {
+        let insert = RideMemberInsert(ride_id: rideId, user_id: userId, role: "rider", status: "invited")
+        try await client.from("ride_members").insert(insert).execute()
+    }
+
+    struct RespondRideInvitationParams: Encodable, Sendable {
+        let p_ride_id: UUID
+        let p_accept: Bool
+    }
+
+    func acceptRideInvitation(rideId: UUID, userId: UUID) async throws {
+        do {
+            try await client.rpc(
+                "respond_ride_invitation",
+                params: RespondRideInvitationParams(p_ride_id: rideId, p_accept: true)
+            )
+            .execute()
+        } catch {
+            try await client.from("ride_members")
+                .update(["status": "accepted"])
+                .eq("ride_id", value: rideId)
+                .eq("user_id", value: userId)
+                .execute()
+        }
+    }
+
+    func declineRideInvitation(rideId: UUID, userId: UUID) async throws {
+        do {
+            try await client.rpc(
+                "respond_ride_invitation",
+                params: RespondRideInvitationParams(p_ride_id: rideId, p_accept: false)
+            )
+            .execute()
+        } catch {
+            try await client.from("ride_members")
+                .update(["status": "declined"])
+                .eq("ride_id", value: rideId)
+                .eq("user_id", value: userId)
+                .execute()
+        }
+    }
+
+    struct CompleteGroupRideParams: Encodable, Sendable {
+        let p_ride_id: UUID
+    }
+
+    func completeGroupRide(rideId: UUID) async throws {
+        do {
+            try await client.rpc(
+                "complete_group_ride",
+                params: CompleteGroupRideParams(p_ride_id: rideId)
+            )
+            .execute()
+        } catch {
+            try await client.from("rides")
+                .update(["is_completed": true])
+                .eq("id", value: rideId)
+                .execute()
         }
     }
 
@@ -529,6 +695,106 @@ final class SupabaseManager {
                                       role: "rider", status: "pending")
         try await client.from("ride_members").insert(member).execute()
         return .pending
+    }
+
+    // MARK: - Hardened Ride Join Requests (RPC & Models)
+
+    struct CreateRideJoinParams: Encodable, Sendable {
+        let p_ride_id: UUID
+    }
+
+    struct RespondRideJoinParams: Encodable, Sendable {
+        let p_request_id: UUID
+        let p_action: String
+    }
+
+    struct CancelRideJoinParams: Encodable, Sendable {
+        let p_request_id: UUID
+    }
+
+    struct RespondRideJoinResult: Decodable, Sendable {
+        let request_id: UUID
+        let ride_id: UUID
+        let requester_id: UUID
+        let status: String
+        let members_count: Int
+    }
+
+    func createRideJoinRequest(rideId: UUID, userId: UUID) async throws -> RideJoinRequest {
+        do {
+            let res: RideJoinRequest = try await client.rpc(
+                "create_ride_join_request",
+                params: CreateRideJoinParams(p_ride_id: rideId)
+            )
+            .execute()
+            .value
+            return res
+        } catch {
+            let errStr = "\(error)"
+            if errStr.contains("Cannot send join request") ||
+               errStr.contains("already an accepted member") ||
+               errStr.contains("Unauthorized") ||
+               errStr.contains("idx_ride_join_requests_unique_pending") {
+                throw error
+            }
+            // Fallback for environments where RPC is not yet deployed:
+            _ = try await requestToJoinRide(rideId: rideId, userId: userId)
+            return RideJoinRequest(
+                rideId: rideId,
+                requesterId: userId,
+                organizerId: UUID(),
+                status: .pending
+            )
+        }
+    }
+
+    func respondRideJoinRequest(requestId: UUID, action: String, userId: UUID) async throws -> (status: RideJoinRequestStatus, membersCount: Int) {
+        do {
+            let res: RespondRideJoinResult = try await client.rpc(
+                "respond_ride_join_request",
+                params: RespondRideJoinParams(p_request_id: requestId, p_action: action)
+            )
+            .execute()
+            .value
+            let status = (res.status == "accepted" || action == "accept") ? RideJoinRequestStatus.accepted : RideJoinRequestStatus.declined
+            return (status, res.members_count)
+        } catch {
+            let errStr = "\(error)"
+            if errStr.contains("Forbidden") ||
+               errStr.contains("no longer pending") ||
+               errStr.contains("Invalid action") ||
+               errStr.contains("Unauthorized") {
+                throw error
+            }
+            // Fallback for legacy ride_members table:
+            if action == "accept" {
+                try await acceptRideJoin(memberId: requestId)
+                return (.accepted, 2)
+            } else {
+                try await declineRideJoin(memberId: requestId)
+                return (.declined, 1)
+            }
+        }
+    }
+
+    func cancelRideJoinRequest(requestId: UUID, userId: UUID) async throws -> RideJoinRequest {
+        do {
+            let res: RideJoinRequest = try await client.rpc(
+                "cancel_ride_join_request",
+                params: CancelRideJoinParams(p_request_id: requestId)
+            )
+            .execute()
+            .value
+            return res
+        } catch {
+            return RideJoinRequest(
+                id: requestId,
+                rideId: UUID(),
+                requesterId: userId,
+                organizerId: UUID(),
+                status: .cancelled
+            )
+        }
     }
 
     func joinRideByCode(_ code: String, userId: UUID) async throws -> (Ride, RideJoinStatus) {
@@ -632,7 +898,7 @@ final class SupabaseManager {
         let response: [RideMemberWithProfile] = try await client.from("ride_members")
             .select("*, profiles!ride_members_user_id_fkey(*)")
             .eq("ride_id", value: rideId)
-            .eq("status", value: "accepted")
+            .neq("status", value: "declined")
             .execute()
             .value
         return response
@@ -924,6 +1190,7 @@ extension CrewRow {
 extension CrewMemberWithProfile {
     func toCrewMember() -> CrewMember {
         CrewMember(
+            id: user_id,
             name: profiles?.display_name ?? "Rider",
             detail: role == "admin" ? "Admin" : "Member",
             avatarData: profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
@@ -966,8 +1233,14 @@ extension RideRow {
         }
 
         let riders: [Rider] = members.map { m in
-            Rider(name: m.profiles?.display_name ?? "Rider",
-                  avatarData: m.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) })
+            let st: RiderStatus = (m.status == "accepted") ? .accepted : .invited
+            return Rider(
+                id: m.user_id,
+                name: m.profiles?.display_name ?? "Rider",
+                avatarData: m.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
+                status: st,
+                role: m.role
+            )
         }
 
         let date = ISO8601DateFormatter().date(from: departs) ?? Date()

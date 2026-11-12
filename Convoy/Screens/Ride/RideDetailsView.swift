@@ -186,25 +186,37 @@ struct RideDetailsView: View {
     private func riders(ride: Ride, solo: Bool, isRideDay: Bool,
                         organisedByYou: Bool) -> some View {
         HStack(spacing: 0) {
-            if solo, let me = ride.riders.first {
+            if solo, let me = ride.acceptedRiders.first ?? ride.riders.first {
                 AvatarChip(data: me.avatarData, name: me.name, size: 32)
                     .padding(.leading, 2)
                     .padding(.trailing, 12)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Just you so far").cvText(15, .semibold, inter: true)
-                    Text("Organised by you · invite riders anytime")
-                        .cvText(12, color: CV.cream.opacity(0.45), inter: true)
+                    if !ride.invitedRiders.isEmpty {
+                        Text("\(ride.invitedRiders.count) rider\(ride.invitedRiders.count == 1 ? "" : "s") invited · waiting for response")
+                            .cvText(12, color: CV.cream.opacity(0.45), inter: true)
+                    } else {
+                        Text("Organised by you · invite riders anytime")
+                            .cvText(12, color: CV.cream.opacity(0.45), inter: true)
+                    }
                 }
             } else {
                 HStack(spacing: -10) {
-                    ForEach(ride.riders.prefix(4)) { r in
+                    ForEach(ride.acceptedRiders.prefix(4)) { r in
                         AvatarChip(data: r.avatarData, name: r.name, size: 32)
                             .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
                     }
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(ride.riders.count) rider\(ride.riders.count == 1 ? "" : "s") going")
-                        .cvText(15, .semibold, inter: true)
+                    let acceptedCount = ride.acceptedRiders.count
+                    let invitedCount = ride.invitedRiders.count
+                    if invitedCount > 0 {
+                        Text("\(acceptedCount) going · \(invitedCount) invited")
+                            .cvText(15, .semibold, inter: true)
+                    } else {
+                        Text("\(acceptedCount) rider\(acceptedCount == 1 ? "" : "s") going")
+                            .cvText(15, .semibold, inter: true)
+                    }
                     Text(isRideDay ? "On the road"
                                    : "Organised by \(organisedByYou ? "you" : ride.organiser)")
                         .cvText(12, color: CV.cream.opacity(0.45), inter: true)
@@ -227,7 +239,37 @@ struct RideDetailsView: View {
 
     @ViewBuilder
     private func cta(ride: Ride, isRideDay: Bool, invited: Bool) -> some View {
-        if isRideDay {
+        if ride.isCompleted || ride.isPast {
+            HStack(spacing: 10) {
+                Image(systemName: "flag.checkered").font(.system(size: 16, weight: .medium))
+                Text("Ride Completed")
+                    .cvText(16, .semibold, color: CV.cream.opacity(0.5), tracking: -0.17, inter: true)
+            }
+            .frame(width: 353, height: 56)
+            .background(Color.white.opacity(0.08), in: Capsule())
+        } else if invited {
+            HStack(spacing: 12) {
+                Button {
+                    app.pop()
+                } label: {
+                    Text("Decline")
+                        .cvText(15, .semibold, color: CV.cream.opacity(0.6), inter: true)
+                        .frame(width: 140, height: 56)
+                        .background(Color.white.opacity(0.08), in: Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    Task { await app.acceptRideInvitation(rideId: ride.id) }
+                } label: {
+                    Text("Accept Ride")
+                        .cvText(15, .semibold, color: CV.ink, inter: true)
+                        .frame(width: 201, height: 56)
+                        .background(CV.cream, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        } else if isRideDay {
             Button { app.push(.rideStart) } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "play").font(.system(size: 17, weight: .medium))
@@ -240,23 +282,19 @@ struct RideDetailsView: View {
             }
             .buttonStyle(.plain)
         } else {
-            Button {
-                if invited {
-                    app.pop()
-                } else {
-                    withAnimation { app.rideDay = true }
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "lock").font(.system(size: 15, weight: .medium))
-                    Text(ride.lockText)
-                        .cvText(15, .semibold, color: CV.cream.opacity(0.5), inter: true)
-                }
-                .foregroundStyle(CV.cream.opacity(0.5))
-                .frame(width: 353, height: 56)
-                .background(Color.white.opacity(0.1), in: Capsule())
+            HStack(spacing: 10) {
+                Image(systemName: "lock").font(.system(size: 15, weight: .medium))
+                Text(ride.lockText)
+                    .cvText(15, .semibold, color: CV.cream.opacity(0.5), inter: true)
             }
-            .buttonStyle(.plain)
+            .foregroundStyle(CV.cream.opacity(0.5))
+            .frame(width: 353, height: 56)
+            .background(Color.white.opacity(0.08), in: Capsule())
+            #if DEBUG
+            .onLongPressGesture {
+                withAnimation { app.rideDay = true }
+            }
+            #endif
         }
     }
 }

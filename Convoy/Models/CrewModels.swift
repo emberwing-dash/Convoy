@@ -48,8 +48,12 @@ struct CrewGroup: Identifiable, Hashable {
         if let data = e.membersJSON.data(using: .utf8),
            let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] {
             members = arr.map { m in
-                CrewMember(name: m["name"] ?? "Rider",
-                           detail: m["detail"] ?? "")
+                let memberId = m["id"].flatMap { UUID(uuidString: $0) } ?? UUID()
+                return CrewMember(
+                    id: memberId,
+                    name: m["name"] ?? "Rider",
+                    detail: m["detail"] ?? ""
+                )
             }
         }
         return CrewGroup(

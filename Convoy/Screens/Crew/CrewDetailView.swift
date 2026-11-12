@@ -5,8 +5,16 @@ struct CrewDetailView: View {
     @Environment(AppState.self) private var app
     let crewID: UUID
 
+    @State private var showLeaveConfirmation = false
+    @State private var memberToRemove: CrewMember?
+
     private var crew: CrewGroup? {
         app.crews.first { $0.id == crewID }
+    }
+
+    private var isCurrentUserAdmin: Bool {
+        guard let crew else { return false }
+        return crew.members.first(where: { $0.name == app.displayName })?.detail == "Admin"
     }
 
     var body: some View {
@@ -63,6 +71,17 @@ struct CrewDetailView: View {
                                                     inter: true)
                                     }
                                     Spacer()
+                                    if isCurrentUserAdmin && m.name != app.displayName {
+                                        Button {
+                                            memberToRemove = m
+                                        } label: {
+                                            Image(systemName: "minus.circle")
+                                                .font(.system(size: 16))
+                                                .foregroundStyle(CV.red.opacity(0.8))
+                                                .frame(width: 32, height: 32)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
                                 }
                                 .padding(.horizontal, 14)
                                 .frame(height: 56)
@@ -80,6 +99,24 @@ struct CrewDetailView: View {
                         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
                         .padding(.top, 8)
+
+                        // Leave Crew button
+                        Button {
+                            showLeaveConfirmation = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                Text("Leave crew")
+                                    .cvText(14, .semibold, color: CV.red, inter: true)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CV.red.opacity(0.3), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 24)
 
                         // MARK: empty hint
                         if crew.memberCount == 1 {
@@ -138,5 +175,29 @@ struct CrewDetailView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
+        .alert("Leave Crew", isPresented: $showLeaveConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Leave", role: .destructive) {
+                Task {
+                    _ = await app.leaveCrew(id: crewID)
+                    app.pop()
+                }
+            }
+        } message: {
+            Text("Are you sure you want to leave \(crew?.name ?? "this crew")?")
+        }
+        .alert("Remove Member", isPresented: Binding(get: { memberToRemove != nil }, set: { if !$0 { memberToRemove = nil } })) {
+            Button("Cancel", role: .cancel) { memberToRemove = nil }
+            Button("Remove", role: .destructive) {
+                if let m = memberToRemove {
+                    Task {
+                        _ = await app.removeCrewMember(crewId: crewID, memberId: m.id)
+                        memberToRemove = nil
+                    }
+                }
+            }
+        } message: {
+            Text("Remove \(memberToRemove?.name ?? "this member") from \(crew?.name ?? "the crew")?")
+        }
     }
 }

@@ -141,6 +141,8 @@ final class AppState {
     // Friends & Notifications
     var friends: [ProfileRow] = []
     var notifications: [AppNotification] = []
+    var outgoingRideRequests: [RideJoinRequest] = []
+    var incomingRideRequests: [RideJoinRequest] = []
     var pendingFriendRequests: [FriendshipWithProfile] = []
     var incomingCrewInvites: [CrewInviteWithDetails] = []
     var incomingRideJoins: [RideJoinWithDetails] = []
@@ -182,6 +184,7 @@ final class AppState {
     var savedPlaces: [DiscoverPlace] = []
     var selectedCrew: UUID? = nil
     var selectedFriends: Set<String> = []
+    var failedRideInvitations: [UUID: [UUID]] = [:] // [rideId: [failedUserId]]
 
     // Garage
     var fillUps: [FillUp] = []
@@ -196,18 +199,33 @@ final class AppState {
         notifications.contains { $0.status == .pending }
     }
 
+    /// Development-only seeding of sample profile / ride / join-request for local previews.
+    /// Compiled out of release builds, and even in DEBUG only runs when the app is launched
+    /// with `-seedDemoData`. Production never injects demo data into real rides.
+    static var isDemoSeedEnabled: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("-seedDemoData")
+        #else
+        return false
+        #endif
+    }
+
     init() {
         if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
             self.phase = .main
             self.displayName = profile.displayName.isEmpty ? "Rider" : profile.displayName
             self.handle = profile.handle.isEmpty ? "rider" : profile.handle
             self.avatarImageData = profile.avatarImageData
-        } else {
+        } else if Self.isDemoSeedEnabled {
+            // DEBUG-only, opt-in via `-seedDemoData`: skip onboarding with a sample identity.
             StorageService.shared.saveOnboardingCompleted(name: "Joydip", handle: "joydip")
             self.phase = .main
             self.displayName = "Joydip"
             self.handle = "joydip"
         }
+        // Production / normal launch with no stored profile: remain in `.onboarding`
+        // (the default) so the real onboarding flow captures the authenticated identity.
+        // No fabricated user is created.
 
         if let storedId = UserDefaults.standard.string(forKey: "backendUserId"),
            let uuid = UUID(uuidString: storedId) {
@@ -216,12 +234,20 @@ final class AppState {
             self.backendUserId = authId
         }
 
+        Task {
+            if let liveId = await SupabaseManager.shared.getOrRestoreUserId() {
+                await MainActor.run {
+                    self.backendUserId = liveId
+                }
+            }
+        }
+
         let entities = StorageService.shared.loadActiveRides()
         self.rides = entities
             .map { $0.toRide(displayName: displayName, avatarData: avatarImageData) }
             .sorted { $0.departs < $1.departs }
 
-        if !self.rides.contains(where: { $0.code.uppercased() == "ECR777" }) {
+        if Self.isDemoSeedEnabled, !self.rides.contains(where: { $0.code.uppercased() == "ECR777" }) {
             let demoRide = Ride(
                 title: "ECR Coastal Sunrise Ride",
                 place: "Mahabalipuram",
@@ -244,9 +270,25 @@ final class AppState {
         self.crews = StorageService.shared.loadCrews().map(CrewGroup.from)
         self.friends = StorageService.shared.loadCachedFriends()
         self.notifications = StorageService.shared.loadCachedNotifications()
+        let cachedRequests = StorageService.shared.loadCachedRideJoinRequests()
+        self.outgoingRideRequests = cachedRequests
+        self.pendingRideJoinRequests = Set(cachedRequests.filter { $0.status == .pending }.map { $0.rideId })
 
-        if !self.notifications.contains(where: { $0.type == .rideJoin && $0.status == .pending }) {
+        if Self.isDemoSeedEnabled, !self.notifications.contains(where: { $0.type == .rideJoin && $0.status == .pending }) {
             let myRide = self.rides.first { $0.organiser == "you" || $0.organiser == displayName } ?? self.rides.first
+            let reqId = UUID()
+            let sampleReq = RideJoinRequest(
+                id: reqId,
+                rideId: myRide?.id ?? UUID(),
+                requesterId: UUID(),
+                organizerId: self.backendUserId ?? UUID(),
+                status: .pending,
+                requesterName: "Devon Lane",
+                requesterHandle: "devon_r1",
+                rideTitle: myRide?.title ?? "Group Ride"
+            )
+            self.incomingRideRequests.insert(sampleReq, at: 0)
+
             let sampleNotif = AppNotification(
                 id: UUID(),
                 type: .rideJoin,
@@ -254,7 +296,7 @@ final class AppState {
                 subtitle: "Devon Lane wants to join \(myRide?.title ?? "your ride").",
                 avatarData: nil,
                 date: Date().addingTimeInterval(-180),
-                requestId: UUID(),
+                requestId: reqId,
                 crewId: nil,
                 rideId: myRide?.id,
                 actorName: "Devon Lane",
@@ -378,11 +420,13 @@ final class AppState {
     // MARK: - Session helper
 
     private func resolvedUserId() async -> UUID? {
-        if let id = backendUserId { return id }
-        if let restored = await SupabaseManager.shared.getOrRestoreUserId() {
-            await MainActor.run { self.backendUserId = restored }
-            return restored
+        if let liveId = await SupabaseManager.shared.getOrRestoreUserId() {
+            if backendUserId != liveId {
+                await MainActor.run { self.backendUserId = liveId }
+            }
+            return liveId
         }
+        if let id = backendUserId { return id }
         return nil
     }
 
@@ -482,6 +526,24 @@ final class AppState {
             let riderName = join.profiles?.display_name ?? "A rider"
             let username = join.profiles?.username ?? "rider"
             let rideTitle = join.rides?.title ?? "your ride"
+
+            let joinReq = RideJoinRequest(
+                id: join.id,
+                rideId: join.ride_id,
+                requesterId: join.user_id,
+                organizerId: userId,
+                status: .pending,
+                requesterName: riderName,
+                requesterHandle: username,
+                requesterAvatarData: join.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
+                rideTitle: rideTitle
+            )
+            if let idx = self.incomingRideRequests.firstIndex(where: { $0.id == join.id }) {
+                self.incomingRideRequests[idx] = joinReq
+            } else {
+                self.incomingRideRequests.append(joinReq)
+            }
+
             fresh.append(AppNotification(
                 id: join.id,
                 type: .rideJoin,
@@ -545,53 +607,151 @@ final class AppState {
             ?? incomingRideJoins
     }
 
+    // MARK: - Dedicated Ride Join Request Operations
+
+    @discardableResult
+    func acceptRideJoinRequest(requestId: UUID) async -> Bool {
+        let userId = await resolvedUserId() ?? UUID()
+        _ = try? await SupabaseManager.shared.respondRideJoinRequest(requestId: requestId, action: "accept", userId: userId)
+
+        await MainActor.run {
+            // 1. Update in incoming requests
+            if let idx = self.incomingRideRequests.firstIndex(where: { $0.id == requestId }) {
+                self.incomingRideRequests[idx].status = .accepted
+                self.incomingRideRequests[idx].updatedAt = Date()
+            }
+            // 2. Update in outgoing requests if present
+            if let idx = self.outgoingRideRequests.firstIndex(where: { $0.id == requestId }) {
+                self.outgoingRideRequests[idx].status = .accepted
+                self.outgoingRideRequests[idx].updatedAt = Date()
+                self.pendingRideJoinRequests.remove(self.outgoingRideRequests[idx].rideId)
+                StorageService.shared.saveRideJoinRequests(self.outgoingRideRequests)
+            }
+            // 3. Update decoupled notification view item if present
+            if let idx = self.notifications.firstIndex(where: { $0.requestId == requestId }) {
+                self.notifications[idx].status = .accepted
+                self.notifications[idx].processedAt = Date()
+                StorageService.shared.saveNotifications(self.notifications)
+            }
+            // 4. Remove from legacy incoming joins list
+            self.incomingRideJoins.removeAll { $0.id == requestId }
+
+            // 5. Add rider to the matching ride
+            let req = self.incomingRideRequests.first { $0.id == requestId }
+            let notif = self.notifications.first { $0.requestId == requestId }
+            let targetRideId = req?.rideId ?? notif?.rideId
+            let targetTitle = req?.rideTitle ?? notif?.targetTitle
+            let riderName = req?.requesterName ?? notif?.actorName ?? "Rider"
+            let riderAvatar = req?.requesterAvatarData ?? notif?.avatarData
+
+            let matchIndex = self.rides.firstIndex { r in
+                if let tId = targetRideId, r.id == tId { return true }
+                if let t = targetTitle, r.title.caseInsensitiveCompare(t) == .orderedSame { return true }
+                return false
+            }
+            if let rIdx = matchIndex {
+                var ride = self.rides[rIdx]
+                if !ride.riders.contains(where: { $0.name == riderName }) {
+                    ride.riders.append(Rider(name: riderName, avatarData: riderAvatar))
+                }
+                ride.ridersGoing = max(ride.ridersGoing + 1, ride.riders.count)
+                self.rides[rIdx] = ride
+                StorageService.shared.saveRide(ride)
+            }
+        }
+
+        await refreshRides(force: true)
+        return true
+    }
+
+    @discardableResult
+    func declineRideJoinRequest(requestId: UUID) async -> Bool {
+        let userId = await resolvedUserId() ?? UUID()
+        _ = try? await SupabaseManager.shared.respondRideJoinRequest(requestId: requestId, action: "decline", userId: userId)
+
+        await MainActor.run {
+            // 1. Update in incoming requests (status: .declined, preserving audit trail)
+            if let idx = self.incomingRideRequests.firstIndex(where: { $0.id == requestId }) {
+                self.incomingRideRequests[idx].status = .declined
+                self.incomingRideRequests[idx].updatedAt = Date()
+            }
+            // 2. Update in outgoing requests if present
+            if let idx = self.outgoingRideRequests.firstIndex(where: { $0.id == requestId }) {
+                self.outgoingRideRequests[idx].status = .declined
+                self.outgoingRideRequests[idx].updatedAt = Date()
+                self.pendingRideJoinRequests.remove(self.outgoingRideRequests[idx].rideId)
+                StorageService.shared.saveRideJoinRequests(self.outgoingRideRequests)
+            }
+            // 3. Update decoupled notification view item if present
+            if let idx = self.notifications.firstIndex(where: { $0.requestId == requestId }) {
+                self.notifications[idx].status = .declined
+                self.notifications[idx].processedAt = Date()
+                StorageService.shared.saveNotifications(self.notifications)
+            }
+            // 4. Remove from legacy incoming joins list
+            self.incomingRideJoins.removeAll { $0.id == requestId }
+        }
+        return true
+    }
+
+    @discardableResult
+    func cancelRideJoinRequest(requestId: UUID) async -> Bool {
+        let userId = await resolvedUserId() ?? UUID()
+        _ = try? await SupabaseManager.shared.cancelRideJoinRequest(requestId: requestId, userId: userId)
+
+        await MainActor.run {
+            if let idx = self.outgoingRideRequests.firstIndex(where: { $0.id == requestId }) {
+                let rideId = self.outgoingRideRequests[idx].rideId
+                self.outgoingRideRequests[idx].status = .cancelled
+                self.outgoingRideRequests[idx].updatedAt = Date()
+                self.pendingRideJoinRequests.remove(rideId)
+                StorageService.shared.saveRideJoinRequests(self.outgoingRideRequests)
+            }
+            if let idx = self.incomingRideRequests.firstIndex(where: { $0.id == requestId }) {
+                self.incomingRideRequests[idx].status = .cancelled
+                self.incomingRideRequests[idx].updatedAt = Date()
+            }
+            if let idx = self.notifications.firstIndex(where: { $0.requestId == requestId }) {
+                self.notifications[idx].status = .declined
+                self.notifications[idx].processedAt = Date()
+                StorageService.shared.saveNotifications(self.notifications)
+            }
+        }
+        return true
+    }
+
+    /// Dismissing or deleting a notification leaves the underlying RideJoinRequest and membership intact.
+    func dismissNotification(id: UUID) {
+        notifications.removeAll { $0.id == id }
+        StorageService.shared.saveNotifications(notifications)
+    }
+
     func acceptNotification(_ notif: AppNotification) async {
         switch notif.type {
         case .friendRequest:
             try? await SupabaseManager.shared.acceptFriendRequest(requestId: notif.requestId)
+            await MainActor.run {
+                if let idx = self.notifications.firstIndex(where: { $0.id == notif.id }) {
+                    self.notifications[idx].status = .accepted
+                    self.notifications[idx].processedAt = Date()
+                }
+                self.pendingFriendRequests.removeAll { $0.id == notif.requestId }
+                StorageService.shared.saveNotifications(self.notifications)
+            }
+            await loadFriends(force: true)
         case .crewInvite:
             try? await SupabaseManager.shared.acceptCrewInvite(memberId: notif.requestId)
-        case .rideJoin:
-            try? await SupabaseManager.shared.acceptRideJoin(memberId: notif.requestId)
-        }
-
-        await MainActor.run {
-            if let idx = self.notifications.firstIndex(where: { $0.id == notif.id }) {
-                self.notifications[idx].status = .accepted
-                self.notifications[idx].processedAt = Date()
-            }
-            switch notif.type {
-            case .friendRequest:
-                self.pendingFriendRequests.removeAll { $0.id == notif.requestId }
-            case .crewInvite:
+            await MainActor.run {
+                if let idx = self.notifications.firstIndex(where: { $0.id == notif.id }) {
+                    self.notifications[idx].status = .accepted
+                    self.notifications[idx].processedAt = Date()
+                }
                 self.incomingCrewInvites.removeAll { $0.id == notif.requestId }
-            case .rideJoin:
-                self.incomingRideJoins.removeAll { $0.id == notif.requestId }
-
-                // Add accepted rider to the ride
-                let riderName = notif.actorName ?? "Rider"
-                let matchIndex = self.rides.firstIndex { r in
-                    if let rId = notif.rideId, r.id == rId { return true }
-                    if let target = notif.targetTitle, r.title.caseInsensitiveCompare(target) == .orderedSame { return true }
-                    return false
-                }
-                if let rIdx = matchIndex {
-                    var ride = self.rides[rIdx]
-                    if !ride.riders.contains(where: { $0.name == riderName }) {
-                        ride.riders.append(Rider(name: riderName, avatarData: notif.avatarData))
-                    }
-                    ride.ridersGoing = max(ride.ridersGoing + 1, ride.riders.count)
-                    self.rides[rIdx] = ride
-                    StorageService.shared.saveRide(ride)
-                }
+                StorageService.shared.saveNotifications(self.notifications)
             }
-            StorageService.shared.saveNotifications(self.notifications)
-        }
-
-        switch notif.type {
-        case .friendRequest: await loadFriends(force: true)
-        case .crewInvite:    await loadCrews(force: true)
-        case .rideJoin:      await refreshRides(force: true)
+            await loadCrews(force: true)
+        case .rideJoin:
+            await acceptRideJoinRequest(requestId: notif.requestId)
         }
     }
 
@@ -599,26 +759,26 @@ final class AppState {
         switch notif.type {
         case .friendRequest:
             try? await SupabaseManager.shared.declineFriendRequest(requestId: notif.requestId)
+            await MainActor.run {
+                if let idx = self.notifications.firstIndex(where: { $0.id == notif.id }) {
+                    self.notifications[idx].status = .declined
+                    self.notifications[idx].processedAt = Date()
+                }
+                self.pendingFriendRequests.removeAll { $0.id == notif.requestId }
+                StorageService.shared.saveNotifications(self.notifications)
+            }
         case .crewInvite:
             try? await SupabaseManager.shared.declineCrewInvite(memberId: notif.requestId)
-        case .rideJoin:
-            try? await SupabaseManager.shared.declineRideJoin(memberId: notif.requestId)
-        }
-
-        await MainActor.run {
-            if let idx = self.notifications.firstIndex(where: { $0.id == notif.id }) {
-                self.notifications[idx].status = .declined
-                self.notifications[idx].processedAt = Date()
-            }
-            switch notif.type {
-            case .friendRequest:
-                self.pendingFriendRequests.removeAll { $0.id == notif.requestId }
-            case .crewInvite:
+            await MainActor.run {
+                if let idx = self.notifications.firstIndex(where: { $0.id == notif.id }) {
+                    self.notifications[idx].status = .declined
+                    self.notifications[idx].processedAt = Date()
+                }
                 self.incomingCrewInvites.removeAll { $0.id == notif.requestId }
-            case .rideJoin:
-                self.incomingRideJoins.removeAll { $0.id == notif.requestId }
+                StorageService.shared.saveNotifications(self.notifications)
             }
-            StorageService.shared.saveNotifications(self.notifications)
+        case .rideJoin:
+            await declineRideJoinRequest(requestId: notif.requestId)
         }
     }
 
@@ -780,6 +940,8 @@ final class AppState {
         StorageService.shared.saveNotifications([])
         StorageService.shared.saveFriends([])
         StorageService.shared.syncCrews([])
+        StorageService.shared.saveRideJoinRequests([])
+        UserDefaults.standard.removeObject(forKey: "backendUserId")
 
         phase = .onboarding
     }
@@ -801,20 +963,69 @@ final class AppState {
 
     @discardableResult
     func finishPlan() -> UUID? {
+        let organiserId = backendUserId ?? UUID()
+        let organiserRider = Rider(
+            id: organiserId,
+            name: displayName,
+            avatarData: avatarImageData,
+            status: .accepted,
+            role: "organiser"
+        )
+        var allRiders: [Rider] = [organiserRider]
+        var invitedUserIds: [UUID] = []
+
+        // If a crew was selected in PlanWhoView, invite its members
+        if let crewId = selectedCrew, let crew = crews.first(where: { $0.id == crewId }) {
+            for member in crew.members {
+                // Deduplicate strictly: skip organiser (by ID or name fallback) and avoid duplicate additions by UUID
+                guard member.id != organiserId && member.name != displayName else { continue }
+                guard !allRiders.contains(where: { $0.id == member.id }) else { continue }
+                allRiders.append(Rider(
+                    id: member.id,
+                    name: member.name,
+                    avatarData: member.avatarData,
+                    status: .invited,
+                    role: "member"
+                ))
+                invitedUserIds.append(member.id)
+            }
+        }
+
+        // If specific friends were selected in PlanWhoView, invite them
+        for friendUsername in selectedFriends {
+            if let friend = friends.first(where: { $0.username == friendUsername }) {
+                // Deduplicate strictly: skip organiser (by ID or name fallback) and avoid duplicate additions by UUID
+                guard friend.id != organiserId && friend.display_name != displayName else { continue }
+                guard !allRiders.contains(where: { $0.id == friend.id }) else { continue }
+                allRiders.append(Rider(
+                    id: friend.id,
+                    name: friend.display_name,
+                    avatarData: friend.avatar_data.flatMap { Data(base64Encoded: $0) },
+                    status: .invited,
+                    role: "member"
+                ))
+                invitedUserIds.append(friend.id)
+            }
+        }
+
+        let isCrewRide = selectedCrew != nil
+        let rideSubtitle = isCrewRide ? "\(draft.to) · Crew ride" : (allRiders.count > 1 ? "\(draft.to) · Group ride" : "\(draft.to) · Solo ride")
+        let rideTag = isCrewRide ? "Crew ride · \(draft.style.rawValue)" : (allRiders.count > 1 ? "Group ride · \(draft.style.rawValue)" : "Solo ride · \(draft.style.rawValue)")
+
         let ride = Ride(
             title: draft.effectiveName,
             place: draft.to,
-            subtitle: "\(draft.to) · Group ride",
-            tag: "Group ride · \(draft.style.rawValue)",
+            subtitle: rideSubtitle,
+            tag: rideTag,
             departs: draft.starts,
-            riders: [Rider(name: displayName, avatarData: avatarImageData)],
+            riders: allRiders,
             plan: draft,
             distance: draft.distanceText(draft.style),
             duration: draft.durationText(draft.style),
             displayDate: draft.starts.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)),
             displayTime: draft.starts.formatted(.dateTime.hour().minute()),
             lockText: "Start ride opens \(draft.starts.formatted(.dateTime.hour().minute()))",
-            ridersGoing: 1,
+            ridersGoing: 1, // Only the organiser is accepted initially
             listMeta: "\(draft.distanceText(draft.style)) · \(draft.from.components(separatedBy: ",")[0]) → \(draft.to)"
         )
 
@@ -825,7 +1036,14 @@ final class AppState {
         rides.sort { $0.departs < $1.departs }
 
         if let userId = backendUserId {
-            Task { try? await SupabaseManager.shared.createRide(ride, userId: userId) }
+            Task {
+                do {
+                    let result = try await SupabaseManager.shared.createRide(ride, userId: userId, invitedUserIds: invitedUserIds)
+                    await self.handleRideCreationResult(result, rideId: ride.id)
+                } catch {
+                    print("[AppState] Failed to create ride on Supabase: \(error)")
+                }
+            }
         }
 
         rideDay = false
@@ -838,7 +1056,156 @@ final class AppState {
         return ride.id
     }
 
-    func completeRide(id: UUID) {
+    @MainActor
+    func handleRideCreationResult(_ result: SupabaseManager.RideCreationResult, rideId: UUID) {
+        guard let idx = rides.firstIndex(where: { $0.id == rideId }) else { return }
+        if !result.failedInvites.isEmpty {
+            failedRideInvitations[rideId] = result.failedInvites
+            // Keep organiser and confirmed invited members; remove failed from active roster
+            rides[idx].riders = rides[idx].riders.filter { rider in
+                rider.role == "organiser" || result.successfulInvites.contains(rider.id)
+            }
+            StorageService.shared.saveRide(rides[idx])
+        }
+    }
+
+    /// Retries failed invitations safely without creating duplicate memberships.
+    func retryFailedInvitations(for rideId: UUID) async -> (successful: [UUID], failed: [UUID]) {
+        guard let failedUserIds = failedRideInvitations[rideId], !failedUserIds.isEmpty else {
+            return ([], [])
+        }
+        var newlySuccessful: [UUID] = []
+        var stillFailed: [UUID] = []
+
+        for userId in failedUserIds {
+            do {
+                try await SupabaseManager.shared.inviteRiderToRide(rideId: rideId, userId: userId)
+                newlySuccessful.append(userId)
+            } catch {
+                stillFailed.append(userId)
+            }
+        }
+
+        if let idx = rides.firstIndex(where: { $0.id == rideId }) {
+            for userId in newlySuccessful {
+                let name = friends.first(where: { $0.id == userId })?.display_name
+                    ?? crews.flatMap(\.members).first(where: { $0.id == userId })?.name
+                    ?? "Rider"
+                if !rides[idx].riders.contains(where: { $0.id == userId }) {
+                    rides[idx].riders.append(Rider(id: userId, name: name, status: .invited, role: "member"))
+                }
+            }
+            StorageService.shared.saveRide(rides[idx])
+        }
+
+        if stillFailed.isEmpty {
+            failedRideInvitations.removeValue(forKey: rideId)
+        } else {
+            failedRideInvitations[rideId] = stillFailed
+        }
+
+        return (newlySuccessful, stillFailed)
+    }
+
+    @discardableResult
+    func inviteFriendToRide(rideId: UUID, friend: ProfileRow) async -> Bool {
+        guard let idx = rides.firstIndex(where: { $0.id == rideId }) else { return false }
+        if rides[idx].riders.contains(where: { $0.id == friend.id }) {
+            return false // Already present by authenticated user UUID
+        }
+
+        let newRider = Rider(
+            id: friend.id,
+            name: friend.display_name,
+            avatarData: friend.avatar_data.flatMap { Data(base64Encoded: $0) },
+            status: .invited,
+            role: "member"
+        )
+        rides[idx].riders.append(newRider)
+        StorageService.shared.saveRide(rides[idx])
+
+        if let _ = backendUserId {
+            Task {
+                try? await SupabaseManager.shared.inviteRiderToRide(rideId: rideId, userId: friend.id)
+            }
+        }
+        return true
+    }
+
+    @discardableResult
+    func acceptRideInvitation(rideId: UUID) async -> Bool {
+        guard let idx = rides.firstIndex(where: { $0.id == rideId }) else { return false }
+        rides[idx].rsvp = .going
+        if let riderIdx = rides[idx].riders.firstIndex(where: { $0.name == displayName }) {
+            rides[idx].riders[riderIdx].status = .accepted
+        } else {
+            rides[idx].riders.append(Rider(
+                id: backendUserId ?? UUID(),
+                name: displayName,
+                avatarData: avatarImageData,
+                status: .accepted,
+                role: "member"
+            ))
+        }
+        rides[idx].ridersGoing = rides[idx].acceptedRiders.count
+        StorageService.shared.saveRide(rides[idx])
+
+        if let userId = backendUserId {
+            Task {
+                try? await SupabaseManager.shared.acceptRideInvitation(rideId: rideId, userId: userId)
+            }
+        }
+        return true
+    }
+
+    @discardableResult
+    func leaveCrew(id: UUID) async -> Bool {
+        guard let userId = backendUserId else {
+            await MainActor.run {
+                crews.removeAll { $0.id == id }
+                StorageService.shared.deleteCrew(id: id)
+            }
+            return true
+        }
+        do {
+            try await SupabaseManager.shared.leaveCrew(crewId: id, userId: userId)
+            await MainActor.run {
+                crews.removeAll { $0.id == id }
+                StorageService.shared.deleteCrew(id: id)
+            }
+            return true
+        } catch {
+            await MainActor.run {
+                crews.removeAll { $0.id == id }
+                StorageService.shared.deleteCrew(id: id)
+            }
+            return true
+        }
+    }
+
+    @discardableResult
+    func removeCrewMember(crewId: UUID, memberId: UUID) async -> Bool {
+        _ = try? await SupabaseManager.shared.removeCrewMember(crewId: crewId, memberId: memberId)
+        await MainActor.run {
+            if let idx = crews.firstIndex(where: { $0.id == crewId }) {
+                crews[idx].members.removeAll { $0.id == memberId }
+                StorageService.shared.saveCrew(crews[idx])
+            }
+        }
+        return true
+    }
+
+    @discardableResult
+    func completeRide(id: UUID, isGroupClosure: Bool = false) async -> Bool {
+        if isGroupClosure {
+            do {
+                try await SupabaseManager.shared.completeGroupRide(rideId: id)
+            } catch {
+                print("[AppState] Failed to complete group ride on backend: \(error)")
+                return false
+            }
+        }
+
         if let idx = rides.firstIndex(where: { $0.id == id }) {
             rides[idx].media.append(contentsOf: activeRideMedia)
         }
@@ -850,6 +1217,7 @@ final class AppState {
 
         popToRoot()
         push(.pastRide(id))
+        return true
     }
 
     // MARK: - Ride Join by Code Flow
@@ -859,30 +1227,37 @@ final class AppState {
         let clean = code.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return nil }
 
+        func resolveStatus(for ride: Ride, defaultStatus: RideMembershipStatus) -> RideMembershipStatus {
+            if ride.organiser == "you" || ride.organiser.lowercased() == displayName.lowercased() {
+                return .isOrganiser
+            }
+            if ride.riders.contains(where: { $0.name.lowercased() == displayName.lowercased() }) {
+                return .accepted
+            }
+            if let req = outgoingRideRequests.first(where: { $0.rideId == ride.id }) {
+                switch req.status {
+                case .pending: return .pending
+                case .accepted: return .accepted
+                case .declined, .cancelled: return .notMember
+                }
+            }
+            if pendingRideJoinRequests.contains(ride.id) {
+                return .pending
+            }
+            return defaultStatus
+        }
+
         // 1. Try server via Supabase if user has a resolved ID
         if let userId = await resolvedUserId() {
             if let result = try? await SupabaseManager.shared.fetchRideByCode(clean, userId: userId) {
-                if pendingRideJoinRequests.contains(result.0.id) && result.1 == .notMember {
-                    return (result.0, .pending)
-                }
-                return result
+                let status = resolveStatus(for: result.0, defaultStatus: result.1)
+                return (result.0, status)
             }
         }
 
         // 2. Local active rides fallback
         if let target = rides.first(where: { $0.code.uppercased() == clean }) {
-            let status: RideMembershipStatus = {
-                if target.organiser == "you" || target.organiser.lowercased() == displayName.lowercased() {
-                    return .isOrganiser
-                }
-                if target.riders.contains(where: { $0.name.lowercased() == displayName.lowercased() }) {
-                    return .accepted
-                }
-                if pendingRideJoinRequests.contains(target.id) {
-                    return .pending
-                }
-                return .notMember
-            }()
+            let status = resolveStatus(for: target, defaultStatus: .notMember)
             return (target, status)
         }
 
@@ -890,18 +1265,7 @@ final class AppState {
         let stored = StorageService.shared.loadActiveRides()
             .map { $0.toRide(displayName: displayName, avatarData: avatarImageData) }
         if let target = stored.first(where: { $0.code.uppercased() == clean }) {
-            let status: RideMembershipStatus = {
-                if target.organiser == "you" || target.organiser.lowercased() == displayName.lowercased() {
-                    return .isOrganiser
-                }
-                if target.riders.contains(where: { $0.name.lowercased() == displayName.lowercased() }) {
-                    return .accepted
-                }
-                if pendingRideJoinRequests.contains(target.id) {
-                    return .pending
-                }
-                return .notMember
-            }()
+            let status = resolveStatus(for: target, defaultStatus: .notMember)
             return (target, status)
         }
 
@@ -911,21 +1275,70 @@ final class AppState {
     /// Sends a join request for a found ride.
     @discardableResult
     func sendRideJoinRequest(ride: Ride) async -> Bool {
-        let userId = await resolvedUserId()
-        if let userId {
-            _ = try? await SupabaseManager.shared.requestToJoinRide(rideId: ride.id, userId: userId)
+        // 1. Own ride check: Organizer cannot request to join their own ride
+        if ride.organiser == "you" || ride.organiser.lowercased() == displayName.lowercased() {
+            print("[RideJoin] Organizer cannot join own ride")
+            return false
         }
 
+        // 2. Already joined check
+        if ride.riders.contains(where: { $0.name.lowercased() == displayName.lowercased() }) {
+            print("[RideJoin] Already a member of this ride")
+            return true
+        }
+
+        // 3. Duplicate pending check: avoid re-sending if already pending
+        if outgoingRideRequests.contains(where: { $0.rideId == ride.id && $0.status == .pending }) {
+            print("[RideJoin] Request already pending")
+            return true
+        }
+
+        // 4. Completed / ended ride check
+        if completedRides.contains(where: { $0.id == ride.id }) {
+            print("[RideJoin] Cannot join completed ride")
+            return false
+        }
+
+        let userId = await resolvedUserId() ?? UUID()
+        let createdReq = try? await SupabaseManager.shared.createRideJoinRequest(rideId: ride.id, userId: userId)
+        let requestId = createdReq?.id ?? UUID()
+
         await MainActor.run {
+            let joinRequest = RideJoinRequest(
+                id: requestId,
+                rideId: ride.id,
+                requesterId: userId,
+                organizerId: UUID(),
+                status: .pending,
+                createdAt: Date(),
+                updatedAt: Date(),
+                requesterName: displayName,
+                requesterHandle: handle.isEmpty ? "rider" : handle,
+                requesterAvatarData: avatarImageData,
+                rideTitle: ride.title
+            )
+
+            if let idx = self.outgoingRideRequests.firstIndex(where: { $0.rideId == ride.id }) {
+                self.outgoingRideRequests[idx] = joinRequest
+            } else {
+                self.outgoingRideRequests.append(joinRequest)
+            }
             self.pendingRideJoinRequests.insert(ride.id)
+            StorageService.shared.saveRideJoinRequests(self.outgoingRideRequests)
 
             // If the organizer is on this device (e.g. testing or local trip creation),
-            // generate the notification for the admin.
+            // record incoming request and generate the notification for the admin.
             let isHostLocal = ride.organiser == "you" ||
                               ride.organiser.lowercased() == displayName.lowercased() ||
                               rides.contains(where: { $0.id == ride.id && ($0.organiser == "you" || $0.organiser.lowercased() == displayName.lowercased()) })
 
             if isHostLocal {
+                if let iIdx = self.incomingRideRequests.firstIndex(where: { $0.id == joinRequest.id }) {
+                    self.incomingRideRequests[iIdx] = joinRequest
+                } else {
+                    self.incomingRideRequests.insert(joinRequest, at: 0)
+                }
+
                 let notif = AppNotification(
                     id: UUID(),
                     type: .rideJoin,
@@ -933,7 +1346,7 @@ final class AppState {
                     subtitle: "\(displayName) wants to join \(ride.title).",
                     avatarData: avatarImageData,
                     date: Date(),
-                    requestId: UUID(),
+                    requestId: joinRequest.id,
                     crewId: nil,
                     rideId: ride.id,
                     actorName: displayName,
@@ -941,7 +1354,7 @@ final class AppState {
                     targetTitle: ride.title,
                     status: .pending
                 )
-                if !notifications.contains(where: { $0.rideId == ride.id && $0.actorName == displayName && $0.status == .pending }) {
+                if !notifications.contains(where: { $0.requestId == joinRequest.id && $0.status == .pending }) {
                     notifications.insert(notif, at: 0)
                     StorageService.shared.saveNotifications(notifications)
                 }
