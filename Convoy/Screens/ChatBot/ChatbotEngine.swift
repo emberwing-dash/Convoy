@@ -2,7 +2,7 @@
 import Foundation
 import SwiftUI
 
-struct RidePlanDraft: Equatable {
+struct RidePlanDraft: Equatable, Codable {
     var destination: String? = nil
     var startLocation: String? = nil
     var startIsCurrentLocation: Bool = false
@@ -22,24 +22,48 @@ struct RidePlanDraft: Equatable {
     var isActive: Bool { destination != nil }
 }
 
-struct ChatMessage: Identifiable, Hashable {
-    enum Kind: Hashable { case user, assistant, confirmation, error, system }
-    let id = UUID()
+struct ChatMessage: Identifiable, Hashable, Codable {
+    enum Kind: String, Codable, Hashable { case user, assistant, confirmation, error, system }
+    let id: UUID
     var kind: Kind
     var text: String
     var pendingConfirmation: PendingConfirmation? = nil
+
+    // ✅ Explicit init with default UUID
+    init(id: UUID = UUID(), kind: Kind, text: String, pendingConfirmation: PendingConfirmation? = nil) {
+        self.id = id
+        self.kind = kind
+        self.text = text
+        self.pendingConfirmation = pendingConfirmation
+    }
 }
 
-struct PendingConfirmation: Identifiable, Hashable {
-    let id = UUID()
+struct PendingConfirmation: Identifiable, Hashable, Codable {
+    let id: UUID
     let toolCallId: String
     let toolName: String
-    let args: [String: AnyHashable]
+    let argsData: Data // Store as Data for Codable
     let displayTitle: String
     let displayDetail: String
     let isNavigating: Bool
     let buttonLabel: String
-    var rawArgs: [String: Any] { args.mapValues { $0.base as Any } }
+    
+    var rawArgs: [String: Any] {
+        (try? JSONSerialization.jsonObject(with: argsData)) as? [String: Any] ?? [:]
+    }
+    
+    // ✅ Explicit init with default UUID
+    init(id: UUID = UUID(), toolCallId: String, toolName: String, argsData: Data, displayTitle: String, displayDetail: String, isNavigating: Bool, buttonLabel: String) {
+        self.id = id
+        self.toolCallId = toolCallId
+        self.toolName = toolName
+        self.argsData = argsData
+        self.displayTitle = displayTitle
+        self.displayDetail = displayDetail
+        self.isNavigating = isNavigating
+        self.buttonLabel = buttonLabel
+    }
+    
     static func == (l: PendingConfirmation, r: PendingConfirmation) -> Bool { l.id == r.id }
     func hash(into h: inout Hasher) { h.combine(id) }
 }
@@ -52,26 +76,84 @@ final class ChatbotEngine {
     private(set) var messages: [ChatMessage] = []
     private(set) var isThinking = false
     private(set) var thinkingStatus: String? = nil
-    private(set) var promptsRemaining: Int = 50
+    private(set) var promptsRemaining: Int = 9999
     private(set) var errorMessage: String? = nil
     private(set) var pendingConfirmation: PendingConfirmation? = nil
 
-    /// Live ride planning state, filled by ChatTools.set_* calls.
     var rideDraft = RidePlanDraft()
 
     // MARK: - Private
     private var apiMessages: [[String: Any]] = []
-    private let dailyLimit = 50
+    private let dailyLimit = 9999
+    
     private let endpoint = URL(string: "https://avykoruhcgwpmvmddlta.supabase.co/functions/v1/groq-proxy")!
     private let supabaseKey = "sb_publishable_4cTQxSHnQbUtxLE_n2Rz7A_YDCuQ5-0"
-    private var didInitSystemPrompt = false
     private var toolFailureRetries = 0
     private var rateLimitRetries = 0
+    private var isExecutingTool = false
 
     private static let countKey = "chat.promptsToday"
     private static let dateKey  = "chat.promptsDate"
+    
+    // ✅ Memory Keys
+    private let messagesKey = "chat.messages.v2"
+    private let apiMessagesKey = "chat.apiMessages.v2"
+    private let timestampKey = "chat.timestamp.v2"
+    private let rideDraftKey = "chat.rideDraft.v2"
 
-    init() { refreshRateLimit() }
+    init() {
+        loadState()
+        refreshRateLimit()
+    }
+
+    // MARK: - Memory Persistence
+
+    private func loadState() {
+        let lastDate = UserDefaults.standard.object(forKey: timestampKey) as? Date ?? .distantPast
+        // Expire after 48 hours
+        if Date().timeIntervalSince(lastDate) > 48 * 60 * 60 {
+            clearState()
+            return
+        }
+        
+        if let data = UserDefaults.standard.data(forKey: messagesKey),
+           let decoded = try? JSONDecoder().decode([ChatMessage].self, from: data) {
+            messages = decoded
+        }
+        
+        if let data = UserDefaults.standard.data(forKey: apiMessagesKey),
+           let decoded = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            apiMessages = decoded
+        }
+        
+        if let data = UserDefaults.standard.data(forKey: rideDraftKey),
+           let decoded = try? JSONDecoder().decode(RidePlanDraft.self, from: data) {
+            rideDraft = decoded
+        }
+    }
+
+    func saveState() {
+        if let data = try? JSONEncoder().encode(messages) {
+            UserDefaults.standard.set(data, forKey: messagesKey)
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: apiMessages) {
+            UserDefaults.standard.set(data, forKey: apiMessagesKey)
+        }
+        if let data = try? JSONEncoder().encode(rideDraft) {
+            UserDefaults.standard.set(data, forKey: rideDraftKey)
+        }
+        UserDefaults.standard.set(Date(), forKey: timestampKey)
+    }
+
+    private func clearState() {
+        messages = []
+        apiMessages = []
+        rideDraft = RidePlanDraft()
+        UserDefaults.standard.removeObject(forKey: messagesKey)
+        UserDefaults.standard.removeObject(forKey: apiMessagesKey)
+        UserDefaults.standard.removeObject(forKey: rideDraftKey)
+        UserDefaults.standard.removeObject(forKey: timestampKey)
+    }
 
     // MARK: - Public API
 
@@ -87,25 +169,23 @@ final class ChatbotEngine {
         messages.append(ChatMessage(kind: .user, text: trimmed))
         apiMessages.append(["role": "user", "content": trimmed])
 
-        // Trim history to prevent hitting the token-per-minute limit
         trimHistoryIfNeeded()
 
         errorMessage = nil
         toolFailureRetries = 0
         rateLimitRetries = 0
+        saveState()
         await runLoop(app: app)
     }
 
-    private var isExecutingTool = false // ✅ Add this variable near the top of the class
-
-        func confirmPending(app: AppState) async {
-            guard let pending = pendingConfirmation else { return }
-            guard !isExecutingTool else { return } // ✅ Prevents double-taps
-            
-            isExecutingTool = true
-            defer { isExecutingTool = false }
-            
-            pendingConfirmation = nil
+    func confirmPending(app: AppState) async {
+        guard let pending = pendingConfirmation else { return }
+        guard !isExecutingTool else { return }
+        
+        isExecutingTool = true
+        defer { isExecutingTool = false }
+        
+        pendingConfirmation = nil
 
         if let idx = messages.lastIndex(where: { $0.pendingConfirmation?.id == pending.id }) {
             messages[idx].pendingConfirmation = nil
@@ -117,6 +197,11 @@ final class ChatbotEngine {
         let result = await ChatTools.execute(
             name: pending.toolName, args: pending.rawArgs,
             app: app, engine: self)
+            
+        if result.contains("\"error\"") {
+            print("⚠️ [Chatbot] Tool '\(pending.toolName)' failed. Result: \(result)")
+        }
+        
         apiMessages.append([
             "role": "tool",
             "tool_call_id": pending.toolCallId,
@@ -125,6 +210,7 @@ final class ChatbotEngine {
         isThinking = false
         thinkingStatus = nil
 
+        saveState()
         if pending.isNavigating { return }
         await runLoop(app: app)
     }
@@ -141,6 +227,7 @@ final class ChatbotEngine {
             "tool_call_id": pending.toolCallId,
             "content": "{\"error\": \"User declined\"}"
         ])
+        saveState()
         await runLoop(app: app)
     }
 
@@ -150,9 +237,12 @@ final class ChatbotEngine {
 
     private func runLoop(app: AppState) async {
         isThinking = true
-        defer { isThinking = false; thinkingStatus = nil }
+        defer {
+            isThinking = false
+            thinkingStatus = nil
+            saveState()
+        }
 
-        // ✅ Inject fresh system prompt on EVERY turn
         let sysPrompt: [String: Any] = ["role": "system", "content": buildSystemPrompt(app: app)]
         if apiMessages.first?["role"] as? String == "system" {
             apiMessages[0] = sysPrompt
@@ -184,11 +274,11 @@ final class ChatbotEngine {
                         else { continue }
 
                         if ChatTools.requiresConfirmation(name) {
-                            let hashable = parsed.compactMapValues { $0 as? AnyHashable }
+                            let argsData = (try? JSONSerialization.data(withJSONObject: parsed)) ?? Data()
                             let pending = PendingConfirmation(
                                 toolCallId: id,
                                 toolName: name,
-                                args: hashable,
+                                argsData: argsData,
                                 displayTitle: ChatTools.confirmationTitle(name, parsed),
                                 displayDetail: ChatTools.confirmationDetail(name, parsed, self),
                                 isNavigating: ChatTools.isNavigating(name),
@@ -201,6 +291,11 @@ final class ChatbotEngine {
                         thinkingStatus = ChatTools.statusLabel(name)
                         let result = await ChatTools.execute(
                             name: name, args: parsed, app: app, engine: self)
+                        
+                        if result.contains("\"error\"") {
+                            print("⚠️ [Chatbot] Tool '\(name)' failed. Result: \(result)")
+                        }
+                        
                         apiMessages.append([
                             "role": "tool", "tool_call_id": id, "content": result
                         ])
@@ -214,7 +309,6 @@ final class ChatbotEngine {
                 }
                 return
             } catch {
-                // ── Tool hallucination retry ────────────────────────
                 if isToolHallucinationError(error), toolFailureRetries == 0 {
                     toolFailureRetries += 1
                     apiMessages.append([
@@ -223,7 +317,6 @@ final class ChatbotEngine {
                     ])
                     continue
                 }
-                // ── Rate limit retry ──────────────────────────────
                 if isRateLimitError(error), rateLimitRetries == 0 {
                     rateLimitRetries += 1
                     thinkingStatus = "Rate limited. Waiting 20s…"
@@ -252,28 +345,19 @@ final class ChatbotEngine {
         return msg.contains("429") || msg.contains("rate limit")
     }
 
-    /// Keeps the conversation under Groq's 7,000 ITPM limit.
-    /// Trims from the top but keeps the system prompt and the last complete turn.
     private func trimHistoryIfNeeded() {
-        // Keep system prompt (index 0) + last ~8 messages
         guard apiMessages.count > 10 else { return }
-
-        // Find a safe cut point — the start of a user message (not a tool result)
         var cutIndex = apiMessages.count - 8
         while cutIndex < apiMessages.count {
             let role = apiMessages[cutIndex]["role"] as? String ?? ""
             if role == "user" { break }
             cutIndex += 1
         }
-        // Don't trim if we can't find a safe point
         guard cutIndex < apiMessages.count, cutIndex > 1 else { return }
-
         let systemPrompt = apiMessages[0]
         let recent = Array(apiMessages[cutIndex...])
         apiMessages = [systemPrompt] + recent
     }
-
-    // MARK: - Groq
 
     private func callGroq() async throws -> [String: Any] {
         let body: [String: Any] = [
@@ -307,7 +391,6 @@ final class ChatbotEngine {
         return json
     }
 
-    // Call this at the start of runLoop, NOT just once in init.
     private func buildSystemPrompt(app: AppState) -> String {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
@@ -332,28 +415,37 @@ final class ChatbotEngine {
         let toolList = ChatTools.allToolNames.joined(separator: ", ")
 
         return """
-                You are Convoy's ride assistant.
-                TODAY'S DATE IS: \(currentDate)
-                
-                USER CONTEXT:
-                - Crews: \(crews.isEmpty ? "None" : crews)
-                - Friends: \(friends.isEmpty ? "None" : friends)
-                
-                \(draftStatus)
-                
-                TOOLS: \(toolList)
-                
-                MULTI-ACTION PROMPTS:
-                If the user says "Create a crew and invite X", you must:
-                1. Call create_crew.
-                2. After it succeeds, call invite_to_crew.
-                
-                RIDE PLANNING FLOW:
-                ...
-                """
-    }
+        You are Convoy's ride assistant for a motorcycle group-ride app in India.
+        TODAY'S DATE IS: \(currentDate)
+        
+        USER CONTEXT:
+        - Crews: \(crews.isEmpty ? "None" : crews)
+        - Friends: \(friends.isEmpty ? "None" : friends)
+        
+        \(draftStatus)
+        
+        TOOLS: \(toolList)
+        
+        MULTI-ACTION PROMPTS:
+        If the user says "Create a crew and invite X", you must:
+        1. Call create_crew.
+        2. After it succeeds, call invite_to_crew.
 
-    // MARK: - Rate limiting
+        RIDE PLANNING FLOW (follow exactly):
+        1. Call begin_ride_planning(destination: <extract from message>)
+        2. Ask ONE question at a time based on "Missing Fields".
+           - If missing "start": Ask where to start. Suggest current location.
+           - If missing "time": Ask when. (Calculate ISO8601 based on TODAY'S DATE).
+           - Ask about checkpoints if they want them. Use suggest_checkpoints.
+        3. Once start and destination are known, call fetch_routes to calculate options. Ask the user to pick one (Fastest, Scenic, etc.).
+        4. Call finalize_ride_plan(route_style: "ChosenStyle") when all details are set.
+        
+        STYLE:
+        - 1-2 short sentences.
+        - ONE question per message.
+        - Plain text only.
+        """
+    }
 
     private func refreshRateLimit() {
         let today = Calendar.current.startOfDay(for: .now)

@@ -25,7 +25,7 @@ struct MotorbikeLogoView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: size, height: size)
-                 .clipShape(Circle())
+                .clipShape(Circle())
         }
         .frame(width: size, height: size)
         .onAppear {

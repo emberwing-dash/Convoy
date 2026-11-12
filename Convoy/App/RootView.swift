@@ -65,9 +65,11 @@ struct RootView: View {
             case .requestPending:
                 app.tab = .ride
                 app.popToRoot()
-                app.push(.joinCode)
+                app.push(.joinCode(payload)) // ✅ Pass the code
             case .failed:
-                break
+                app.tab = .ride
+                app.popToRoot()
+                app.push(.joinCode(payload)) // ✅ Pass the code
             }
 
         default: break

@@ -956,6 +956,10 @@ final class SupabaseManager {
             .delete().eq("user_id", value: userId).eq("route_id", value: routeId)
             .execute()
     }
+    
+    func deleteRide(id: UUID) async throws {
+        try await client.from("rides").delete().eq("id", value: id).execute()
+    }
 }
 
 // MARK: - Codable payloads
@@ -1245,8 +1249,9 @@ extension RideRow {
             departs: date, riders: riders, plan: plan,
             distance: distance ?? "", duration: duration ?? "",
             displayDate: display_date ?? "", displayTime: display_time ?? "",
-            organiser: "host", rsvp: .going,
-            lockText: "Start ride", ridersGoing: max(1, riders.count),
+            organiser: "host", organiserId: organiser_id,
+            rsvp: .going, lockText: "Start ride",
+            ridersGoing: max(1, riders.count),
             listMeta: "\(distance ?? "") · \(from_location ?? "") → \(to_location ?? "")",
             code: code
         )

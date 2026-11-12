@@ -97,7 +97,6 @@ struct Ride: Identifiable, Hashable {
     var listMeta: String
     var code: String
     var media: [RideMediaItem] = []
-
     var isCompleted: Bool = false
 
     static func generateUniqueCode() -> String {
@@ -172,8 +171,6 @@ struct RideMediaItem: Identifiable, Hashable {
         self.createdDate = createdDate; self.caption = caption
     }
 }
-
-// MARK: - Entity → Ride mapping
 
 extension PersistedRideEntity {
     func toRide(displayName: String, avatarData: Data?) -> Ride {
