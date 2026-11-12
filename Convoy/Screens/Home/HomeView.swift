@@ -21,8 +21,8 @@ struct HomeView: View {
             .scrollIndicators(.hidden)
         }
         .task {
-            await app.refreshRides(force: true)
-            await app.refreshNotifications(force: true)
+            await app.refreshRides(force: false)
+            await app.refreshNotifications(force: false)
             await app.refreshMyPendingRideJoins()
         }
         .refreshable {

@@ -8,12 +8,21 @@ struct MainShell: View {
         @Bindable var app = app
         NavigationStack(path: $app.path) {
             ZStack(alignment: .bottom) {
-                Group {
-                    switch app.tab {
-                    case .ride: HomeView()
-                    case .discover: DiscoverView()
-                    case .crew: CrewView()
-                    }
+                ZStack {
+                    HomeView()
+                        .opacity(app.tab == .ride ? 1 : 0)
+                        .allowsHitTesting(app.tab == .ride)
+                        .accessibilityHidden(app.tab != .ride)
+
+                    DiscoverView()
+                        .opacity(app.tab == .discover ? 1 : 0)
+                        .allowsHitTesting(app.tab == .discover)
+                        .accessibilityHidden(app.tab != .discover)
+
+                    CrewView()
+                        .opacity(app.tab == .crew ? 1 : 0)
+                        .allowsHitTesting(app.tab == .crew)
+                        .accessibilityHidden(app.tab != .crew)
                 }
                 ConvoyTabBar(selection: $app.tab)
                     .padding(.bottom, 8)
