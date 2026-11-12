@@ -229,7 +229,11 @@ final class AppState {
         }
 
         Task {
-            if let liveId = await SupabaseManager.shared.getOrRestoreUserId() {
+            if let validId = try? await SupabaseManager.shared.ensureAuthenticatedUser(displayName: self.displayName, handle: self.handle) {
+                await MainActor.run {
+                    self.backendUserId = validId
+                }
+            } else if let liveId = await SupabaseManager.shared.getOrRestoreUserId() {
                 await MainActor.run {
                     self.backendUserId = liveId
                 }

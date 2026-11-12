@@ -599,5 +599,22 @@ import Testing
         )
         #expect(crewId != UUID())
     }
+
+    @Test func testCreateCrewDilliBoysMatchesUserFlow() async throws {
+        let app = AppState()
+        let n = "Dilli boys"
+        let code = CrewGroup.makeCode(name: n)
+        let userId = try await SupabaseManager.shared.ensureAuthenticatedUser(displayName: app.displayName, handle: app.handle)
+        let crewId = try await SupabaseManager.shared.createCrew(
+            name: n,
+            code: code,
+            creatorId: userId,
+            memberIds: [],
+            avatarData: nil,
+            displayName: app.displayName,
+            handle: app.handle
+        )
+        #expect(crewId != UUID())
+    }
 }
 

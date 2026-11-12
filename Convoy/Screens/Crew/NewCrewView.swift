@@ -162,7 +162,12 @@ struct NewCrewView: View {
                     handle: app.handle
                 )
 
-                let hydrated = (try? await SupabaseManager.shared.fetchCrewsWithMembers(for: userId)) ?? []
+                let activeId = SupabaseManager.shared.currentUserId ?? userId
+                if app.backendUserId != activeId {
+                    await MainActor.run { app.backendUserId = activeId }
+                }
+
+                let hydrated = (try? await SupabaseManager.shared.fetchCrewsWithMembers(for: activeId)) ?? []
 
                 await MainActor.run {
                     isCreating = false

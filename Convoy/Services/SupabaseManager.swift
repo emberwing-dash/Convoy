@@ -32,7 +32,23 @@ final class SupabaseManager {
     func getOrRestoreUserId() async -> UUID? {
         do {
             let session = try await client.auth.session
-            return session.user.id
+            do {
+                let user = try await client.auth.user()
+                return user.id
+            } catch {
+                let errStr = "\(error)"
+                // Allow cached session for transient network / offline errors
+                if let urlErr = error as? URLError, urlErr.code == .notConnectedToInternet || urlErr.code == .timedOut {
+                    return session.user.id
+                }
+                // If server explicitly invalidated token / user is missing, purge local session
+                if errStr.contains("401") || errStr.contains("403") || errStr.contains("user_not_found") || errStr.contains("invalid") || errStr.contains("AuthError") {
+                    print("⚠️ [getOrRestoreUserId] Server rejected session, clearing local auth...")
+                    _ = try? await client.auth.signOut()
+                    return nil
+                }
+                return session.user.id
+            }
         } catch {
             return nil
         }
@@ -116,7 +132,19 @@ final class SupabaseManager {
         do {
             try await client.from("profiles").upsert(profile).execute()
         } catch {
-            print("[ensureAuthenticatedUser] Profile upsert note: \(error)")
+            print("⚠️ [ensureAuthenticatedUser] Profile upsert failed: \(error). Re-authenticating session...")
+            // Session was stale or unauthorized on server. Force a clean re-auth.
+            _ = try? await client.auth.signOut()
+            let freshId = try await signInAnonymously()
+            let retryCandidate = "\(baseUsername)_\(freshId.uuidString.prefix(4).lowercased())"
+            let freshProfile = ProfileInsert(
+                id: freshId,
+                username: retryCandidate,
+                display_name: displayName.isEmpty ? "Rider" : displayName,
+                avatar_data: nil
+            )
+            try await client.from("profiles").upsert(freshProfile).execute()
+            return freshId
         }
 
         return validId
@@ -246,7 +274,7 @@ final class SupabaseManager {
         }
 
         var currentCode = code
-        for attempt in 0..<2 {
+        for attempt in 0..<3 {
             let params = Params(
                 p_name: name, p_code: currentCode, p_creator_id: authenticatedId,
                 p_avatar_data: avatarData?.base64EncodedString(),
@@ -257,51 +285,23 @@ final class SupabaseManager {
                 return crewId
             } catch {
                 let errString = "\(error)"
-                // Only retry if it's a unique constraint violation (code 23505)
-                if attempt == 0 && errString.contains("23505") {
+                // Retry if it's a unique constraint violation on code (code 23505)
+                if attempt < 2 && errString.contains("23505") {
                     print("⚠️ Crew code collided, retrying with a new code...")
                     currentCode = CrewGroup.makeCode(name: name)
                     continue
                 }
 
-                // If RPC failed due to an auth issue (e.g. session expired mid-flight), refresh and retry once
-                if attempt == 0 && (errString.contains("P0001") || errString.contains("42501") || errString.contains("JWT")) {
-                    print("⚠️ Crew creation auth issue detected, refreshing session and retrying...")
+                // If RPC failed due to auth/profile/session expiration, refresh and retry
+                if attempt < 2 && (errString.contains("P0001") || errString.contains("42501") || errString.contains("23503") || errString.contains("JWT") || errString.contains("PGRST301")) {
+                    print("⚠️ Crew creation auth/profile issue detected (\(error)), refreshing session and retrying...")
                     _ = try? await client.auth.signOut()
                     authenticatedId = try await ensureAuthenticatedUser(displayName: displayName, handle: handle)
                     continue
                 }
 
-                // Fallback to direct client insert if RPC fails
-                do {
-                    let crew = CrewInsert(
-                        name: name,
-                        code: currentCode,
-                        created_by: authenticatedId,
-                        avatar_data: avatarData?.base64EncodedString()
-                    )
-                    let inserted: [CrewRow] = try await client.from("crews")
-                        .insert(crew)
-                        .select()
-                        .execute()
-                        .value
-                    guard let cId = inserted.first?.id else { throw error }
-                    let adminMember = CrewMemberInsert(
-                        crew_id: cId,
-                        user_id: authenticatedId,
-                        role: "admin",
-                        status: "accepted"
-                    )
-                    try await client.from("crew_members").insert(adminMember).execute()
-                    for mId in memberIds where mId != authenticatedId {
-                        let inv = CrewMemberInsert(crew_id: cId, user_id: mId, role: "member", status: "pending", invited_by: authenticatedId)
-                        try? await client.from("crew_members").insert(inv).execute()
-                    }
-                    return cId
-                } catch {
-                    print("🚨 Crew creation fallback failed: \(error)")
-                    throw error
-                }
+                print("🚨 create_crew_atomic failed: \(error)")
+                throw error
             }
         }
         throw NSError(domain: "Convoy", code: 500, userInfo: [NSLocalizedDescriptionKey: "Crew creation failed"])
