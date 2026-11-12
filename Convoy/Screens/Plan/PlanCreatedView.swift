@@ -31,6 +31,8 @@ struct PlanCreatedView: View {
         (350, 250, CV.cream),
     ]
 
+    private var isEditing: Bool { app.editingRideID != nil }
+
     var body: some View {
         DesignCanvas(background: ContourBackdrop()) {
             Circle()
@@ -59,12 +61,12 @@ struct PlanCreatedView: View {
                 Circle().fill(d.2).frame(width: 6, height: 6).at(d.0, d.1)
             }
 
-            Text("Ride on, \(app.displayName)")
+            Text(isEditing ? "Ride updated" : "Ride on, \(app.displayName)")
                 .cvText(32, .bold, tracking: -0.64, inter: true)
                 .frame(width: 393).at(0, 512)
 
             HStack(spacing: 8) {
-                Image(systemName: "triangle")
+                Image(systemName: isEditing ? "pencil" : "triangle")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(CV.red)
                 Text(app.draft.effectiveName)
@@ -87,7 +89,7 @@ struct PlanCreatedView: View {
             }
             .frame(width: 100, height: 4).at(146.5, 760)
 
-            Text("Taking you to your ride")
+            Text(isEditing ? "Saving your changes" : "Taking you to your ride")
                 .cvText(13, color: CV.cream.opacity(0.45), inter: true)
                 .frame(width: 393).at(0, 776)
         }

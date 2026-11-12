@@ -10,7 +10,8 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
-                    if app.rides.isEmpty { newUserContent } else { upcomingContent }
+                    if app.rides.isEmpty && app.pendingRideJoinsByMe.isEmpty { newUserContent }
+                    else { upcomingContent }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
@@ -20,16 +21,17 @@ struct HomeView: View {
             .scrollIndicators(.hidden)
         }
         .task {
-            await app.refreshRides()
-            await app.refreshNotifications()
+            await app.refreshRides(force: true)
+            await app.refreshNotifications(force: true)
+            await app.refreshMyPendingRideJoins()
         }
         .refreshable {
             await app.refreshRides(force: true)
             await app.refreshNotifications(force: true)
+            await app.refreshMyPendingRideJoins()
         }
     }
 
-    // MARK: - Header
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 0) {
@@ -38,9 +40,7 @@ struct HomeView: View {
                 Text("Hey \(app.displayName)").cvText(20, .semibold, tracking: -0.3, lineHeight: 24, inter: true)
             }
             Spacer()
-            
             HStack(spacing: 12) {
-                // Notification Bell
                 Button { app.push(.notifications) } label: {
                     ZStack(alignment: .topTrailing) {
                         Image(systemName: "bell.fill")
@@ -49,28 +49,21 @@ struct HomeView: View {
                             .frame(width: 44, height: 44)
                             .background(CV.glassFill, in: Circle())
                             .overlay(Circle().strokeBorder(CV.glassStroke, lineWidth: 1))
-                        
                         if app.hasUnreadNotifications {
-                            Circle()
-                                .fill(CV.red)
-                                .frame(width: 10, height: 10)
+                            Circle().fill(CV.red).frame(width: 10, height: 10)
                                 .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
                                 .offset(x: -4, y: 4)
                         }
                     }
-                }
-                .buttonStyle(.plain)
-                
-                // Profile Button
-                Button { app.push(.profile) } label: { AvatarChip(data: app.avatarImageData, name: app.displayName, size: 44) }
-                    .buttonStyle(.plain)
+                }.buttonStyle(.plain)
+                Button { app.push(.profile) } label: {
+                    AvatarChip(data: app.avatarImageData, name: app.displayName, size: 44)
+                }.buttonStyle(.plain)
             }
         }
         .frame(height: 44)
     }
 
-
-    // MARK: - Actions
     private var actions: some View {
         VStack(spacing: 12) {
             Button {
@@ -84,8 +77,7 @@ struct HomeView: View {
                 .foregroundStyle(CV.ink)
                 .frame(maxWidth: .infinity).frame(height: 56)
                 .background(CV.cream, in: Capsule())
-            }
-            .buttonStyle(.plain)
+            }.buttonStyle(.plain)
 
             Button { app.push(.joinCode) } label: {
                 HStack(spacing: 10) {
@@ -95,15 +87,13 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity).frame(height: 56)
                 .background(Color.white.opacity(0.07), in: Capsule())
                 .overlay(Capsule().strokeBorder(CV.glassStroke, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
+            }.buttonStyle(.plain)
         }
     }
 
-    // MARK: - Empty state
     private var newUserContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Your first ride\nstarts here.").cvText(34, .bold, tracking: -0.85, lineHeight: 40, inter: true)
+            Text("Your first ride\nstarts here").cvText(34, .bold, tracking: -0.85, lineHeight: 40, inter: true)
                 .padding(.top, 26)
             Text("Bring your crew and Plan a route, or join a ride a friend already planned.")
                 .cvText(17, color: CV.muted, tracking: -0.17, lineHeight: 24, inter: true)
@@ -111,26 +101,32 @@ struct HomeView: View {
             actions.padding(.top, 24)
             Text("Upcoming rides").cvText(20, .semibold, tracking: -0.3, lineHeight: 25, inter: true)
                 .padding(.top, 32)
-            VStack(spacing: 12) {
-                Image(systemName: "calendar").font(.system(size: 24))
-                    .foregroundStyle(CV.red)
-                    .frame(width: 52, height: 52)
-                    .background(CV.red.opacity(0.14), in: Circle())
-                Text("No rides planned yet").cvText(17, .semibold, tracking: -0.17, lineHeight: 22, inter: true)
-                    .padding(.top, 4)
-                Text("Rides you plan or join will show up here.")
-                    .cvText(15, color: CV.muted, tracking: -0.15, lineHeight: 20, inter: true)
-                    .multilineTextAlignment(.center)
+            VStack() {
+                Image("no_upcomming_rides")
+                    .resizable().scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 24))
+                    .overlay(
+                        ZStack {
+                            LinearGradient(
+                                colors: [.clear, .black.opacity(0.55), .black.opacity(0.95)],
+                                startPoint: .center, endPoint: .bottom
+                            ).clipShape(RoundedRectangle(cornerRadius: 24))
+                            VStack(alignment: .leading) {
+                                Text("No rides planned yet").font(.subheadline).bold().foregroundStyle(.white)
+                                Text("Plan your next adventure and ride together!")
+                                    .font(.caption).foregroundStyle(.white.opacity(0.9))
+                            }.offset(x: 0, y: 50)
+                        }
+                    )
             }
-            .padding(.horizontal, 24).padding(.vertical, 20)
             .frame(maxWidth: .infinity)
             .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
             .padding(.top, 12)
         }
     }
 
-    // MARK: - Upcoming (3 rides max + See all)
     private var upcomingContent: some View {
         let sorted = app.sortedRides
         let top3 = Array(sorted.prefix(3))
@@ -138,10 +134,25 @@ struct HomeView: View {
             (Text("Where to ") + Text("next").foregroundColor(CV.red) + Text("?"))
                 .cvText(30, .bold, tracking: -0.6, inter: true)
                 .padding(.top, 22)
-            Text("Plan another route or hop into a friend’s ride.")
+            Text("Plan another route or hop into a friend's ride.")
                 .cvText(15, color: CV.cream.opacity(0.6), inter: true)
                 .padding(.top, 4)
             actions.padding(.top, 28)
+
+            // Pending joins (organiser hasn't accepted yet)
+            if !app.pendingRideJoinsByMe.isEmpty {
+                HStack {
+                    Text("Waiting for approval")
+                        .cvText(20, .semibold, tracking: -0.24, inter: true)
+                    Spacer()
+                    Text("\(app.pendingRideJoinsByMe.count)")
+                        .cvText(14, .medium, color: CV.muted, inter: true)
+                }
+                .padding(.top, 28)
+                ForEach(app.pendingRideJoinsByMe) { ride in
+                    pendingRideCard(ride).padding(.top, 10)
+                }
+            }
 
             HStack {
                 Text("Upcoming").cvText(20, .semibold, tracking: -0.24, inter: true)
@@ -164,9 +175,31 @@ struct HomeView: View {
             }
         }
     }
-}
 
-// MARK: - Avatar chip
+    private func pendingRideCard(_ ride: Ride) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(hex: 0xFFB020).opacity(0.15))
+                    .frame(width: 52, height: 52)
+                Image(systemName: "clock")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0xFFB020))
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(ride.title).cvText(15, .semibold, inter: true).lineLimit(1)
+                Text("Waiting for \(ride.organiser) to accept")
+                    .cvText(12, color: Color(hex: 0xFFB020), inter: true)
+                Text(ride.listMeta).cvText(11, color: CV.cream.opacity(0.4), inter: true).lineLimit(1)
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .strokeBorder(Color(hex: 0xFFB020).opacity(0.3), lineWidth: 1))
+    }
+}
 
 struct AvatarChip: View {
     let data: Data?
@@ -177,8 +210,7 @@ struct AvatarChip: View {
         ZStack {
             if let data, let img = UIImage(data: data) {
                 Image(uiImage: img).resizable().scaledToFill()
-                    .frame(width: size, height: size)
-                    .clipShape(Circle())
+                    .frame(width: size, height: size).clipShape(Circle())
             } else {
                 Text(String(name.prefix(1)).uppercased())
                     .cvText(size * 0.4, .semibold, inter: true)
@@ -189,8 +221,6 @@ struct AvatarChip: View {
         .overlay(Circle().strokeBorder(CV.cream, lineWidth: 1.5))
     }
 }
-
-// MARK: - Cards
 
 struct UpcomingRideCard: View {
     let ride: Ride
@@ -214,25 +244,19 @@ struct UpcomingRideCard: View {
                     ], startPoint: .top, endPoint: .bottom)
                     Text(ride.tag).cvText(12, .semibold, color: .white, inter: true)
                         .padding(.horizontal, 12).frame(height: 28)
-                        .background(CV.bg.opacity(0.55), in: Capsule())
-                        .padding(15)
+                        .background(CV.bg.opacity(0.55), in: Capsule()).padding(15)
                     VStack(alignment: .leading, spacing: 8) {
                         Text(ride.title).cvText(22, .bold, color: .white, tracking: -0.33, inter: true)
                         HStack(spacing: 6) {
-                            Image(systemName: "mappin.circle.fill")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.red)
+                            Image(systemName: "mappin.circle.fill").font(.system(size: 12)).foregroundStyle(.red)
                             Text(ride.subtitle.components(separatedBy: " · ")[0])
                                 .cvText(14, .medium, color: CV.cream.opacity(0.75), inter: true)
                                 .lineLimit(1)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .clipped()
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding(15).padding(.bottom, 8)
-                }
-                .frame(height: 128)
+                }.frame(height: 128)
 
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {

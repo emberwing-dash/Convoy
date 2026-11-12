@@ -3,15 +3,15 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var app
-    @State private var showLaunchSplash = !ProcessInfo.processInfo.arguments.contains("-pushRoute") && !ProcessInfo.processInfo.arguments.contains("-initialTabDiscover")
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var showLaunchSplash = !ProcessInfo.processInfo.arguments.contains("-pushRoute")
+        && !ProcessInfo.processInfo.arguments.contains("-initialTabDiscover")
 
     var body: some View {
         Group {
             if showLaunchSplash && app.phase == .main {
                 InConvoyView {
-                    withAnimation(.easeInOut(duration: 0.35)) {
-                        showLaunchSplash = false
-                    }
+                    withAnimation(.easeInOut(duration: 0.35)) { showLaunchSplash = false }
                 }
             } else {
                 switch app.phase {
@@ -21,9 +21,11 @@ struct RootView: View {
             }
         }
         .onAppear {
-            if app.phase == .onboarding {
-                showLaunchSplash = false
-            }
+            if app.phase == .onboarding { showLaunchSplash = false }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, app.phase == .main else { return }
+            Task { await app.refreshEverything(force: true) }
         }
         .onOpenURL { url in
             Task { await handleDeepLink(url) }
@@ -46,7 +48,8 @@ struct RootView: View {
             app.push(.userSearch(.friends))
 
         case "crew":
-            if let crew = try? await SupabaseManager.shared.fetchCrewByCode(payload) {
+            guard let userId = await app.resolvedUserId() else { break }
+            if let crew = try? await SupabaseManager.shared.joinCrewByCode(payload, userId: userId) {
                 app.tab = .crew
                 app.crewSegment = .crews
                 app.popToRoot()
@@ -55,20 +58,19 @@ struct RootView: View {
 
         case "ride":
             switch await app.joinRideByCode(payload) {
-                case .joined(let id):
-                    app.tab = .ride
-                    app.popToRoot()
-                    app.push(.rideDetails(id))
-                case .requestPending:
-                    app.tab = .ride
-                    app.popToRoot()
-                    app.push(.joinCode)  // show pending state there
-                case .failed:
-                    break
-                }
+            case .joined(let id):
+                app.tab = .ride
+                app.popToRoot()
+                app.push(.rideDetails(id))
+            case .requestPending:
+                app.tab = .ride
+                app.popToRoot()
+                app.push(.joinCode)
+            case .failed:
+                break
+            }
 
-        default:
-            break
+        default: break
         }
     }
 }
@@ -79,9 +81,7 @@ struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
     @State private var path: [OnboardingRoute] = []
 
-    private var hasExistingProfile: Bool {
-        StorageService.shared.loadUserProfile() != nil
-    }
+    private var hasExistingProfile: Bool { StorageService.shared.loadUserProfile() != nil }
 
     var body: some View {
         NavigationStack(path: $path) {

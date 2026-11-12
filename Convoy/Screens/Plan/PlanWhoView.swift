@@ -12,7 +12,7 @@ struct PlanWhoView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // Top back button
                     CircleBackButton { app.pop() }
-                        .padding(.top, 56)
+                        .padding(.top, 8)
                         .padding(.bottom, 22)
 
                     Text("Who’s riding?")
@@ -77,7 +77,7 @@ struct PlanWhoView: View {
             }
 
             if app.crews.isEmpty {
-                noCrewsCard
+                addCrewButton
             } else if app.crews.count < 3 {
                 standardCrewsRow
             } else {
@@ -236,7 +236,7 @@ struct PlanWhoView: View {
                         .foregroundStyle(CV.red)
                 }
                 Text("Add crew")
-                    .cvText(12, .medium, color: CV.muted, inter: true)
+                    .cvText(15, .medium, color: CV.muted, inter: true)
                     .lineLimit(1)
                     .multilineTextAlignment(.center)
                     .frame(width: 72)

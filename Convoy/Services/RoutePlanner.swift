@@ -2,16 +2,14 @@
 import MapKit
 import CoreLocation
 
-/// Computes real routes from Apple MapKit (MKDirections), extracting accurate polylines,
-/// distances, travel times, and navigation maneuver steps.
+/// Computes real routes from Apple MapKit (MKDirections). No artificial detours.
+/// Apple's genuine alternates are used as-is; candidates that double back on
+/// themselves are rejected so U-turn "spurs" never reach the UI.
 @MainActor @Observable
 final class RoutePlanner {
 
     enum State: Equatable {
-        case idle
-        case loading
-        case ready
-        case failed(String)
+        case idle, loading, ready, failed(String)
     }
 
     private(set) var state: State = .idle
@@ -21,7 +19,6 @@ final class RoutePlanner {
     private(set) var scenicSpots: [Coord] = []
     private(set) var key = ""
 
-    /// Cached POI results keyed by the coarse region, so repeat plans are instant.
     private var scenicCache: [String: [Spot]] = [:]
 
     fileprivate struct Candidate {
@@ -30,7 +27,7 @@ final class RoutePlanner {
         var time: Double          // seconds
         var kind: Kind
         var steps: [NavStep]
-        enum Kind { case apple, detour, poi }
+        enum Kind { case apple }
     }
 
     fileprivate struct Spot {
@@ -44,7 +41,7 @@ final class RoutePlanner {
         key = ""
     }
 
-    /// Plans routes with real coordinates and queries.
+    /// Plans routes. Uses Apple's real alternates only — no synthetic detours.
     func plan(
         from: String,
         to: String,
@@ -62,7 +59,7 @@ final class RoutePlanner {
         key = k
 
         do {
-            // ── Resolve start coordinate ───────────────────────────────
+            // Resolve start
             let a: CLLocationCoordinate2D
             if let fc = fromCoord {
                 a = fc
@@ -72,7 +69,7 @@ final class RoutePlanner {
                 throw PlanError.place(from.isEmpty ? "Starting location" : from)
             }
 
-            // ── Resolve destination coordinate ────────────────────────
+            // Resolve destination
             let b: CLLocationCoordinate2D
             if let tc = toCoord {
                 b = tc
@@ -82,7 +79,7 @@ final class RoutePlanner {
                 throw PlanError.place(to.isEmpty ? "Destination" : to)
             }
 
-            // ── Resolve intermediate stops ────────────────────────────
+            // Resolve intermediate stops
             var via: [CLLocationCoordinate2D] = []
             for (idx, s) in stops.enumerated() {
                 if idx < stopCoords.count {
@@ -96,24 +93,27 @@ final class RoutePlanner {
             end = Coord(b)
             let points = [a] + via + [b]
 
-            // ── 1. Apple's own candidates via MKDirections with motorcycle fallback ─
+            // Apple's routes (with alternates for 2-point requests)
             var candidates = (try? await appleCandidates(points)) ?? []
             if candidates.isEmpty {
+                // Offline fallback: corridor geometry, single route only
                 let coords = PrecomputedMotorcycleRoutingProvider.corridorGeometry(connecting: points.map(Coord.init))
                 let distM = PrecomputedMotorcycleRoutingProvider.estimateDistance(for: coords)
                 let cal = ConvoyRoutingCalibrator.calibrate(distanceMeters: distM, origin: Coord(a), destination: Coord(b))
                 let steps: [NavStep] = points.enumerated().map { i, pt in
-                    let label = i == 0 ? "Start at \(from)" : i == points.count - 1 ? "Arrive at \(to)" : "Pass waypoint \(i)"
-                    return NavStep(instructions: label, distance: distM / Double(max(1, points.count - 1)), coordinate: Coord(pt))
+                    let label = i == 0 ? "Start at \(from)"
+                              : i == points.count - 1 ? "Arrive at \(to)"
+                              : "Pass waypoint \(i)"
+                    return NavStep(instructions: label,
+                                   distance: distM / Double(max(1, points.count - 1)),
+                                   coordinate: Coord(pt))
                 }
                 candidates = [
-                    Candidate(
-                        coords: coords.map(\.cl),
-                        distance: distM,
-                        time: cal.saddleDurationSeconds,
-                        kind: .apple,
-                        steps: steps
-                    )
+                    Candidate(coords: coords.map(\.cl),
+                              distance: distM,
+                              time: cal.saddleDurationSeconds,
+                              kind: .apple,
+                              steps: steps)
                 ]
             }
 
@@ -121,54 +121,32 @@ final class RoutePlanner {
                 throw PlanError.none
             }
 
-            // ── 2. Detour candidates for an alternate off-route option ─
-            for wp in detourWaypoints(for: base.coords) {
-                if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) {
-                    candidates.append(c)
-                }
-            }
-
-            // ── 3. Scenic spots along the corridor (cached) ────────────
+            // Scenic spots for scoring only — no waypoint injection
             let spots = await cachedScenicPlaces(around: base.coords)
             scenicSpots = spots.map { Coord($0.coordinate) }
-            for spot in spots.sorted(by: { $0.weight > $1.weight }).prefix(2) {
-                if let c = try? await candidate(points: [a] + via + [spot.coordinate, b], kind: .poi) {
-                    candidates.append(c)
-                }
-            }
 
-            let fastest = Self.pickFastest(candidates)
+            // Reject candidates that double back on themselves
+            let clean = candidates.filter { !Self.hasDoubleBack($0.coords) }
+            let pool = clean.isEmpty ? candidates : clean
 
-            // ── 4. Off-route: distinct road, capped attempts ───────────
-            var off = Self.pickOffRoute(candidates, fastest: fastest)
-            var scale = 1.0
-            var attempts = 0
-            while off == nil && scale < 2.5 && attempts < 2 {
-                attempts += 1
-                scale *= 1.5
-                for wp in detourWaypoints(for: base.coords, scale: scale) {
-                    if let c = try? await candidate(points: [a] + via + [wp] + [b], kind: .detour) {
-                        candidates.append(c)
-                    }
-                }
-                off = Self.pickOffRoute(candidates, fastest: fastest)
-            }
-
-            // ── 5. Scenic: best weighted score ────────────────────────
+            let fastest = Self.pickFastest(pool) ?? base
+            let off = Self.pickOffRoute(pool, fastest: fastest)
             let scenic = Self.pickScenic(
-                candidates,
+                pool,
                 avoiding: [fastest] + (off.map { [$0] } ?? []),
                 fastest: fastest,
                 spots: spots
             )
-            let offFinal = off ?? fastest
-            let scenicFinal = scenic ?? (candidates.count > 1 ? candidates[1] : fastest)
 
-            routes = [
-                .fastest: summary(fastest, note: "Minimum travel time"),
-                .offRoute: summary(offFinal, note: "Alternative roads with open riding"),
-                .scenic: summary(scenicFinal, note: "Passes viewpoints and points of interest"),
-            ]
+            // Only include styles we actually have a route for.
+            routes[.fastest] = summary(fastest, note: "Minimum travel time")
+            if let off {
+                routes[.offRoute] = summary(off, note: "Alternative roads with open riding")
+            }
+            if let scenic {
+                routes[.scenic] = summary(scenic, note: "Passes viewpoints and points of interest")
+            }
+
             state = .ready
         } catch {
             state = .failed(error.localizedDescription)
@@ -196,22 +174,17 @@ final class RoutePlanner {
     private func geocode(_ text: String) async throws -> CLLocationCoordinate2D? {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return nil }
-
         let lower = clean.lowercased()
         if lower == "current location" || lower == "your location" || lower == "my location" {
-            if let loc = LocationService.shared.currentLocation {
-                return loc.coordinate
-            }
+            if let loc = LocationService.shared.currentLocation { return loc.coordinate }
             throw PlanError.locationUnavailable
         }
-
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = clean
         if let loc = LocationService.shared.currentLocation {
             req.region = MKCoordinateRegion(
                 center: loc.coordinate,
-                span: .init(latitudeDelta: 1.5, longitudeDelta: 1.5)
-            )
+                span: .init(latitudeDelta: 1.5, longitudeDelta: 1.5))
         }
         let res = try await MKLocalSearch(request: req).start()
         return res.mapItems.first?.placemark.coordinate
@@ -234,22 +207,20 @@ final class RoutePlanner {
                         notice: step.notice,
                         distance: step.distance,
                         coordinate: Coord(step.polyline.coordinate),
-                        symbol: Self.symbolForInstruction(inst)
-                    )
+                        symbol: Self.symbolForInstruction(inst))
                 }
                 return Candidate(
                     coords: r.polyline.coords,
                     distance: r.distance,
                     time: r.expectedTravelTime,
                     kind: .apple,
-                    steps: steps
-                )
+                    steps: steps)
             }
         }
+        // Multi-stop: chain one request per leg → single candidate
         return [try await candidate(points: points, kind: .apple)]
     }
 
-    /// Chains one MKDirections request per leg.
     private func candidate(points: [CLLocationCoordinate2D], kind: Candidate.Kind) async throws -> Candidate {
         var coords: [CLLocationCoordinate2D] = []
         var dist = 0.0
@@ -276,8 +247,7 @@ final class RoutePlanner {
                         notice: step.notice,
                         distance: step.distance,
                         coordinate: Coord(step.polyline.coordinate),
-                        symbol: Self.symbolForInstruction(inst)
-                    ))
+                        symbol: Self.symbolForInstruction(inst)))
                 }
             }
         }
@@ -302,7 +272,7 @@ final class RoutePlanner {
         MKMapItem(placemark: MKPlacemark(coordinate: c))
     }
 
-    // MARK: - Scenic places (cached)
+    // MARK: - Scenic places (scoring only — never used as waypoints)
     private func cachedScenicPlaces(around path: [CLLocationCoordinate2D]) async -> [Spot] {
         guard let region = Self.region(for: path, padding: 1.35) else { return [] }
         let cacheKey = String(
@@ -310,8 +280,7 @@ final class RoutePlanner {
             region.center.latitude,
             region.center.longitude,
             region.span.latitudeDelta,
-            region.span.longitudeDelta
-        )
+            region.span.longitudeDelta)
         if let hit = scenicCache[cacheKey] { return hit }
         let spots = await scenicPlaces(around: path)
         scenicCache[cacheKey] = spots
@@ -341,16 +310,20 @@ final class RoutePlanner {
     }
 
     // MARK: - Selection rules
-    private static func pickFastest(_ c: [Candidate]) -> Candidate {
-        c.min { $0.time < $1.time }!
+
+    private static func pickFastest(_ c: [Candidate]) -> Candidate? {
+        c.min { $0.time < $1.time }
     }
 
+    /// Best candidate that's genuinely different from `fastest`.
+    /// Distance filter loosened from +4% to +2% (Apple's real alternates are 1–3% longer).
     private static func pickOffRoute(_ c: [Candidate], fastest: Candidate) -> Candidate? {
         let pool = c.filter {
             $0.coords.count > 1 &&
-            $0.distance >= fastest.distance * 1.04 &&
+            $0.distance >= fastest.distance * 1.02 &&
             $0.time <= fastest.time * 2.5 &&
-            !similar($0, fastest)
+            !similar($0, fastest) &&
+            !hasDoubleBack($0.coords)
         }
         func score(_ x: Candidate) -> Double {
             deviation(of: x.coords, from: fastest.coords) / 1000
@@ -359,6 +332,9 @@ final class RoutePlanner {
         return pool.max { score($0) < score($1) }
     }
 
+    /// Best candidate that differs from both fastest and off-route, and passes
+    /// near scenic POIs. Returns nil when there's no genuinely scenic option —
+    /// the caller then omits the "Scenic" style entirely.
     private static func pickScenic(
         _ c: [Candidate],
         avoiding: [Candidate],
@@ -382,9 +358,13 @@ final class RoutePlanner {
         }
         let pool = c.filter { x in
             x.time <= fastest.time * 2.6 &&
+            !hasDoubleBack(x.coords) &&
             !avoiding.contains(where: { similar(x, $0) })
         }
-        return pool.max { score($0) < score($1) }
+        guard let best = pool.max(by: { score($0) < score($1) }), score(best) > 0 else {
+            return nil
+        }
+        return best
     }
 
     private static func similar(_ a: Candidate, _ b: Candidate) -> Bool {
@@ -392,36 +372,32 @@ final class RoutePlanner {
             && deviation(of: b.coords, from: a.coords) < 350
     }
 
-    // MARK: - Geometry helpers
-    private func detourWaypoints(
-        for path: [CLLocationCoordinate2D],
-        scale: Double = 1,
-        sides: [(Double, Double)] = [(0.5, 1.0), (0.5, -1.0), (0.35, 1.0), (0.65, -1.0)]
-    ) -> [CLLocationCoordinate2D] {
-        guard path.count > 8, let a = path.first, let b = path.last else { return [] }
-        let total = CLLocation(latitude: a.latitude, longitude: a.longitude)
-            .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
-        let offset = min(max(total * 0.16 * scale, 2500), 40_000)
-        var out: [CLLocationCoordinate2D] = []
-        for (f, side) in sides {
-            let i = Int(Double(path.count - 1) * f)
-            let p = path[i]
-            let q = path[min(i + 3, path.count - 1)]
-            let r = path[max(i - 3, 0)]
-            let dx = q.longitude - r.longitude
-            let dy = q.latitude - r.latitude
-            let len = max((dx * dx + dy * dy).squareRoot(), 1e-9)
-            let nx = -dy / len
-            let ny = dx / len
-            let deg = offset / 111_000
-            out.append(.init(
-                latitude: p.latitude + ny * deg * side,
-                longitude: p.longitude + nx * deg * side / max(cos(p.latitude * .pi / 180), 0.2)
-            ))
+    /// True if the route revisits the same physical point after travelling >400m.
+    /// Catches any leftover forced U-turns. Only used to filter alternates —
+    /// never applied to the fastest (that's Apple's own route, trust it).
+    private static func hasDoubleBack(_ coords: [CLLocationCoordinate2D]) -> Bool {
+        guard coords.count > 30 else { return false }
+        let threshold = 30.0  // metres
+
+        for i in stride(from: 0, to: coords.count - 30, by: 5) {
+            let pi = CLLocation(latitude: coords[i].latitude, longitude: coords[i].longitude)
+            for j in stride(from: i + 10, through: min(i + 30, coords.count - 1), by: 3) {
+                let pj = CLLocation(latitude: coords[j].latitude, longitude: coords[j].longitude)
+                if pi.distance(from: pj) < threshold {
+                    var along = 0.0
+                    for k in i..<j {
+                        let a = CLLocation(latitude: coords[k].latitude, longitude: coords[k].longitude)
+                        let b = CLLocation(latitude: coords[k + 1].latitude, longitude: coords[k + 1].longitude)
+                        along += a.distance(from: b)
+                    }
+                    if along > 400 { return true }
+                }
+            }
         }
-        return out
+        return false
     }
 
+    // MARK: - Geometry helpers
     private static func sample(_ c: [CLLocationCoordinate2D], every n: Int) -> [CLLocationCoordinate2D] {
         stride(from: 0, to: c.count, by: max(n, 1)).map { c[$0] }
     }
@@ -444,17 +420,14 @@ final class RoutePlanner {
         var minLat = first.latitude, maxLat = first.latitude
         var minLon = first.longitude, maxLon = first.longitude
         for c in path {
-            minLat = min(minLat, c.latitude)
-            maxLat = max(maxLat, c.latitude)
-            minLon = min(minLon, c.longitude)
-            maxLon = max(maxLon, c.longitude)
+            minLat = min(minLat, c.latitude); maxLat = max(maxLat, c.latitude)
+            minLon = min(minLon, c.longitude); maxLon = max(maxLon, c.longitude)
         }
         return MKCoordinateRegion(
             center: .init(latitude: (minLat + maxLat) / 2,
                           longitude: (minLon + maxLon) / 2),
             span: .init(latitudeDelta: max((maxLat - minLat) * padding, 0.02),
-                        longitudeDelta: max((maxLon - minLon) * padding, 0.02))
-        )
+                        longitudeDelta: max((maxLon - minLon) * padding, 0.02)))
     }
 
     private func summary(_ c: Candidate, note: String) -> RouteSummary {
@@ -467,8 +440,7 @@ final class RoutePlanner {
             note: note,
             steps: c.steps,
             rawDistance: c.distance,
-            rawTime: c.time
-        )
+            rawTime: c.time)
     }
 }
 
