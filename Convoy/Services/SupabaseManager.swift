@@ -30,9 +30,12 @@ final class SupabaseManager {
     var currentUserId: UUID? { client.auth.currentUser?.id }
 
     func getOrRestoreUserId() async -> UUID? {
-        if let id = client.auth.currentUser?.id { return id }
-        do { return try await client.auth.session.user.id }
-        catch { return client.auth.currentUser?.id }
+        do {
+            let session = try await client.auth.session
+            return session.user.id
+        } catch {
+            return nil
+        }
     }
 
     func signInAnonymously() async throws -> UUID {
@@ -74,11 +77,18 @@ final class SupabaseManager {
     /// Ensures the client has a valid authenticated session, matching profile, and returns the authoritative user ID.
     @discardableResult
     func ensureAuthenticatedUser(displayName: String = "Rider", handle: String = "rider") async throws -> UUID {
-        var userId = await getOrRestoreUserId()
-        if userId == nil {
-            userId = try await signInAnonymously()
+        var activeUserId = await getOrRestoreUserId()
+        if activeUserId == nil {
+            _ = try? await client.auth.signOut()
+            do {
+                activeUserId = try await signInAnonymously()
+                print("✅ [ensureAuthenticatedUser] Established fresh session: \(activeUserId?.uuidString ?? "")")
+            } catch {
+                print("🚨 [ensureAuthenticatedUser] signInAnonymously failed: \(error)")
+                throw error
+            }
         }
-        guard let validId = userId else {
+        guard let validId = activeUserId else {
             throw NSError(domain: "Convoy", code: 401, userInfo: [NSLocalizedDescriptionKey: "Authentication session could not be established."])
         }
 
@@ -225,14 +235,7 @@ final class SupabaseManager {
     func createCrew(name: String, code: String, creatorId: UUID? = nil,
                     memberIds: [UUID] = [], avatarData: Data?,
                     displayName: String = "Rider", handle: String = "rider") async throws -> UUID {
-        let authenticatedId: UUID
-        if let liveId = client.auth.currentUser?.id {
-            authenticatedId = liveId
-        } else if let cId = creatorId {
-            authenticatedId = cId
-        } else {
-            authenticatedId = try await ensureAuthenticatedUser(displayName: displayName, handle: handle)
-        }
+        var authenticatedId = try await ensureAuthenticatedUser(displayName: displayName, handle: handle)
 
         struct Params: Encodable {
             let p_name: String
@@ -258,6 +261,14 @@ final class SupabaseManager {
                 if attempt == 0 && errString.contains("23505") {
                     print("⚠️ Crew code collided, retrying with a new code...")
                     currentCode = CrewGroup.makeCode(name: name)
+                    continue
+                }
+
+                // If RPC failed due to an auth issue (e.g. session expired mid-flight), refresh and retry once
+                if attempt == 0 && (errString.contains("P0001") || errString.contains("42501") || errString.contains("JWT")) {
+                    print("⚠️ Crew creation auth issue detected, refreshing session and retrying...")
+                    _ = try? await client.auth.signOut()
+                    authenticatedId = try await ensureAuthenticatedUser(displayName: displayName, handle: handle)
                     continue
                 }
 

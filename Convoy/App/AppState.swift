@@ -417,6 +417,12 @@ final class AppState {
             }
             return liveId
         }
+        if let validId = try? await SupabaseManager.shared.ensureAuthenticatedUser(displayName: displayName, handle: handle) {
+            if backendUserId != validId {
+                await MainActor.run { self.backendUserId = validId }
+            }
+            return validId
+        }
         if let id = backendUserId { return id }
         return nil
     }
