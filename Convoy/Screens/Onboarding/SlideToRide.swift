@@ -27,7 +27,7 @@ struct SlideToRide: View {
                         .foregroundStyle(CV.ink))
                     .offset(x: pad + (slid ? travel : offset))
                     .gesture(
-                        DragGesture()
+                        DragGesture() //Dragable slider
                             .onChanged { v in
                                 guard !slid else { return }
                                 offset = min(max(0, v.translation.width), travel)

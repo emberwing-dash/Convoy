@@ -13,6 +13,7 @@ struct MainShell: View {
                     case .ride: HomeView()
                     case .discover: DiscoverView()
                     case .crew: CrewView()
+                    case .garage: GarageView()
                     }
                 }
                 ConvoyTabBar(selection: $app.tab)

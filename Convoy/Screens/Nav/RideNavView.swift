@@ -2,6 +2,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import Speech
 
 // MARK: - POI results loader (real MapKit data)
 
@@ -55,6 +56,22 @@ struct RideNavView: View {
     @State private var isRerouting = false
     @State private var poiResults = POIResults()
 
+    // MARK: Convoy Session (real-time crew features)
+    @State private var session: RideSessionService? = nil
+    @State private var voiceService = VoiceCommandService()
+    @State private var showWarningPicker = false
+    @State private var voiceTranscriptBanner: String? = nil
+    @State private var voiceBannerTask: Task<Void, Never>? = nil
+
+    // MARK: Sci-Fi Map Modes & Notifications
+    @State private var sciFiMapMode: SciFiMapMode = .standard
+    @State private var showMapModeSelector = false
+    @State private var showUnreadNotificationsSheet = false
+
+    // MARK: Google Maps / Apple Maps Style Stop Info & Zoom
+    @State private var focusedStopCard: (StopPlace, StopKind)? = nil
+    @State private var stopCameraTimer: Task<Void, Never>? = nil
+
     // MARK: Computed data
 
     private var destinationName: String {
@@ -90,12 +107,64 @@ struct RideNavView: View {
         ZStack {
             liveNavigationMap
 
+            // MARK: - Sci-Fi HUD Cockpit Telemetry (Cyberpunk / Recon grid, bearing, altitude)
+            SciFiHUDTelemetryOverlay(
+                mode: sciFiMapMode,
+                heading: locationService.currentHeading,
+                speedKmh: currentSpeedKmh,
+                location: locationService.currentLocation
+            )
+
             VStack(spacing: 0) {
                 topTurnBanner.padding(.top, 54).padding(.horizontal, 16)
+
+                // MARK: Voice Transcript Pill
+                if let text = voiceTranscriptBanner {
+                    HStack(spacing: 8) {
+                        Image(systemName: voiceService.isListening ? "waveform" : "sparkles")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(voiceService.isListening ? CV.red : amberC)
+                        Text(text)
+                            .cvText(13, .semibold, inter: true)
+                            .lineLimit(2)
+                    }
+                    .padding(.horizontal, 14).frame(height: 38)
+                    .background(Color(hex: 0x1A1A1D).opacity(0.95), in: Capsule())
+                    .overlay(Capsule().strokeBorder(voiceService.isListening ? CV.red.opacity(0.5) : Color.white.opacity(0.15), lineWidth: 1))
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
+                // MARK: Live Rider Warnings (traffic, fuel, etc.)
+                if let latestWarning = session?.warnings.last {
+                    RiderWarningBanner(warning: latestWarning) {
+                        session?.warnings.removeAll { $0.id == latestWarning.id }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
+                // MARK: Leader Stop Proposals from Crew
+                if isLeader, let latestProposal = session?.stopProposals.first(where: { !$0.approvedByLeader }) {
+                    StopProposalCard(
+                        proposal: latestProposal,
+                        onApprove: {
+                            approveStopProposal(latestProposal)
+                        },
+                        onDismiss: {
+                            session?.dismissProposal(id: latestProposal.id)
+                        }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
                 if phase != .arrived {
                     HStack(alignment: .top) {
                         Spacer()
+<<<<<<< Updated upstream
                         AppleMapsRightControls(
                             isTrackingUser: isTrackingUser,
                             isVoiceMuted: isVoiceMuted,
@@ -108,6 +177,31 @@ struct RideNavView: View {
                             onSOS: { startSOS() },
                             onSiri: { showSiriSimulator = true }
                         )
+=======
+                        VStack(spacing: 12) {
+                            // Top Right Sci-Fi Gamified Map Mode Button
+                            SciFiMapIconButton(currentMode: sciFiMapMode) {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                    showMapModeSelector.toggle()
+                                }
+                            }
+
+                            AppleMapsRightControls(
+                                isTrackingUser: isTrackingUser,
+                                isVoiceMuted: isVoiceMuted,
+                                onRecentre: { recentreOnUser() },
+                                onToggleVoice: {
+                                    isVoiceMuted.toggle()
+                                    NavigationVoice.shared.isMuted = isVoiceMuted
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                },
+                                onSOS: { startSOS() },
+                                onAlertCrew: { showWarningPicker = true },
+                                onShowNotifications: { showUnreadNotificationsSheet = true },
+                                unreadCount: ConvoyNotificationManager.shared.unreadHistory.filter { !$0.isRead }.count
+                            )
+                        }
+>>>>>>> Stashed changes
                         .padding(.trailing, 16).padding(.top, 10)
                     }
                 }
@@ -115,11 +209,22 @@ struct RideNavView: View {
                 Spacer()
 
                 if !isSheetExpanded && phase != .arrived {
+<<<<<<< Updated upstream
                     HStack(alignment: .bottom, spacing: 10) {
                         AppleMapsSpeedometer(speed: currentSpeedKmh)
                             .padding(.leading, 16).padding(.bottom, 10)
                         SiriHandsFreeStatusBadge()
                             .padding(.bottom, 18)
+=======
+                    HStack(alignment: .bottom) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            VoiceMicButton(isListening: voiceService.isListening) {
+                                handleMicTap()
+                            }
+                            AppleMapsSpeedometer(speed: currentSpeedKmh)
+                        }
+                        .padding(.leading, 16).padding(.bottom, 10)
+>>>>>>> Stashed changes
                         Spacer()
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -128,6 +233,67 @@ struct RideNavView: View {
                 if phase != .arrived { appleMapsBottomSheetView }
             }
             .ignoresSafeArea(edges: .bottom)
+
+            // MARK: - Sci-Fi Mode Selector Popup (Top-Right anchored)
+            if showMapModeSelector {
+                Color.black.opacity(0.35).ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            showMapModeSelector = false
+                        }
+                    }
+
+                VStack {
+                    HStack {
+                        Spacer()
+                        SciFiMapModeSelector(selectedMode: $sciFiMapMode) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                showMapModeSelector = false
+                            }
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.top, 114)
+                    }
+                    Spacer()
+                }
+                .transition(.scale(scale: 0.9, anchor: .topTrailing).combined(with: .opacity))
+            }
+
+            // MARK: - Top-Middle iOS-Style Grouped Notification Stack (Slide-out after 3s, overlapping deck)
+            ConvoyNotificationStackContainer()
+
+            // MARK: - Google Maps / Apple Maps Style Stop Information Card
+            if let focused = focusedStopCard {
+                VStack {
+                    Spacer()
+                    GoogleMapsStopPreviewCard(
+                        place: focused.0,
+                        kind: focused.1,
+                        onContinue: {
+                            stopCameraTimer?.cancel()
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+                                focusedStopCard = nil
+                                recentreOnUser()
+                            }
+                            NavigationVoice.shared.speak("Continuing route to \(focused.0.name).")
+                        },
+                        onRemove: {
+                            stopCameraTimer?.cancel()
+                            withAnimation {
+                                self.stop = nil
+                                self.focusedStopCard = nil
+                                recentreOnUser()
+                            }
+                            NavigationVoice.shared.speak("Stop removed.")
+                            Task { await recalculateRouteWithCurrentStop() }
+                        }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(150)
+            }
 
             if alert != .none {
                 VStack {
@@ -199,6 +365,7 @@ struct RideNavView: View {
         .onAppear {
             setupConfirmedRoute()
             locationService.startNavigationTracking()
+<<<<<<< Updated upstream
             LiveNavigationSession.shared.startSession(
                 destinationName: destinationName,
                 destinationCoordinate: destinationCoordinate,
@@ -209,12 +376,58 @@ struct RideNavView: View {
             )
             isVoiceMuted = LiveNavigationSession.shared.isVoiceMuted
             ConvoySiriVoiceService.shared.startListening()
+=======
+
+            // Initialize and connect live convoy ride session
+            let rideId = app.upcomingRide?.id ?? UUID()
+            let riderId = app.backendUserId ?? UUID()
+            let riderName = app.displayName.isEmpty ? "Rider" : app.displayName
+            let s = RideSessionService(rideId: rideId, riderId: riderId, riderName: riderName, isLeader: isLeader)
+            self.session = s
+            RideSessionService.active = s
+            Task { await s.connect() }
+>>>>>>> Stashed changes
         }
         .onDisappear {
             locationService.stopTracking()
             NavigationVoice.shared.stop()
+<<<<<<< Updated upstream
             LiveNavigationSession.shared.endSession()
             ConvoySiriVoiceService.shared.stopListening()
+=======
+            voiceService.stopListening()
+            stopCameraTimer?.cancel()
+            Task { await session?.disconnect() }
+        }
+        .onChange(of: voiceService.isListening) { _, listening in
+            if !listening && !voiceService.lastTranscript.isEmpty {
+                let query = voiceService.lastTranscript
+                voiceService.lastTranscript = ""
+                Task { await handleVoiceQuery(query) }
+            }
+        }
+        .sheet(isPresented: $showWarningPicker) {
+            RiderWarningPicker(
+                onSelect: { type in
+                    showWarningPicker = false
+                    if let coord = locationService.currentLocation?.coordinate {
+                        Task { await session?.sendWarning(type, coord: coord) }
+                        NavigationVoice.shared.speak("\(type.label) broadcast to crew.")
+                        setVoiceBanner("Broadcast: \(type.label)")
+                    }
+                },
+                onCancel: { showWarningPicker = false }
+            )
+            .presentationDetents([.fraction(0.55)])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showUnreadNotificationsSheet) {
+            UnreadNotificationsHistorySheet {
+                showUnreadNotificationsSheet = false
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+>>>>>>> Stashed changes
         }
         .onChange(of: locationService.currentLocation) { _, newLocation in
             if let loc = newLocation { processRealLocationUpdate(loc) }
@@ -230,7 +443,7 @@ struct RideNavView: View {
                 offRouteTask = Task {
                     try? await Task.sleep(for: .seconds(4))
                     guard !Task.isCancelled else { return }
-                    await reroute()
+                    await recalculateRouteWithCurrentStop()
                 }
             } else {
                 offRouteTask?.cancel()
@@ -425,10 +638,38 @@ struct RideNavView: View {
             if let loc = locationService.currentLocation {
                 Annotation("You", coordinate: loc.coordinate) {
                     ZStack {
-                        Circle().fill(CV.red.opacity(0.3)).frame(width: 48, height: 48)
-                        Circle().fill(.white).frame(width: 24, height: 24)
-                            .shadow(color: .black.opacity(0.4), radius: 4)
-                        Circle().fill(CV.red).frame(width: 18, height: 18)
+                        if sciFiMapMode == .cyberHUD {
+                            // Holographic radar pulse ring
+                            Circle()
+                                .strokeBorder(Color(hex: 0x00F0FF).opacity(0.55), lineWidth: 1.5)
+                                .frame(width: 58, height: 58)
+                            Circle()
+                                .fill(Color(hex: 0x00F0FF).opacity(0.2))
+                                .frame(width: 44, height: 44)
+                            Circle()
+                                .fill(Color(hex: 0x00F0FF))
+                                .frame(width: 18, height: 18)
+                                .overlay(Circle().strokeBorder(.white, lineWidth: 2.5))
+                                .shadow(color: Color(hex: 0x00F0FF).opacity(0.8), radius: 8)
+                        } else if sciFiMapMode == .tacticalRecon {
+                            Circle()
+                                .strokeBorder(Color(hex: 0x30D158).opacity(0.6), lineWidth: 1.5)
+                                .frame(width: 54, height: 54)
+                            Circle()
+                                .fill(Color(hex: 0x30D158).opacity(0.25))
+                                .frame(width: 44, height: 44)
+                            Circle()
+                                .fill(Color(hex: 0x30D158))
+                                .frame(width: 18, height: 18)
+                                .overlay(Circle().strokeBorder(.white, lineWidth: 2.5))
+                                .shadow(color: Color(hex: 0x30D158).opacity(0.7), radius: 6)
+                        } else {
+                            Circle().fill(CV.red.opacity(0.3)).frame(width: 48, height: 48)
+                            Circle().fill(.white).frame(width: 24, height: 24)
+                                .shadow(color: .black.opacity(0.4), radius: 4)
+                            Circle().fill(CV.red).frame(width: 18, height: 18)
+                        }
+
                         if let h = locationService.currentHeading, h.trueHeading >= 0 {
                             Image(systemName: "location.north.fill")
                                 .font(.system(size: 11, weight: .bold))
@@ -445,10 +686,35 @@ struct RideNavView: View {
                         .stroke(Color.gray.opacity(0.7), lineWidth: 7)
                 }
                 if locationService.routeProgressIndex < locationService.routePolyline.count - 1 {
-                    MapPolyline(coordinates: Array(locationService.routePolyline.suffix(from: locationService.routeProgressIndex)))
-                        .stroke(CV.red, lineWidth: 8)
-                    MapPolyline(coordinates: Array(locationService.routePolyline.suffix(from: locationService.routeProgressIndex)))
-                        .stroke(Color.white.opacity(0.4), lineWidth: 2)
+                    let remaining = Array(locationService.routePolyline.suffix(from: locationService.routeProgressIndex))
+                    switch sciFiMapMode {
+                    case .cyberHUD:
+                        MapPolyline(coordinates: remaining)
+                            .stroke(Color(hex: 0x00F0FF).opacity(0.35), lineWidth: 14)
+                        MapPolyline(coordinates: remaining)
+                            .stroke(Color(hex: 0x00F0FF), lineWidth: 6)
+                        MapPolyline(coordinates: remaining)
+                            .stroke(Color.white, lineWidth: 2)
+                    case .tacticalRecon:
+                        MapPolyline(coordinates: remaining)
+                            .stroke(Color(hex: 0x30D158).opacity(0.35), lineWidth: 14)
+                        MapPolyline(coordinates: remaining)
+                            .stroke(Color(hex: 0x30D158), lineWidth: 6)
+                        MapPolyline(coordinates: remaining)
+                            .stroke(Color.white, lineWidth: 2)
+                    case .neonStealth:
+                        MapPolyline(coordinates: remaining)
+                            .stroke(Color(hex: 0xFF2D55).opacity(0.35), lineWidth: 14)
+                        MapPolyline(coordinates: remaining)
+                            .stroke(Color(hex: 0xFF2D55), lineWidth: 6)
+                        MapPolyline(coordinates: remaining)
+                            .stroke(Color.white, lineWidth: 2)
+                    case .standard:
+                        MapPolyline(coordinates: remaining)
+                            .stroke(CV.red, lineWidth: 8)
+                        MapPolyline(coordinates: remaining)
+                            .stroke(Color.white.opacity(0.4), lineWidth: 2)
+                    }
                 }
             }
 
@@ -470,9 +736,41 @@ struct RideNavView: View {
                     stopPin(s)
                 }
             }
+
+            // MARK: - Ghost / Translucent Stop Proposals (visible to leader and group)
+            if let proposals = session?.stopProposals {
+                ForEach(proposals) { p in
+                    Annotation(p.placeName, coordinate: p.coord) {
+                        StopProposalMarker(proposal: p)
+                    }
+                }
+            }
+
+            // MARK: - Live Rider Hazard Warnings (traffic, fuel, etc.)
+            if let warnings = session?.warnings {
+                ForEach(warnings) { w in
+                    Annotation(w.riderName, coordinate: w.coord) {
+                        HStack(spacing: 4) {
+                            Image(systemName: w.type.symbol)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                            Text(w.type.label)
+                                .cvText(10, .semibold, color: .white, inter: true)
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(w.type.color.opacity(0.88), in: Capsule())
+                        .shadow(color: w.type.color.opacity(0.4), radius: 5)
+                    }
+                }
+            }
         }
-        .mapStyle(.standard(elevation: .realistic,
-                            pointsOfInterest: .including([.gasStation, .restaurant])))
+        .mapStyle(
+            sciFiMapMode == .tacticalRecon
+                ? .imagery(elevation: .realistic)
+                : (sciFiMapMode == .cyberHUD
+                    ? .hybrid(elevation: .realistic, pointsOfInterest: .excludingAll)
+                    : .standard(elevation: .realistic, pointsOfInterest: .including([.gasStation, .restaurant])))
+        )
         .ignoresSafeArea()
         .simultaneousGesture(
             DragGesture().onChanged { _ in isTrackingUser = false }
@@ -480,20 +778,57 @@ struct RideNavView: View {
     }
 
     private func stopPin(_ s: (StopPlace, StopKind)) -> some View {
-        HStack(spacing: 6) {
-            Text(s.0.name)
-                .cvText(12, .semibold, color: .white, inter: true)
-                .lineLimit(1)
-                .padding(.horizontal, 10)
-                .frame(height: 27)
-                .background(navPanel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            Image(systemName: s.1.symbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.black)
-                .frame(width: 34, height: 34)
-                .background(s.1.tint, in: Circle())
-                .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+        Button {
+            focusOnStop(coordinate: s.0.coordinate)
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+                focusedStopCard = s
+            }
+        } label: {
+            VStack(spacing: 0) {
+                // Floating Speech Bubble with Place Name & Detour Info
+                HStack(spacing: 6) {
+                    Image(systemName: s.1.symbol)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(s.1.tint)
+                    Text(s.0.name)
+                        .cvText(12, .bold, color: .white, inter: true)
+                        .lineLimit(1)
+                    if let detour = s.0.detourText {
+                        Text(detour)
+                            .cvText(11, .bold, color: CV.green, inter: true)
+                    }
+                }
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Color(hex: 0x1A1A1D).opacity(0.96), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(s.1.tint.opacity(0.6), lineWidth: 1.5)
+                )
+                .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
+
+                // Pointing downward notch
+                Image(systemName: "arrowtriangle.down.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(Color(hex: 0x1A1A1D))
+                    .offset(y: -1)
+
+                // Waypoint Pin
+                ZStack {
+                    Circle()
+                        .fill(s.1.tint.opacity(0.25))
+                        .frame(width: 38, height: 38)
+                    Circle()
+                        .fill(s.1.tint)
+                        .frame(width: 22, height: 22)
+                        .overlay(Circle().strokeBorder(.white, lineWidth: 2.5))
+                        .shadow(color: s.1.tint.opacity(0.6), radius: 6)
+                    Circle()
+                        .fill(.black)
+                        .frame(width: 6, height: 6)
+                }
+            }
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Turn banner
@@ -1105,6 +1440,297 @@ struct RideNavView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Convoy Crew & Voice Navigation AI Helpers
+
+    private var isLeader: Bool {
+        if let ride = app.upcomingRide {
+            return ride.organiserId == app.backendUserId || ride.organiser == "you"
+        }
+        return true
+    }
+
+    private func handleMicTap() {
+        if voiceService.isListening {
+            voiceService.stopListening()
+        } else {
+            Task {
+                if !voiceService.permissionGranted {
+                    await voiceService.requestPermission()
+                }
+                voiceService.startListening()
+                setVoiceBanner("Listening for navigation command…", autoDismissAfter: 6)
+            }
+        }
+    }
+
+    private func setVoiceBanner(_ text: String, autoDismissAfter: Double = 4.0) {
+        voiceBannerTask?.cancel()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            voiceTranscriptBanner = text
+        }
+        voiceBannerTask = Task {
+            try? await Task.sleep(for: .seconds(autoDismissAfter))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    self.voiceTranscriptBanner = nil
+                }
+            }
+        }
+    }
+
+    private func handleVoiceQuery(_ query: String) async {
+        setVoiceBanner("Analyzing: \"\(query)\"…", autoDismissAfter: 10)
+        let context = NavigationContext(
+            destinationName: destinationName,
+            remainingDistanceKm: remainingDistanceMeters / 1000.0,
+            currentSpeedKmh: currentSpeedKmh,
+            isLeader: isLeader,
+            currentCoord: locationService.currentLocation?.coordinate
+        )
+        let action = await NavigationAIAssistant.shared.interpret(voiceQuery: query, context: context)
+        await executeAIAction(action, rawQuery: query)
+    }
+
+    private func executeAIAction(_ action: NavigationAIAction, rawQuery: String) async {
+        switch action {
+        case .addStop(let query, let spoken):
+            setVoiceBanner(spoken)
+            NavigationVoice.shared.speak(spoken)
+            await searchAndAddStop(query: query)
+
+        case .proposeStop(let query, let spoken):
+            setVoiceBanner(spoken)
+            NavigationVoice.shared.speak(spoken)
+            await searchAndProposeStop(query: query)
+
+        case .reportWarning(let type, let spoken):
+            setVoiceBanner(spoken)
+            NavigationVoice.shared.speak(spoken)
+            if let coord = locationService.currentLocation?.coordinate {
+                await session?.sendWarning(type, coord: coord)
+            }
+
+        case .changeRoute(let style, let spoken):
+            setVoiceBanner(spoken)
+            NavigationVoice.shared.speak(spoken)
+            app.draft.style = style
+            await recalculateRouteWithCurrentStop()
+
+        case .muteVoice(let spoken):
+            isVoiceMuted = true
+            NavigationVoice.shared.isMuted = true
+            setVoiceBanner(spoken)
+
+        case .unmuteVoice(let spoken):
+            isVoiceMuted = false
+            NavigationVoice.shared.isMuted = false
+            setVoiceBanner(spoken)
+            NavigationVoice.shared.speak(spoken)
+
+        case .endRide(let spoken):
+            setVoiceBanner(spoken)
+            NavigationVoice.shared.speak(spoken)
+            panel = .endRide
+
+        case .assistAnswer(let spoken):
+            setVoiceBanner(spoken)
+            NavigationVoice.shared.speak(spoken)
+
+        case .fallback(let raw):
+            voiceService.processTranscript(raw)
+            if let cmd = voiceService.lastCommand {
+                switch cmd {
+                case .addStop(let q):
+                    if isLeader { await searchAndAddStop(query: q) }
+                    else { await searchAndProposeStop(query: q) }
+                case .removeStop:
+                    stop = nil
+                    NavigationVoice.shared.speak("Stop removed.")
+                    await recalculateRouteWithCurrentStop()
+                case .changeRoute(let s):
+                    app.draft.style = s
+                    await recalculateRouteWithCurrentStop()
+                case .muteVoice:
+                    isVoiceMuted = true
+                    NavigationVoice.shared.isMuted = true
+                case .unmuteVoice:
+                    isVoiceMuted = false
+                    NavigationVoice.shared.isMuted = false
+                case .endRide:
+                    panel = .endRide
+                case .unknown:
+                    setVoiceBanner("Try: 'Add stop at petrol pump' or 'Report traffic'")
+                }
+            }
+        }
+    }
+
+    private func focusOnStop(coordinate: CLLocationCoordinate2D) {
+        isTrackingUser = false
+        stopCameraTimer?.cancel()
+
+        let trueHeading = locationService.currentHeading?.trueHeading ?? 0
+        let cam = MapCamera(
+            centerCoordinate: coordinate,
+            distance: 420,
+            heading: trueHeading >= 0 ? trueHeading : 0,
+            pitch: 45
+        )
+        withAnimation(.spring(response: 0.85, dampingFraction: 0.82)) {
+            cameraPosition = .camera(cam)
+        }
+
+        // Auto-restore navigation tracking after 8 seconds if user doesn't tap "Continue Route"
+        stopCameraTimer = Task {
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    self.focusedStopCard = nil
+                    self.recentreOnUser()
+                }
+            }
+        }
+    }
+
+    private func approveStopProposal(_ proposal: StopProposal) {
+        let detectedKind = StopKind.detect(query: proposal.placeName)
+        var distText: String? = nil
+        var detourText: String? = nil
+        if let userLoc = locationService.currentLocation {
+            let distM = userLoc.distance(from: CLLocation(latitude: proposal.lat, longitude: proposal.lon))
+            distText = distM >= 1000 ? String(format: "%.1f km away", distM / 1000.0) : "\(Int(distM)) m away"
+            let detourMin = max(1, Int(round((distM / 1000.0) * 2.2)))
+            detourText = "+\(detourMin) min detour"
+        }
+
+        let place = StopPlace(
+            name: proposal.placeName,
+            address: "",
+            coordinate: proposal.coord,
+            categoryName: detectedKind.rawValue,
+            detourText: detourText,
+            distanceText: distText
+        )
+        self.stop = (place, detectedKind)
+        self.focusedStopCard = (place, detectedKind)
+        session?.approveProposal(id: proposal.id)
+        focusOnStop(coordinate: proposal.coord)
+        Task { await recalculateRouteWithCurrentStop() }
+        NavigationVoice.shared.speak("Stop at \(proposal.placeName) accepted and added to route.")
+    }
+
+    private func searchAndAddStop(query: String) async {
+        guard let center = locationService.currentLocation?.coordinate ?? destinationCoordinate else { return }
+        let req = MKLocalSearch.Request()
+        req.naturalLanguageQuery = query
+        req.region = MKCoordinateRegion(center: center, span: .init(latitudeDelta: 0.15, longitudeDelta: 0.15))
+        guard let res = try? await MKLocalSearch(request: req).start(),
+              let first = res.mapItems.first else {
+            NavigationVoice.shared.speak("Could not find \(query) nearby.")
+            setVoiceBanner("No places found for \"\(query)\"")
+            return
+        }
+
+        let detectedKind = StopKind.detect(query: query, category: first.pointOfInterestCategory)
+
+        var distText: String? = nil
+        var detourText: String? = nil
+        if let userLoc = locationService.currentLocation {
+            let distM = userLoc.distance(from: CLLocation(latitude: first.placemark.coordinate.latitude, longitude: first.placemark.coordinate.longitude))
+            if distM >= 1000 {
+                distText = String(format: "%.1f km away", distM / 1000.0)
+            } else {
+                distText = "\(Int(distM)) m away"
+            }
+            let detourMin = max(1, Int(round((distM / 1000.0) * 2.2)))
+            detourText = "+\(detourMin) min detour"
+        }
+
+        let stopPlace = StopPlace(
+            name: first.name ?? query,
+            address: first.placemark.title ?? "",
+            coordinate: first.placemark.coordinate,
+            categoryName: detectedKind.rawValue,
+            detourText: detourText,
+            distanceText: distText,
+            phone: first.phoneNumber
+        )
+
+        await MainActor.run {
+            self.stop = (stopPlace, detectedKind)
+            self.focusedStopCard = (stopPlace, detectedKind)
+            self.focusOnStop(coordinate: stopPlace.coordinate)
+            setVoiceBanner("Added stop: \(stopPlace.name) · \(detourText ?? "")", autoDismissAfter: 5)
+        }
+
+        await recalculateRouteWithCurrentStop()
+    }
+
+    private func searchAndProposeStop(query: String) async {
+        guard let center = locationService.currentLocation?.coordinate ?? destinationCoordinate else { return }
+        let req = MKLocalSearch.Request()
+        req.naturalLanguageQuery = query
+        req.region = MKCoordinateRegion(center: center, span: .init(latitudeDelta: 0.15, longitudeDelta: 0.15))
+        guard let res = try? await MKLocalSearch(request: req).start(),
+              let first = res.mapItems.first else {
+            NavigationVoice.shared.speak("Could not find \(query) to propose.")
+            setVoiceBanner("No places found for \"\(query)\"")
+            return
+        }
+        let name = first.name ?? query
+        let coord = first.placemark.coordinate
+        await session?.proposeStop(placeName: name, coord: coord)
+        await MainActor.run {
+            setVoiceBanner("Proposed stop at \(name) to leader")
+        }
+    }
+
+    private func recalculateRouteWithCurrentStop() async {
+        guard let dest = destinationCoordinate,
+              let current = locationService.currentLocation?.coordinate else { return }
+        isRerouting = true
+
+        if let s = stop {
+            let req1 = MKDirections.Request()
+            req1.source = MKMapItem(placemark: MKPlacemark(coordinate: current))
+            req1.destination = MKMapItem(placemark: MKPlacemark(coordinate: s.0.coordinate))
+            req1.transportType = .automobile
+
+            let req2 = MKDirections.Request()
+            req2.source = MKMapItem(placemark: MKPlacemark(coordinate: s.0.coordinate))
+            req2.destination = MKMapItem(placemark: MKPlacemark(coordinate: dest))
+            req2.transportType = .automobile
+
+            if let res1 = try? await MKDirections(request: req1).calculate(),
+               let r1 = res1.routes.first,
+               let res2 = try? await MKDirections(request: req2).calculate(),
+               let r2 = res2.routes.first {
+                let combinedCoords = r1.polyline.coords + r2.polyline.coords
+                let steps = (r1.steps + r2.steps).compactMap { step -> NavStep? in
+                    let inst = step.instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !inst.isEmpty else { return nil }
+                    return NavStep(
+                        instructions: inst,
+                        notice: step.notice,
+                        distance: step.distance,
+                        coordinate: Coord(step.polyline.coordinate),
+                        symbol: RoutePlanner.symbolForInstruction(inst))
+                }
+                await MainActor.run {
+                    locationService.setRoute(combinedCoords)
+                    navSteps = steps
+                    currentStepIndex = 0
+                    announcedThresholds.removeAll()
+                    isRerouting = false
+                }
+                return
+            }
+        }
+        await reroute()
     }
 }
 

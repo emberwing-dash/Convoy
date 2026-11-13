@@ -5,7 +5,7 @@ import MapKit
 struct FillUp: Hashable { var odo: Int; var litres: Double; var price: Double }
 enum CrewSegment { case crews, friends }
 enum RidePhase { case starting, navigating }
-enum AppTab: Hashable { case ride, discover, crew }
+enum AppTab: Hashable { case ride, discover, crew, garage }
 
 // MARK: - Notifications
 

@@ -50,12 +50,42 @@ enum StopKind: String, CaseIterable, Identifiable {
         case .mechanic: "mechanic"
         }
     }
+
+    static func detect(query: String, category: MKPointOfInterestCategory? = nil) -> StopKind {
+        if let cat = category {
+            if cat == .gasStation || cat == .evCharger { return .fuel }
+            if cat == .restaurant || cat == .bakery || cat == .brewery { return .food }
+            if cat == .cafe { return .rest }
+            if cat == .nationalPark || cat == .beach || cat == .campground { return .viewpoint }
+        }
+        let q = query.lowercased()
+        if q.contains("petrol") || q.contains("fuel") || q.contains("gas") || q.contains("pump") || q.contains("diesel") || q.contains("shell") || q.contains("hp") || q.contains("indian oil") || q.contains("bpcl") {
+            return .fuel
+        }
+        if q.contains("food") || q.contains("hotel") || q.contains("eat") || q.contains("restaurant") || q.contains("dhaba") || q.contains("biryani") || q.contains("burger") || q.contains("pizza") {
+            return .food
+        }
+        if q.contains("cafe") || q.contains("coffee") || q.contains("tea") || q.contains("rest") || q.contains("ccd") || q.contains("starbucks") || q.contains("chai") {
+            return .rest
+        }
+        if q.contains("view") || q.contains("point") || q.contains("scenic") || q.contains("hill") || q.contains("lake") || q.contains("falls") || q.contains("peak") {
+            return .viewpoint
+        }
+        if q.contains("mechanic") || q.contains("puncture") || q.contains("repair") || q.contains("garage") || q.contains("service") || q.contains("tyre") {
+            return .mechanic
+        }
+        return .rest
+    }
 }
 
 struct StopPlace: Hashable {
     var name: String
     var address: String
     var coordinate: CLLocationCoordinate2D
+    var categoryName: String = "Stop"
+    var detourText: String? = nil
+    var distanceText: String? = nil
+    var phone: String? = nil
     var short: String { name }
 
     static func == (l: StopPlace, r: StopPlace) -> Bool {
@@ -67,6 +97,127 @@ struct StopPlace: Hashable {
         h.combine(name)
         h.combine(coordinate.latitude)
         h.combine(coordinate.longitude)
+    }
+}
+
+// MARK: - Google Maps-Style Stop Preview Card
+
+struct GoogleMapsStopPreviewCard: View {
+    let place: StopPlace
+    let kind: StopKind
+    var onContinue: () -> Void
+    var onRemove: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Drag indicator pill
+            Capsule()
+                .fill(Color.white.opacity(0.3))
+                .frame(width: 38, height: 4)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+
+            HStack(alignment: .top, spacing: 14) {
+                // Category round badge
+                ZStack {
+                    Circle()
+                        .fill(kind.tint)
+                        .frame(width: 48, height: 48)
+                        .shadow(color: kind.tint.opacity(0.4), radius: 8)
+                    Image(systemName: kind.symbol)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.black)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(place.name)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+
+                        Text("STOP ADDED")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(kind.tint)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(kind.tint.opacity(0.18), in: Capsule())
+                    }
+
+                    if !place.address.isEmpty {
+                        Text(place.address)
+                            .font(.system(size: 12))
+                            .foregroundStyle(CV.cream.opacity(0.65))
+                            .lineLimit(2)
+                    }
+
+                    // Detour & Distance info
+                    HStack(spacing: 8) {
+                        if let detour = place.detourText {
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text(detour)
+                                    .font(.system(size: 12, weight: .bold))
+                            }
+                            .foregroundStyle(CV.green)
+                        }
+
+                        if let dist = place.distanceText {
+                            Text("•")
+                                .foregroundStyle(CV.cream.opacity(0.4))
+                            Text(dist)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(CV.cream.opacity(0.75))
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+
+            // Bottom Action Buttons
+            HStack(spacing: 12) {
+                Button(action: onRemove) {
+                    Text("Remove Stop")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(CV.red)
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(CV.red.opacity(0.35), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onContinue) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        Text("Continue Route")
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                    .foregroundStyle(Color(hex: 0x1A1A1D))
+                    .frame(maxWidth: .infinity).frame(height: 44)
+                    .background(Color(hex: 0xF5EDDE), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 12)
+        }
+        .padding(.bottom, 6)
+        .background(
+            Color(hex: 0x161619).opacity(0.97),
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.55), radius: 24, y: -6)
     }
 }
 
@@ -192,7 +343,13 @@ struct AppleMapsRightControls: View {
     var onRecentre: () -> Void
     var onToggleVoice: () -> Void
     var onSOS: () -> Void
+<<<<<<< Updated upstream
     var onSiri: (() -> Void)? = nil
+=======
+    var onAlertCrew: (() -> Void)? = nil
+    var onShowNotifications: (() -> Void)? = nil
+    var unreadCount: Int = 0
+>>>>>>> Stashed changes
 
     var body: some View {
         VStack(spacing: 12) {
@@ -214,6 +371,7 @@ struct AppleMapsRightControls: View {
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
             }.buttonStyle(.plain)
 
+<<<<<<< Updated upstream
             if let onSiri {
                 Button(action: onSiri) {
                     ZStack {
@@ -238,6 +396,38 @@ struct AppleMapsRightControls: View {
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
+=======
+            if let onAlertCrew {
+                Button(action: onAlertCrew) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0xFFB020))
+                        .frame(width: 48, height: 48)
+                        .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Circle())
+                        .overlay(Circle().strokeBorder(Color(hex: 0xFFB020).opacity(0.4), lineWidth: 1.5))
+                }.buttonStyle(.plain)
+            }
+
+            if let onShowNotifications {
+                Button(action: onShowNotifications) {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(CV.cream)
+                            .frame(width: 48, height: 48)
+                            .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Circle())
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+
+                        if unreadCount > 0 {
+                            Circle()
+                                .fill(CV.red)
+                                .frame(width: 10, height: 10)
+                                .overlay(Circle().strokeBorder(Color(hex: 0x1A1A1D), lineWidth: 1.5))
+                                .offset(x: -3, y: 3)
+                        }
+                    }
+                }.buttonStyle(.plain)
+>>>>>>> Stashed changes
             }
 
             Button(action: onSOS) {
@@ -437,5 +627,228 @@ struct AppleMapsBottomSheet: View {
             }
             .padding(.horizontal, 14).frame(height: 50).contentShape(Rectangle())
         }.buttonStyle(.plain)
+    }
+}
+
+// MARK: - Ghost / Proposal marker (translucent — visible to leader only)
+
+/// Translucent map annotation shown to the leader for a rider's stop proposal.
+struct StopProposalMarker: View {
+    let proposal: StopProposal
+    var body: some View {
+        VStack(spacing: 4) {
+            ZStack {
+                Circle()
+                    .fill(Color(hex: 0x0A84FF).opacity(0.18))
+                    .frame(width: 48, height: 48)
+                Circle()
+                    .strokeBorder(Color(hex: 0x0A84FF).opacity(0.6), lineWidth: 2)
+                    .frame(width: 36, height: 36)
+                Image(systemName: "mappin")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0x0A84FF))
+            }
+            Text(proposal.riderName)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(Color(hex: 0x0A84FF).opacity(0.75), in: Capsule())
+        }
+    }
+}
+
+// MARK: - Rider warning banner (shown to all riders)
+
+struct RiderWarningBanner: View {
+    let warning: RiderWarningEvent
+    var onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: warning.type.symbol)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(warning.type.color)
+                .frame(width: 36, height: 36)
+                .background(warning.type.color.opacity(0.2), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(warning.riderName)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                Text(warning.type.label)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            Spacer()
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.1), in: Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(hex: 0x1A1A1D).opacity(0.95))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(warning.type.color.opacity(0.5), lineWidth: 1.5)
+                )
+        )
+        .shadow(color: warning.type.isCritical ? warning.type.color.opacity(0.4) : .clear,
+                radius: 12)
+    }
+}
+
+// MARK: - Stop Proposal card (shown to leader in a tray)
+
+struct StopProposalCard: View {
+    let proposal: StopProposal
+    var onApprove: () -> Void
+    var onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "mappin.circle.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(Color(hex: 0x0A84FF))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(proposal.riderName) wants to stop")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text(proposal.placeName)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .lineLimit(1)
+            }
+            Spacer()
+
+            HStack(spacing: 8) {
+                Button(action: onApprove) {
+                    Text("Add")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color(hex: 0x1A1A1D))
+                        .padding(.horizontal, 14).frame(height: 32)
+                        .background(Color(hex: 0x0A84FF), in: Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(width: 32, height: 32)
+                        .background(Color.white.opacity(0.1), in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(12)
+        .background(Color(hex: 0x1C1C1F).opacity(0.96),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .strokeBorder(Color(hex: 0x0A84FF).opacity(0.4), lineWidth: 1))
+    }
+}
+
+// MARK: - Voice command button
+
+struct VoiceMicButton: View {
+    var isListening: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(isListening
+                          ? CV.red.opacity(0.9)
+                          : Color(hex: 0x1A1A1D).opacity(0.9))
+                    .frame(width: 52, height: 52)
+                    .overlay(Circle().strokeBorder(
+                        isListening ? CV.red : Color.white.opacity(0.15), lineWidth: 1.5))
+                    .shadow(color: isListening ? CV.red.opacity(0.5) : .clear, radius: 10)
+
+                Image(systemName: isListening ? "mic.fill" : "mic")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+
+                if isListening {
+                    Circle()
+                        .strokeBorder(CV.red.opacity(0.4), lineWidth: 2)
+                        .frame(width: 68, height: 68)
+                        .scaleEffect(1.0)
+                        .animation(
+                            .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                            value: isListening
+                        )
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Warning picker sheet (rider sends a warning)
+
+struct RiderWarningPicker: View {
+    var onSelect: (RiderWarningType) -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Send Warning")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+                Spacer()
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(width: 32, height: 32)
+                        .background(Color.white.opacity(0.1), in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 12)
+
+            ForEach(RiderWarningType.allCases) { type in
+                Button { onSelect(type) } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: type.symbol)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(type.color)
+                            .frame(width: 40, height: 40)
+                            .background(type.color.opacity(0.18),
+                                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        Text(type.label)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        if type.isCritical {
+                            Text("URGENT")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(type.color)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(type.color.opacity(0.2), in: Capsule())
+                        }
+                    }
+                    .padding(.horizontal, 20).frame(height: 60)
+                }
+                .buttonStyle(.plain)
+                if type != RiderWarningType.allCases.last {
+                    Rectangle().fill(Color.white.opacity(0.07))
+                        .frame(height: 1).padding(.leading, 74)
+                }
+            }
+            Spacer(minLength: 20)
+        }
+        .background(Color(hex: 0x1A1A1D))
     }
 }

@@ -22,6 +22,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
+		<string>bluetooth-peripheral</string>
 	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Convoy understands your hands-free voice commands while riding in live navigation.</string>
