@@ -4,24 +4,38 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppState.self) private var app
     @Environment(\.scenePhase) private var scenePhase
-    @State private var showLaunchSplash = !ProcessInfo.processInfo.arguments.contains("-pushRoute")
-        && !ProcessInfo.processInfo.arguments.contains("-initialTabDiscover")
+
+    // The Convoy cinematic brand animation plays on app launch
+    @State private var isPlayingOpeningAnimation = true
 
     var body: some View {
-        Group {
-            if showLaunchSplash && app.phase == .main {
-                InConvoyView {
-                    withAnimation(.easeInOut(duration: 0.35)) { showLaunchSplash = false }
+        ZStack {
+            // Main app content
+            switch app.phase {
+            case .onboarding:
+                OnboardingFlow()
+            case .main:
+                MainShell()
+            }
+
+            // Cinematic Brand Launch Animation
+            if isPlayingOpeningAnimation {
+                ConvoyOpeningAnimationView {
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        isPlayingOpeningAnimation = false
+                    }
                 }
-            } else {
-                switch app.phase {
-                case .onboarding: OnboardingFlow()
-                case .main:       MainShell()
-                }
+                .transition(.opacity)
+                .zIndex(999)
             }
         }
         .onAppear {
-            if app.phase == .onboarding { showLaunchSplash = false }
+            let isTesting = ProcessInfo.processInfo.arguments.contains("-skipAnimation")
+                || ProcessInfo.processInfo.arguments.contains("-pushRoute")
+                || ProcessInfo.processInfo.arguments.contains("-initialTabDiscover")
+            if isTesting {
+                isPlayingOpeningAnimation = false
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, app.phase == .main else { return }
@@ -41,6 +55,13 @@ struct RootView: View {
         guard let payload = parts.first, !payload.isEmpty else { return }
 
         switch host {
+        case "details":
+            app.tab = .ride
+            app.popToRoot()
+            if let first = app.rides.first {
+                app.push(.rideDetails(first.id))
+            }
+
         case "friend":
             app.tab = .crew
             app.crewSegment = .friends
@@ -75,7 +96,10 @@ struct RootView: View {
     }
 }
 
-enum OnboardingRoute: Hashable { case profile, inConvoy }
+// MARK: - Onboarding Navigation Flow
+enum OnboardingRoute: Hashable {
+    case profile
+}
 
 struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
@@ -85,16 +109,52 @@ struct OnboardingFlow: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            WelcomeView {
-                if hasExistingProfile { path.append(.inConvoy) }
-                else { path.append(.profile) }
-            }
+            WelcomeView(
+                onGoogleSignIn: {
+                    Task {
+                        // Sign in with Google / Supabase
+                        do {
+                            let userId = try await SupabaseManager.shared.signInAnonymously()
+                            await MainActor.run {
+                                app.backendUserId = userId
+                                if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
+                                    // Returning user restoring profile -> proceed to Home
+                                    app.completeOnboarding(
+                                        name: profile.displayName,
+                                        handle: profile.handle,
+                                        imageData: profile.avatarImageData
+                                    )
+                                } else {
+                                    // New user -> proceed to Name Entry
+                                    path.append(.profile)
+                                }
+                            }
+                        } catch {
+                            await MainActor.run {
+                                path.append(.profile)
+                            }
+                        }
+                    }
+                },
+                onContinueGuest: {
+                    if hasExistingProfile, let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
+                        app.completeOnboarding(
+                            name: profile.displayName,
+                            handle: profile.handle,
+                            imageData: profile.avatarImageData
+                        )
+                    } else {
+                        path.append(.profile)
+                    }
+                }
+            )
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
                 case .profile:
-                    ProfileSetupView(onBack: pop) { path.append(.inConvoy) }
-                case .inConvoy:
-                    InConvoyView {
+                    ProfileSetupView(onBack: pop) {
+                        // After name entry and profile completion:
+                        // Complete onboarding and navigate directly to Home.
+                        // (NO opening animation replay here).
                         app.completeOnboarding(
                             name: app.displayName,
                             handle: app.handle,
