@@ -104,6 +104,21 @@ enum RideMath {
         return out
     }
 
+    /// Removes the first and last `metres` of a path so a shared track never shows where a rider
+    /// starts or ends (usually home or work). Paths too short to trim safely come back empty.
+    static func trimEnds(_ pts: [Coord], metres: Double = 400) -> [Coord] {
+        guard pts.count > 2 else { return [] }
+        var total = 0.0
+        var cumulative = [0.0]
+        for i in 1..<pts.count {
+            total += pts[i - 1].distanceKm(to: pts[i]) * 1000
+            cumulative.append(total)
+        }
+        guard total > metres * 3 else { return [] }
+        let kept = pts.indices.filter { cumulative[$0] >= metres && cumulative[$0] <= total - metres }
+        return kept.count > 1 ? kept.map { pts[$0] } : []
+    }
+
     // MARK: Encoded polyline (Google polyline algorithm, 1e-5 precision)
 
     static func encode(_ pts: [Coord]) -> String {

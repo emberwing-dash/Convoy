@@ -70,7 +70,7 @@ SELECT test.check((SELECT ride_from FROM public.crew_feed()) = 'Hebbal', 'start 
 SELECT test.check((SELECT members_count = 1 AND max_riders = 3 AND accepts_requests AND my_request_status IS NULL
                    AND NOT i_am_member AND pending_requests = 0 FROM public.crew_feed()), 'open ride state');
 SELECT test.as_user('d0000000-0000-0000-0000-000000000000');
-SELECT test.check((SELECT COUNT(*) FROM public.crew_feed()) = 0, 'stranger sees nothing');
+SELECT test.check((SELECT COUNT(*) FROM public.crew_feed()) = 1, 'feed is community-wide');
 
 -- Requests
 SELECT test.as_user('b0000000-0000-0000-0000-000000000000');
@@ -154,8 +154,8 @@ SELECT test.fails($$SELECT public.add_post_comment((SELECT post_id FROM public.c
 SELECT test.check((SELECT like_count = 1 AND comment_count = 1 AND liked_by_me FROM public.crew_feed() WHERE kind = 'ride_log'), 'counts');
 SELECT test.check((SELECT COUNT(*) FROM public.crew_feed(NULL, 20, 'b0000000-0000-0000-0000-000000000000')) = 1, 'profile feed filter');
 SELECT test.as_user('d0000000-0000-0000-0000-000000000000');
-SELECT test.fails($$SELECT public.toggle_post_like((SELECT id FROM public.feed_posts LIMIT 1))$$, 'Post not found');
-SELECT test.check((SELECT COUNT(*) FROM public.post_comments_list((SELECT post_id FROM public.crew_feed() LIMIT 1))) = 0, 'stranger cannot read comments');
+SELECT test.fails($$SELECT public.toggle_post_like(gen_random_uuid())$$, 'Post not found');
+SELECT test.check((SELECT COUNT(*) FROM public.post_comments_list((SELECT post_id FROM public.crew_feed() WHERE kind = 'ride_log'))) = 1, 'any rider can read comments');
 SELECT test.as_user('b0000000-0000-0000-0000-000000000000');
 SELECT test.check((SELECT COUNT(*) FROM public.my_notifications() WHERE kind IN ('post_like', 'post_comment')) = 2, 'like + comment notified once each');
 SELECT test.check((SELECT body FROM public.post_comments_list((SELECT post_id FROM public.crew_feed() WHERE kind = 'ride_log'))) = 'Great run!', 'comments list');
@@ -180,22 +180,34 @@ SELECT test.as_user('b0000000-0000-0000-0000-000000000000');
 SELECT test.check((SELECT reason FROM public.suggested_riders() WHERE display_name = 'Kavya') = 'In your crew Weekend Warriors', 'crew suggestion');
 SELECT test.check((SELECT reason FROM public.suggested_riders() WHERE display_name = 'Rohan') = 'Rode with you 1 time', 'co-rider suggestion');
 SELECT test.check((SELECT reason FROM public.suggested_riders() WHERE display_name = 'Dev') = 'Rode 12.0 km this month', 'active rider suggestion');
-SELECT test.check((SELECT COUNT(*) FROM public.suggested_riders() WHERE display_name IN ('Suman', 'Rishav')) = 0, 'no reason, no suggestion; never me');
+SELECT test.check((SELECT reason FROM public.suggested_riders() WHERE display_name = 'Suman') = 'Rider on Convoy', 'every real rider can be suggested');
+SELECT test.check((SELECT COUNT(*) FROM public.suggested_riders() WHERE display_name = 'Rishav') = 0, 'never suggest me');
 INSERT INTO public.follows (follower_id, followee_id) VALUES ('b0000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000000');
 SELECT test.check((SELECT COUNT(*) FROM public.suggested_riders() WHERE display_name = 'Kavya') = 0, 'followed riders drop out');
 SELECT test.check((SELECT followers = 2 AND i_follow AND NOT follows_me AND total_km = 60.0 AND rides_count = 1
                    AND total_points = 85 AND level = 1 AND shared_crews = 1 FROM public.rider_profile('a0000000-0000-0000-0000-000000000000')), 'rider profile');
+
+-- Ride invitations (live app writes 'invited')
+RESET ROLE;
+INSERT INTO public.ride_members (ride_id, user_id, role, status)
+VALUES ('10000000-0000-0000-0000-000000000000', 'd0000000-0000-0000-0000-000000000000', 'rider', 'invited');
+SET ROLE authenticated;
+SELECT test.as_user('d0000000-0000-0000-0000-000000000000');
+SELECT test.check((public.respond_ride_invitation('10000000-0000-0000-0000-000000000000', false) ->> 'status') = 'declined', 'invitee declines');
+SELECT test.fails($$SELECT public.respond_ride_invitation('10000000-0000-0000-0000-000000000000', true)$$, 'only invited members');
+SELECT test.fails($$SELECT public.complete_group_ride('10000000-0000-0000-0000-000000000000')$$, 'Only the ride organiser');
 
 -- Finishing the ride removes the open post but keeps recaps
 SELECT test.as_user('a0000000-0000-0000-0000-000000000000');
 SELECT public.complete_group_ride('10000000-0000-0000-0000-000000000000');
 SELECT test.as_user('b0000000-0000-0000-0000-000000000000');
 SELECT test.check((SELECT string_agg(kind, ',') FROM public.crew_feed()) = 'ride_log', 'finished open ride leaves the feed');
+SELECT test.check((SELECT is_completed AND completed_at IS NOT NULL FROM public.rides WHERE id = '10000000-0000-0000-0000-000000000000'), 'completion recorded');
 SELECT test.fails($$SELECT public.create_ride_join_request('10000000-0000-0000-0000-000000000000')$$, 'already finished');
 
 -- Grants
 RESET ROLE;
 SET ROLE anon;
 SELECT test.fails($$SELECT * FROM public.crew_feed()$$, 'permission denied');
-SELECT test.fails($$SELECT * FROM public.audience_of('a0000000-0000-0000-0000-000000000000')$$, 'permission denied');
+SELECT test.fails($$SELECT public.complete_group_ride('10000000-0000-0000-0000-000000000000')$$, 'permission denied');
 RESET ROLE;

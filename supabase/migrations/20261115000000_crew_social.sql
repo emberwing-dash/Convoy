@@ -4,8 +4,13 @@
 -- open rides that accept join requests), likes, comments, a notification inbox
 -- with realtime delivery, leaderboards, suggested riders and rider profiles.
 --
--- REVIEW BEFORE APPLYING. Requires the existing tables: profiles, rides,
--- ride_members, ride_join_requests (20261104000000), crews, crew_members.
+-- Written against the live Convoy project schema (checked 2026-11-15). It is self-contained:
+-- 20261104000000_harden_ride_joins.sql was never applied there and must NOT be applied now
+-- (its ride_members policies would replace the live ones). Section 0 adds the parts of it
+-- the app needs, adapted to the live tables.
+--
+-- Visibility: the Crew feed is community-wide — every signed-in rider can see posts.
+-- Shared GPS tracks are trimmed on the device (first/last 400 m removed) before upload.
 --
 -- Rider score (one formula, used everywhere — see public.ride_points):
 --   per recorded ride  = floor(km)                       distance points
@@ -17,7 +22,80 @@
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- 0. Ride columns used by open rides
+-- 0a. Live-project prerequisites
+-- -----------------------------------------------------------------------------
+-- The app writes 'invited' for ride invitations; the live check only allowed pending/accepted/declined.
+ALTER TABLE public.ride_members DROP CONSTRAINT IF EXISTS ride_members_status_check;
+ALTER TABLE public.ride_members ADD CONSTRAINT ride_members_status_check
+    CHECK (status IN ('pending', 'invited', 'accepted', 'declined'));
+
+CREATE TABLE IF NOT EXISTS public.ride_join_requests (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ride_id      UUID NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
+    requester_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    organizer_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    status       TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'declined', 'cancelled')),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ride_join_requests_unique_pending
+    ON public.ride_join_requests (ride_id, requester_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_rjr_organizer_status ON public.ride_join_requests (organizer_id, status);
+CREATE INDEX IF NOT EXISTS idx_rjr_requester_status ON public.ride_join_requests (requester_id, status);
+CREATE INDEX IF NOT EXISTS idx_rjr_ride_status ON public.ride_join_requests (ride_id, status);
+ALTER TABLE public.ride_join_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view relevant ride join requests" ON public.ride_join_requests;
+CREATE POLICY "Users can view relevant ride join requests" ON public.ride_join_requests
+    FOR SELECT USING (auth.uid() = requester_id OR auth.uid() = organizer_id);
+-- No insert/update/delete policies: every change goes through the functions below.
+
+CREATE OR REPLACE FUNCTION public.cancel_ride_join_request(p_request_id UUID)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth AS $$
+DECLARE v_request RECORD;
+BEGIN
+    IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Unauthorized: User not authenticated'; END IF;
+    SELECT * INTO v_request FROM public.ride_join_requests WHERE id = p_request_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Ride join request not found'; END IF;
+    IF v_request.requester_id <> auth.uid() THEN RAISE EXCEPTION 'Forbidden: Only the requester can cancel their request'; END IF;
+    IF v_request.status <> 'pending' THEN RAISE EXCEPTION 'Cannot cancel request with status %', v_request.status; END IF;
+    UPDATE public.ride_join_requests SET status = 'cancelled', updated_at = now() WHERE id = p_request_id
+    RETURNING * INTO v_request;
+    RETURN to_jsonb(v_request);
+END;
+$$;
+
+-- Invitee accepts or declines a ride invitation (the live update policy only lets organisers write).
+CREATE OR REPLACE FUNCTION public.respond_ride_invitation(p_ride_id UUID, p_accept BOOLEAN)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth AS $$
+DECLARE v_member RECORD; v_status TEXT;
+BEGIN
+    IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Unauthorized: User not authenticated'; END IF;
+    SELECT * INTO v_member FROM public.ride_members WHERE ride_id = p_ride_id AND user_id = auth.uid() FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Invitation not found for current user'; END IF;
+    IF v_member.status NOT IN ('invited', 'pending') THEN
+        RAISE EXCEPTION 'Membership status is % (only invited members can respond)', v_member.status;
+    END IF;
+    v_status := CASE WHEN p_accept THEN 'accepted' ELSE 'declined' END;
+    UPDATE public.ride_members SET status = v_status WHERE ride_id = p_ride_id AND user_id = auth.uid();
+    RETURN jsonb_build_object('ride_id', p_ride_id, 'user_id', auth.uid(), 'status', v_status);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.complete_group_ride(p_ride_id UUID)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth AS $$
+BEGIN
+    IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Unauthorized: User not authenticated'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.rides WHERE id = p_ride_id) THEN RAISE EXCEPTION 'Ride not found'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.rides WHERE id = p_ride_id AND organiser_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Forbidden: Only the ride organiser can close the group ride';
+    END IF;
+    UPDATE public.rides SET is_completed = true, completed_at = COALESCE(completed_at, now()) WHERE id = p_ride_id;
+    RETURN jsonb_build_object('ride_id', p_ride_id, 'is_completed', true);
+END;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- 0b. Ride columns used by open rides
 -- -----------------------------------------------------------------------------
 ALTER TABLE public.rides ADD COLUMN IF NOT EXISTS max_riders INT
     CHECK (max_riders IS NULL OR max_riders BETWEEN 2 AND 50);
@@ -189,17 +267,7 @@ RETURNS INT LANGUAGE sql IMMUTABLE AS $$
     SELECT GREATEST(1, floor((1 + sqrt(1 + 4 * GREATEST(p_points, 0) / 50.0)) / 2)::INT);
 $$;
 
--- Riders whose posts I may see: me, people I follow, and accepted members of my crews.
-CREATE OR REPLACE FUNCTION public.audience_of(p_viewer UUID)
-RETURNS TABLE (user_id UUID) LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-    SELECT p_viewer
-    UNION SELECT f.followee_id FROM public.follows f WHERE f.follower_id = p_viewer
-    UNION SELECT other.user_id
-          FROM public.crew_members mine
-          JOIN public.crew_members other ON other.crew_id = mine.crew_id AND other.status = 'accepted'
-          WHERE mine.user_id = p_viewer AND mine.status = 'accepted';
-$$;
-REVOKE EXECUTE ON FUNCTION public.audience_of(UUID) FROM public, anon, authenticated;
+DROP FUNCTION IF EXISTS public.audience_of(UUID);
 
 CREATE OR REPLACE FUNCTION public.accepted_rider_count(p_ride_id UUID)
 RETURNS INT LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
@@ -306,7 +374,7 @@ BEGIN
     SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Ride not found'; END IF;
     IF v_ride.organiser_id <> v_user THEN RAISE EXCEPTION 'Forbidden: Only the ride admin can post this ride'; END IF;
-    IF v_ride.is_completed THEN RAISE EXCEPTION 'This ride has already finished'; END IF;
+    IF COALESCE(v_ride.is_completed, false) THEN RAISE EXCEPTION 'This ride has already finished'; END IF;
     v_count := public.accepted_rider_count(p_ride_id);
     IF p_max_riders IS NULL OR p_max_riders < GREATEST(2, v_count) OR p_max_riders > 50 THEN
         RAISE EXCEPTION 'Max riders must be between % and 50', GREATEST(2, v_count);
@@ -351,7 +419,7 @@ BEGIN
     SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id;
     IF NOT FOUND THEN RAISE EXCEPTION 'Ride not found'; END IF;
     IF v_ride.organiser_id = v_user THEN RAISE EXCEPTION 'Cannot send join request to your own ride'; END IF;
-    IF v_ride.is_completed THEN RAISE EXCEPTION 'This ride has already finished'; END IF;
+    IF COALESCE(v_ride.is_completed, false) THEN RAISE EXCEPTION 'This ride has already finished'; END IF;
     IF p_source = 'feed' AND NOT v_ride.accepts_requests THEN
         RAISE EXCEPTION 'This ride is not taking requests';
     END IF;
@@ -558,7 +626,6 @@ RETURNS TABLE (
     route_preview JSONB, members_count INT, max_riders INT, accepts_requests BOOLEAN, ride_completed BOOLEAN,
     my_request_status TEXT, i_am_member BOOLEAN, pending_requests INT)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-    WITH aud AS (SELECT user_id FROM public.audience_of(auth.uid()))
     SELECT fp.id, fp.kind, fp.created_at, fp.caption,
            fp.author_id, p.display_name, p.username, p.avatar_data, fp.author_id = auth.uid(),
            (SELECT COUNT(*)::INT FROM public.post_likes pl WHERE pl.post_id = fp.id),
@@ -572,7 +639,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
            CASE WHEN r.id IS NULL THEN NULL ELSE split_part(COALESCE(r.to_location, ''), ',', 1) END,
            r.route_km::NUMERIC, CASE WHEN r.id IS NULL THEN NULL ELSE public.route_preview(r.route_coords_json) END,
            CASE WHEN r.id IS NULL THEN NULL ELSE public.accepted_rider_count(r.id) END,
-           r.max_riders, r.accepts_requests, r.is_completed,
+           r.max_riders, r.accepts_requests, COALESCE(r.is_completed, false),
            (SELECT q.status FROM public.ride_join_requests q
              WHERE q.ride_id = r.id AND q.requester_id = auth.uid() ORDER BY q.created_at DESC LIMIT 1),
            CASE WHEN r.id IS NULL THEN NULL ELSE
@@ -582,7 +649,6 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
                 THEN (SELECT COUNT(*)::INT FROM public.ride_join_requests q WHERE q.ride_id = r.id AND q.status = 'pending')
                 ELSE 0 END
     FROM public.feed_posts fp
-    JOIN aud ON aud.user_id = fp.author_id
     LEFT JOIN public.profiles p ON p.id = fp.author_id
     LEFT JOIN public.ride_logs l ON l.id = fp.ride_log_id
     LEFT JOIN public.rides r ON r.id = fp.ride_id
@@ -590,15 +656,15 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
       AND (p_before IS NULL OR fp.created_at < p_before)
       AND (p_author IS NULL OR fp.author_id = p_author)
       -- Finished open rides drop out of the feed; ride recaps stay.
-      AND (fp.kind = 'ride_log' OR NOT r.is_completed)
+      AND (fp.kind = 'ride_log' OR NOT COALESCE(r.is_completed, false))
     ORDER BY fp.created_at DESC
     LIMIT LEAST(GREATEST(p_limit, 1), 50);
 $$;
 
 CREATE OR REPLACE FUNCTION public.can_see_post(p_post_id UUID)
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-    SELECT EXISTS (SELECT 1 FROM public.feed_posts fp
-                   WHERE fp.id = p_post_id AND fp.author_id IN (SELECT user_id FROM public.audience_of(auth.uid())));
+    -- The Crew feed is community-wide: any signed-in rider can see any post.
+    SELECT auth.uid() IS NOT NULL AND EXISTS (SELECT 1 FROM public.feed_posts fp WHERE fp.id = p_post_id);
 $$;
 
 CREATE OR REPLACE FUNCTION public.toggle_post_like(p_post_id UUID)
@@ -720,7 +786,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
                     WHEN cr.uid IS NOT NULL THEN 'Rode with you ' || cr.n || CASE WHEN cr.n = 1 THEN ' time' ELSE ' times' END
                     WHEN ff.uid IS NOT NULL THEN 'Followed by ' || ff.n || ' rider' || CASE WHEN ff.n = 1 THEN '' ELSE 's' END || ' you follow'
                     WHEN COALESCE(s.mkm, 0) > 0 THEN 'Rode ' || s.mkm || ' km this month'
-                    ELSE NULL END AS reason,
+                    ELSE 'Rider on Convoy' END AS reason,
                COALESCE(s.km, 0) AS km, COALESCE(s.rides, 0) AS rides, COALESCE(s.mkm, 0) AS mkm
         FROM public.profiles p
         LEFT JOIN crew_mates cm ON cm.uid = p.id
@@ -732,8 +798,8 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
     )
     SELECT c.uid, p.display_name, p.username, p.avatar_data, c.reason, c.km, c.rides, c.mkm
     FROM candidates c JOIN public.profiles p ON p.id = c.uid
-    WHERE auth.uid() IS NOT NULL AND c.reason IS NOT NULL
-    ORDER BY c.weight DESC, c.mkm DESC, c.km DESC, p.display_name
+    WHERE auth.uid() IS NOT NULL
+    ORDER BY c.weight DESC, c.mkm DESC, c.km DESC, p.created_at DESC
     LIMIT LEAST(GREATEST(p_limit, 1), 30);
 $$;
 
@@ -771,6 +837,7 @@ DECLARE f TEXT;
 BEGIN
     FOREACH f IN ARRAY ARRAY[
         'record_ride_log(UUID, UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, INT, INT, INT, NUMERIC, TEXT)',
+        'cancel_ride_join_request(UUID)', 'respond_ride_invitation(UUID, BOOLEAN)', 'complete_group_ride(UUID)',
         'share_ride_log(UUID, TEXT)', 'post_open_ride(UUID, TEXT, INT)', 'close_open_ride(UUID)',
         'create_ride_join_request(UUID, TEXT, TEXT)', 'respond_ride_join_request(UUID, TEXT)',
         'incoming_ride_join_requests()', 'my_notifications(INT)', 'mark_notifications_read(UUID[])',
@@ -782,3 +849,12 @@ BEGIN
         EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated', f);
     END LOOP;
 END $$;
+
+-- 14. Hardening (from the Supabase security advisor): trigger functions are not API endpoints,
+--     and immutable helpers get a fixed search_path.
+REVOKE EXECUTE ON FUNCTION public.notify_ride_join_request() FROM public, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.notify_new_follower() FROM public, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.notify_post_activity() FROM public, anon, authenticated;
+ALTER FUNCTION public.ride_points(INT, BOOLEAN, BOOLEAN) SET search_path = '';
+ALTER FUNCTION public.rider_level(BIGINT) SET search_path = '';
+ALTER FUNCTION public.route_preview(TEXT) SET search_path = '';

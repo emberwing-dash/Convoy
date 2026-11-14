@@ -57,8 +57,8 @@ struct CrewFeedSection: View {
                 case .failed(let m):
                     Text(m).cvText(13, color: CV.muted, inter: true)
                 case .loaded:
-                    EmptyStateCard(icon: "person.2", title: "No suggestions yet",
-                                   message: "Join a crew or ride with others and we'll suggest riders you know.",
+                    EmptyStateCard(icon: "person.2", title: "No other riders yet",
+                                   message: "Invite friends to Convoy and they'll show up here.",
                                    actionTitle: "Invite friends") { app.push(.inviteFriends) }
                 }
             } else {
@@ -87,7 +87,7 @@ struct CrewFeedSection: View {
             case .loaded:
                 EmptyStateCard(icon: "point.topleft.down.to.point.bottomright.curvepath",
                                title: "Your feed is quiet",
-                               message: "Follow riders or join a crew to see their rides here. Finish a ride and you can share it too.",
+                               message: "Nobody has shared a ride yet. Finish a ride with navigation on and share it to be the first.",
                                actionTitle: "Plan a ride") {
                     app.startNewPlan(); app.push(.planWho)
                 }

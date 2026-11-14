@@ -26,7 +26,7 @@ struct CrewComposeSheet: View {
                                        actionTitle: "Plan a ride") { dismiss(); app.startNewPlan(); app.push(.planWho) }
                     }
                     if !hosting.isEmpty {
-                        group("Open a ride you're hosting", "Riders in your crews and followers can ask to join. You approve every request.") {
+                        group("Open a ride you're hosting", "Any rider on Convoy can ask to join. You approve every request.") {
                             ForEach(hosting) { r in
                                 row(icon: "flag.2.crossed.fill", title: r.title,
                                     subtitle: "\(r.displayDate.isEmpty ? r.departs.formatted(date: .abbreviated, time: .omitted) : r.displayDate) · \(r.acceptedRiders.count) going") {
@@ -104,7 +104,7 @@ struct ShareRideForm: View {
                 StatRow(items: [("\(RideFormat.km(log.distanceKm)) km", "Distance"), (RideFormat.duration(log.movingS), "Ride time"),
                                 (log.avgSpeedKmh > 0 ? "\(Int(log.avgSpeedKmh.rounded())) km/h" : "—", "Avg speed")])
                 NoteField(placeholder: "How was the ride?", text: $caption, limit: 500)
-                Text("Visible to riders who follow you and members of your crews.")
+                Text("Visible to everyone on Convoy. The first and last 400 m of your route are hidden.")
                     .cvText(12, color: CV.muted, inter: true)
                 if let error { Text(error).cvText(13, .semibold, color: CV.red, inter: true) }
                 Button(action: post) {
@@ -152,7 +152,7 @@ struct OpenRideForm: View {
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Who sees it").cvText(13, .semibold, color: CV.muted, inter: true)
-                    infoRow("person.3.fill", "Members of your crews and riders who follow you")
+                    infoRow("person.3.fill", "Everyone on Convoy sees it in the Crew feed")
                     infoRow("mappin.and.ellipse", "They see the area and route, not the exact meeting point or ride code")
                     infoRow("checkmark.shield.fill", "Nobody joins until you accept their request")
                 }

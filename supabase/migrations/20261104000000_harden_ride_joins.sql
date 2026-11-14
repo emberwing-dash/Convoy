@@ -1,3 +1,5 @@
+-- !! NOT APPLIED to the live project, and must not be: its ride_members policies and status check
+-- !! would replace the live ones. 20261115000000_crew_social.sql contains the parts the app needs.
 -- 20261104000000_harden_ride_joins.sql
 -- Hardening Ride Join Codes, Unique Membership Constraints, Dedicated RideJoinRequest Lifecycle,
 -- Atomic Backend Approval/Decline RPCs, RLS Column Security, and Ride Completion Integrity.

@@ -182,3 +182,14 @@ enum CLLocationShim {
                    speed: 20, speedAccuracy: 1, timestamp: time)
     }
 }
+
+@MainActor @Suite struct TrackPrivacyTests {
+    @Test func sharedTracksHideStartAndFinish() {
+        let line = (0...100).map { Coord(lat: 13 + Double($0) * 20 / 110_574, lon: 77.5) }   // 2 km, 20 m steps
+        let trimmed = RideMath.trimEnds(line, metres: 400)
+        let start = try! #require(trimmed.first), end = try! #require(trimmed.last)
+        #expect(line[0].distanceKm(to: start) * 1000 >= 399)
+        #expect(line[100].distanceKm(to: end) * 1000 >= 399)
+        #expect(RideMath.trimEnds(Array(line.prefix(50)), metres: 400).isEmpty)   // 1 km is too short to share safely
+    }
+}

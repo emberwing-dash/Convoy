@@ -101,7 +101,9 @@ final class SocialRepository {
             p_client_log_id: log.id, p_ride_id: log.rideId, p_title: log.title, p_start_name: log.startName,
             p_end_name: log.endName, p_started_at: Self.iso(log.startedAt), p_ended_at: Self.iso(log.endedAt),
             p_distance_m: log.distanceM, p_moving_s: log.movingS, p_elapsed_s: log.elapsedS,
-            p_max_speed_kmh: log.maxSpeedKmh, p_path_polyline: log.polyline))
+            p_max_speed_kmh: log.maxSpeedKmh,
+            // Everyone can see shared rides, so the uploaded track never includes the start or finish.
+            p_path_polyline: RideMath.encode(RideMath.trimEnds(log.path))))
         return (r.id, r.points, r.rider_count, r.is_host)
     }
 

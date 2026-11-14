@@ -101,9 +101,9 @@ struct RiderProfileView: View {
     private func postsSection(_ p: RiderProfile) -> some View {
         SectionTitleRow(title: "Rides")
         if posts.isEmpty {
-            EmptyStateCard(icon: "lock", title: isMe ? "You haven't shared a ride yet" : "No rides to show",
+            EmptyStateCard(icon: "point.topleft.down.to.point.bottomright.curvepath", title: isMe ? "You haven't shared a ride yet" : "No rides to show",
                            message: isMe ? "Finish a recorded ride and share it from the trip summary."
-                                         : "\(p.rider.name)'s shared rides appear here once you follow them or share a crew.")
+                                         : "\(p.rider.name) hasn't shared a ride yet.")
         } else {
             LazyVStack(spacing: 16) {
                 ForEach(posts) { post in
