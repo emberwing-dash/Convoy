@@ -54,22 +54,18 @@ struct ConvoyTabBar: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
-    // MARK: - Chatbot button (right side, circular)
+    // MARK: - Chatbot button (right side, circular) — Ellis
 
     private var chatbotButton: some View {
         Button {
             app.push(.chatbot)
         } label: {
-            Image("chatbot_logo")
+            Image("ellis_logo")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 55, height: 55)
-                .clipShape(Circle())
-//                .background(CV.red, in: Circle())
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
-                .shadow(color: CV.red.opacity(0.45), radius: 12, y: 4)
+                .frame(width: 68, height: 68)
         }
         .buttonStyle(PressScale())
-        .accessibilityLabel("Open Convoy Assistant")
+        .accessibilityLabel("Ask Ellis")
     }
 }

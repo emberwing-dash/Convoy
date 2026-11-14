@@ -447,7 +447,7 @@ final class SupabaseManager {
         if let current = existing.first {
             if current.status == "accepted" {
                 let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
-                return (row.toRide(members: members), .alreadyMember)
+                return (row.toRide(members: members, currentUserId: userId), .alreadyMember)
             }
             // pending or declined → normalize to pending (declined rows were previously deleted; keep this for safety)
             if current.status == "declined" {
@@ -455,13 +455,13 @@ final class SupabaseManager {
                     .update(["status": "pending"]).eq("id", value: current.id).execute()
             }
             let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
-            return (row.toRide(members: members), .requestSent)
+            return (row.toRide(members: members, currentUserId: userId), .requestSent)
         }
         try await client.from("ride_members").insert(RideMemberInsert(
             ride_id: row.id, user_id: userId, role: "rider", status: "pending"
         )).execute()
         let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
-        return (row.toRide(members: members), .requestSent)
+        return (row.toRide(members: members, currentUserId: userId), .requestSent)
     }
 
     /// Rides the user is an accepted member of. Loud on member-fetch errors.
@@ -477,10 +477,10 @@ final class SupabaseManager {
         for row in rows {
             do {
                 let members = try await fetchRideMembers(rideId: row.id)
-                out.append(row.toRide(members: members))
+                out.append(row.toRide(members: members, currentUserId: userId))
             } catch {
                 print("⚠️ [fetchUserRides] members fetch failed for \(row.id): \(error)")
-                out.append(row.toRide(members: []))
+                out.append(row.toRide(members: [], currentUserId: userId))
             }
         }
         return out
@@ -495,7 +495,7 @@ final class SupabaseManager {
         guard !rideIds.isEmpty else { return [] }
         let rows: [RideRow] = try await client.from("rides")
             .select().in("id", values: rideIds).execute().value
-        return rows.map { $0.toRide(members: []) }
+        return rows.map { $0.toRide(members: [], currentUserId: userId) }
     }
 
     func fetchIncomingRideJoins(for userId: UUID) async throws -> [RideJoinWithDetails] {
@@ -806,7 +806,7 @@ extension CrewMemberWithProfile {
 }
 
 extension RideRow {
-    func toRide(members: [RideMemberWithProfile] = []) -> Ride {
+    func toRide(members: [RideMemberWithProfile] = [], currentUserId: UUID? = nil) -> Ride {
         let stops: [String] = {
             guard let s = stops_json, let d = s.data(using: .utf8),
                   let arr = try? JSONDecoder().decode([String].self, from: d) else { return [] }
@@ -838,15 +838,27 @@ extension RideRow {
                   avatarData: m.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) })
         }
         let date = ISO8601DateFormatter().date(from: departs) ?? Date()
+
+        let effectiveUserId = currentUserId ?? SupabaseManager.shared.currentUserId
+        let isOrganiser = (effectiveUserId != nil && organiser_id == effectiveUserId)
+        let organiserName: String = {
+            if isOrganiser { return "you" }
+            if let m = members.first(where: { $0.user_id == organiser_id }) {
+                return m.profiles?.display_name ?? "host"
+            }
+            return "host"
+        }()
+
         return Ride(
             id: id, title: title, place: place ?? "",
             subtitle: subtitle ?? "", tag: tag ?? "Group ride",
             departs: date, riders: riders, plan: plan,
             distance: distance ?? "", duration: duration ?? "",
             displayDate: display_date ?? "", displayTime: display_time ?? "",
-            organiser: "host", organiserId: organiser_id, // ✅ Added organiser_id
-            rsvp: .going, lockText: "Start ride",
-            ridersGoing: max(1, riders.count),
+            organiser: organiserName,
+            organiserId: organiser_id,
+            rsvp: isOrganiser ? .organizing : .going,
+            lockText: "Start ride", ridersGoing: max(1, riders.count),
             listMeta: "\(distance ?? "") · \(from_location ?? "") → \(to_location ?? "")",
             code: code
         )

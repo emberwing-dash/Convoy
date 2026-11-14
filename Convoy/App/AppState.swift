@@ -196,6 +196,9 @@ final class AppState {
             self.phase = .main
             self.tab = .discover
         }
+        if ProcessInfo.processInfo.arguments.contains("-mainPhase") {
+            self.phase = .main
+        }
         if let idx = ProcessInfo.processInfo.arguments.firstIndex(of: "-pushRoute"),
            idx + 1 < ProcessInfo.processInfo.arguments.count {
             let routeName = ProcessInfo.processInfo.arguments[idx + 1]
@@ -205,6 +208,7 @@ final class AppState {
             case "discoverSaved": self.path.append(.discoverSaved)
             case "scenic": self.path.append(.scenic)
             case "surprise": self.path.append(.surprise)
+            case "chatbot": self.path.append(.chatbot)
             default: break
             }
         }
@@ -642,12 +646,16 @@ final class AppState {
             duration: draft.durationText(draft.style),
             displayDate: draft.starts.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)),
             displayTime: draft.starts.formatted(.dateTime.hour().minute()),
+            organiser: "you",
+            organiserId: backendUserId ?? SupabaseManager.shared.currentUserId,
+            rsvp: .organizing,
             lockText: "Start ride opens \(draft.starts.formatted(.dateTime.hour().minute()))",
             ridersGoing: 1,
             listMeta: "\(draft.distanceText(draft.style)) · \(draft.from.components(separatedBy: ",")[0]) → \(draft.to)"
         )
         guard !ride.title.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
 
+        lastCreatedRideID = ride.id
         StorageService.shared.saveRide(ride)
         rides.insert(ride, at: 0)
         rides.sort { $0.departs < $1.departs }

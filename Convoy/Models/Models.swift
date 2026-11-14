@@ -141,7 +141,7 @@ extension PersistedRideEntity {
             riders: [Rider(name: displayName, avatarData: avatarData)],
             plan: plan, distance: distance, duration: duration,
             displayDate: displayDate, displayTime: displayTime,
-            organiser: organiser, rsvp: .organizing,
+            organiser: organiser, rsvp: organiser == "you" ? .organizing : .going,
             whenTag: nil, lockText: "Start ride",
             ridersGoing: 1, listMeta: "\(distance) · \(fromLocation) → \(toLocation)",
             code: code
