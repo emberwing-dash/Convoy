@@ -196,7 +196,7 @@ struct ChatbotView: View {
 
     private var rateLabel: String {
         if engine.promptsRemaining <= 0 { return "Limit reached · resets tomorrow" }
-        return "\(engine.promptsRemaining)/50 prompts left today"
+        return "\(engine.promptsRemaining)/9999 prompts left today"
     }
     private var rateColor: Color {
         if engine.promptsRemaining <= 0 { return Color(hex: 0xFF5C00) }
@@ -258,6 +258,13 @@ struct ChatbotView: View {
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
+            .onAppear {
+                if let last = engine.messages.last {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        proxy.scrollTo(last.id, anchor: .bottom)
+                    }
+                }
+            }
             .onChange(of: engine.messages.count) { _, _ in
                 withAnimation(.snappy) {
                     proxy.scrollTo("bottom-spacer", anchor: .bottom)
@@ -357,7 +364,8 @@ struct ChatbotView: View {
             case .assistant, .system:
                 HStack(alignment: .top, spacing: 12) {
                     assistantAvatar
-                    Text(msg.text)
+                    let attributed = (try? AttributedString(markdown: msg.text)) ?? AttributedString(msg.text)
+                    Text(attributed)
                         .cvText(15, lineHeight: 21, inter: true)
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)

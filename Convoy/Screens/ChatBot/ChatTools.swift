@@ -6,7 +6,7 @@ enum ChatTools {
     static let allToolNames: [String] = [
         "search_places", "search_routes", "list_my_rides", "list_my_crews", "list_my_friends",
         "suggest_checkpoints", "begin_ride_planning", "set_ride_companions", "set_ride_start",
-        "set_ride_checkpoints", "set_ride_time", "finalize_ride_plan",
+        "set_ride_checkpoints", "set_ride_time", "fetch_routes", "finalize_ride_plan",
         "join_ride", "send_friend_request", "create_crew", "invite_to_crew"
     ]
 
@@ -21,7 +21,7 @@ enum ChatTools {
         searchPlacesSchema, searchRoutesSchema, listMyRidesSchema, listMyCrewsSchema, listFriendsSchema,
         findUserSchema, suggestCheckpointsSchema,
         beginRideSchema, setCompanionsSchema, setStartSchema,
-        setCheckpointsSchema, setTimeSchema, finalizeRideSchema,
+        setCheckpointsSchema, setTimeSchema, fetchRoutesSchema, finalizeRideSchema,
         joinRideSchema, sendFriendSchema, createCrewSchema, inviteToCrewSchema
     ]
 
@@ -29,28 +29,30 @@ enum ChatTools {
         ["type": "function", "function": ["name": name, "description": desc, "parameters": ["type": "object", "properties": props, "required": required]]]
     }
 
-    private static let searchPlacesSchema = fn("search_places", "Find places to ride to. Filter by category or search by name.", ["query": ["type": "string"], "category": ["type": "string", "enum": ["lake","waterfall","viewpoint","beach","forest","cafe","historical","hillRoad","hillStation","waterfront"]]])
+    private static let searchPlacesSchema = fn("search_places", "Find places to ride to.", ["query": ["type": "string"], "category": ["type": "string", "enum": ["lake","waterfall","viewpoint","beach","forest","cafe","historical","hillRoad","hillStation","waterfront"]]])
     private static let searchRoutesSchema = fn("search_routes", "Find curated routes.", ["query": ["type": "string"]])
     private static let listMyRidesSchema = fn("list_my_rides", "List the current user's accepted upcoming rides.")
     private static let listMyCrewsSchema = fn("list_my_crews", "List crews the current user belongs to.")
     private static let listFriendsSchema = fn("list_my_friends", "List the user's friends (name and handle).")
     private static let findUserSchema = fn("find_user", "Look up a Convoy user by @handle.", ["username": ["type": "string"]], ["username"])
     
-    private static let suggestCheckpointsSchema = fn("suggest_checkpoints", "Suggest real cafes or scenic stops along the route between start and destination.", ["start": ["type": "string"], "destination": ["type": "string"], "category": ["type": "string", "enum": ["cafe", "viewpoint", "restaurant", "waterfall"]]], ["start", "destination", "category"])
+    private static let suggestCheckpointsSchema = fn("suggest_checkpoints", "Suggest real cafes or scenic stops along the route.", ["start": ["type": "string"], "destination": ["type": "string"], "category": ["type": "string", "enum": ["cafe", "viewpoint", "restaurant", "waterfall"]]], ["start", "destination", "category"])
 
     private static let beginRideSchema = fn("begin_ride_planning", "Start a new ride-planning session.", ["destination": ["type": "string"]], ["destination"])
     private static let setCompanionsSchema = fn("set_ride_companions", "Record who's riding.", ["crew_name": ["type": "string"], "friend_usernames": ["type": "array", "items": ["type": "string"]], "solo": ["type": "boolean"]])
     private static let setStartSchema = fn("set_ride_start", "Record the starting point.", ["location": ["type": "string"], "use_current_location": ["type": "boolean"]], ["location"])
     private static let setCheckpointsSchema = fn("set_ride_checkpoints", "Record chosen intermediate stops.", ["checkpoints": ["type": "array", "items": ["type": "string"]]], ["checkpoints"])
-    private static let setTimeSchema = fn("set_ride_time", "Record start time. Must be ISO8601 (e.g. 2026-11-15T07:00:00+05:30).", ["iso8601": ["type": "string"]], ["iso8601"])
-    private static let finalizeRideSchema = fn("finalize_ride_plan", "Call ONLY after all details are set. Calculates route and opens review screen.")
+    private static let setTimeSchema = fn("set_ride_time", "Record start time. Must be ISO8601.", ["iso8601": ["type": "string"]], ["iso8601"])
+    
+    private static let fetchRoutesSchema = fn("fetch_routes", "Calculate route options between start and destination. Call this AFTER start & destination are set, but BEFORE finalizing.", ["start": ["type": "string"], "destination": ["type": "string"], "stops": ["type": "array", "items": ["type": "string"]]], ["start", "destination"])
+    
+    private static let finalizeRideSchema = fn("finalize_ride_plan", "Call ONLY after all details are set and route is chosen.", ["route_style": ["type": "string", "enum": ["Fastest", "Scenic", "Off-route"], "description": "The user's chosen route style from the fetch_routes options."]], ["route_style"])
 
     private static let joinRideSchema = fn("join_ride", "Join a ride by 6-character code.", ["code": ["type": "string"]], ["code"])
     private static let sendFriendSchema = fn("send_friend_request", "Send a friend request.", ["username": ["type": "string"]], ["username"])
     private static let createCrewSchema = fn("create_crew", "Create a new crew.", ["name": ["type": "string"]], ["name"])
     private static let inviteToCrewSchema = fn("invite_to_crew", "Invite a user to a crew.", ["crew_name": ["type": "string"], "username": ["type": "string"]], ["crew_name", "username"])
 
-    // MARK: - Confirmation UI
     static func confirmationTitle(_ name: String, _ args: [String: Any]) -> String {
         switch name {
         case "join_ride": return "Join this ride?"
@@ -77,6 +79,7 @@ enum ChatTools {
             if let when = d.scheduledAt { lines.append("When: \(when.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute()))") }
             if let crew = d.crewName { lines.append("Crew: \(crew)") }
             if !d.friendUsernames.isEmpty { lines.append("Friends: \(d.friendUsernames.map { "@\($0)" }.joined(separator: ", "))") }
+            if let style = args["route_style"] as? String { lines.append("Route: \(style)") }
             return lines.joined(separator: " · ")
         default: return ""
         }
@@ -87,12 +90,12 @@ enum ChatTools {
         case "search_places": return "Searching places…"
         case "list_my_friends": return "Checking friends…"
         case "suggest_checkpoints": return "Searching MapKit…"
-        case "finalize_ride_plan": return "Calculating route…"
+        case "fetch_routes": return "Calculating routes…"
+        case "finalize_ride_plan": return "Opening review…"
         default: return "Working…"
         }
     }
 
-    // MARK: - Execute
     @MainActor
     static func execute(name: String, args: [String: Any], app: AppState, engine: ChatbotEngine) async -> String {
         do {
@@ -150,23 +153,54 @@ enum ChatTools {
                 if let date = parseISO(iso), date > Date() { engine.rideDraft.scheduledAt = date; return jsonEncode(["status": "ok", "missing": engine.rideDraft.missingFields, "hint": nextHint(engine.rideDraft)]) }
                 return jsonEncode(["error": "Date must be in the future and ISO8601 format."])
                 
+            case "fetch_routes":
+                let start = args["start"] as? String ?? ""
+                let dest = args["destination"] as? String ?? ""
+                let stops = args["stops"] as? [String] ?? []
+                
+                let seed = PlanSeed(name: "Ride to \(dest)", start: start, startCoord: nil, destination: dest, destinationCoord: nil, stops: stops.map { .init(name: $0, coord: nil) })
+                app.startPlan(seed)
+                await app.findRoutes()
+                
+                if app.planner.state == .ready {
+                    let opts = RouteStyle.allCases.filter { app.draft.routes[$0] != nil }.map { $0.rawValue }
+                    return jsonEncode(["status": "success", "options": opts, "hint": "Ask the user which route they prefer."])
+                } else {
+                    return jsonEncode(["error": "Could not calculate routes. Ask for a more specific location."])
+                }
+                
             case "finalize_ride_plan":
                 guard engine.rideDraft.isComplete else { return jsonEncode(["error": "Missing fields. Ask user."]) }
                 let d = engine.rideDraft
+                let styleStr = args["route_style"] as? String ?? "Fastest"
+                var style = RouteStyle(rawValue: styleStr) ?? .fastest
                 
                 if let crewName = d.crewName, let crew = app.crews.first(where: { $0.name.lowercased() == crewName.lowercased() }) { app.selectedCrew = crew.id }
                 app.selectedFriends = Set(d.friendUsernames.filter { u in app.friends.contains { $0.username.lowercased() == u.lowercased() } })
 
-                let seed = PlanSeed(name: "Ride to \(d.destination ?? "")", start: d.startLocation ?? "", startCoord: nil, destination: d.destination ?? "", destinationCoord: nil, stops: d.checkpoints.map { .init(name: $0, coord: nil) })
+                // ✅ FIX: If fetch_routes wasn't called, calculate now. Otherwise preserve existing routes.
+                if app.draft.routes.isEmpty {
+                    let seed = PlanSeed(name: "Ride to \(d.destination ?? "")", start: d.startLocation ?? "", startCoord: nil, destination: d.destination ?? "", destinationCoord: nil, stops: d.checkpoints.map { .init(name: $0, coord: nil) })
+                    app.startPlan(seed)
+                    if let when = d.scheduledAt { app.draft.starts = when }
+                    await app.findRoutes()
+                } else {
+                    if let when = d.scheduledAt { app.draft.starts = when }
+                }
                 
-                app.startPlan(seed)
-                if let when = d.scheduledAt { app.draft.starts = when }
+                guard app.draft.selected != nil else {
+                    return jsonEncode(["error": "Could not calculate route to \(d.destination ?? ""). Ask the user for a more specific location."])
+                }
                 
-                // ✅ Calculate route BEFORE navigating so map isn't a straight line
-                await app.findRoutes()
-                app.push(.planReview) // ✅ Jump to final review screen
+                // ✅ FIX: Fallback if the chosen style doesn't exist
+                if app.draft.routes[style] == nil {
+                    style = RouteStyle.allCases.first(where: { app.draft.routes[$0] != nil }) ?? .fastest
+                }
                 
+                app.draft.style = style
+                app.push(.planReview)
                 engine.rideDraft = RidePlanDraft()
+                engine.saveState()
                 return jsonEncode(["status": "opened_review"])
 
             case "join_ride": return jsonEncode(["error": "Use manual flow"])
@@ -177,14 +211,8 @@ enum ChatTools {
             case "create_crew":
                 guard let u = await resolveUserId(app) else { return jsonEncode(["error": "Not signed in"]) }
                 let name = args["name"] as? String ?? ""
-                do {
-                    _ = try await SupabaseManager.shared.createCrew(name: name, code: CrewGroup.makeCode(name: name), creatorId: u, memberIds: [], avatarData: nil)
-                    await app.loadCrews(force: true) // ✅ Refresh UI immediately
-                    return jsonEncode(["status": "created"])
-                } catch {
-                    print("🚨 [ChatTools] create_crew failed: \(error)") // ✅ Print actual error
-                    return jsonEncode(["error": error.localizedDescription])
-                } 
+                _ = try await SupabaseManager.shared.createCrew(name: name, code: CrewGroup.makeCode(name: name), creatorId: u, memberIds: [], avatarData: nil)
+                return jsonEncode(["status": "created"])
             case "invite_to_crew":
                 guard let u = await resolveUserId(app) else { return jsonEncode(["error": "Not signed in"]) }
                 let crewName = args["crew_name"] as? String ?? ""
@@ -208,7 +236,7 @@ enum ChatTools {
         if draft.destination == nil { return "Ask for destination." }
         if draft.startLocation == nil { return "Ask where it starts." }
         if draft.scheduledAt == nil { return "Ask when they want to leave." }
-        return "Ask if they want checkpoints, or finalize."
+        return "Ask if they want checkpoints, then calculate routes."
     }
 
     private static func parseISO(_ s: String) -> Date? {
@@ -237,7 +265,6 @@ enum ChatTools {
 
     @MainActor
     private static func suggestCheckpoints(start: String, destination: String, category: String) async -> String {
-        // ✅ Use MKLocalSearch to actually find cafes/viewpoints in the real world
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = "\(category) near \(destination)"
         guard let res = try? await MKLocalSearch(request: req).start() else {

@@ -29,7 +29,7 @@ struct MainShell: View {
                 case .pastRide(let id):   PastRideView(pastID: id)
                 case .shareCard:          ShareCardView()
                 case .profile:            ProfileView()
-                case .joinCode:           JoinCodeView()
+                case .joinCode(let code): JoinCodeView(initialCode: code)
                 case .joinFound:          JoinFoundView()
                 case .myRides:            MyRidesView()
                 case .crewDetail(let id): CrewDetailView(crewID: id)
@@ -46,7 +46,7 @@ struct MainShell: View {
                 case .logFillUp:          LogFillUpView()
                 case .mileageProgress:    MileageProgressView()
                 case .mileageResults:     MileageResultsView()
-                case .inviteCode:         InviteCodeView()
+                case .inviteCode(let id): InviteCodeView(rideID: id) // ✅ Fixed
                 case .planWho:            PlanWhoView()
                 case .pickCrews:          PlanPickerView(kind: .crews)
                 case .pickFriends:        PlanPickerView(kind: .friends)
@@ -59,11 +59,6 @@ struct MainShell: View {
                 case .userSearch(let ctx): UserSearchView(context: ctx)
                 case .chatbot:            ChatbotView()
                 case .placeholder(let t): PlaceholderScreen(title: t, canPop: true)
-                }
-            }
-            .onChange(of: app.path.isEmpty) { _, isEmpty in
-                if isEmpty {
-                    Task { await app.refreshEverything(force: true) }
                 }
             }
         }

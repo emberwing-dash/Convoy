@@ -478,6 +478,7 @@ struct RideDetailsView: View {
     let rideID: UUID
     @State private var showEditSheet = false
     @State private var rideDayOverride = false
+    @State private var rideToDelete: Ride? = nil
 
     var body: some View {
         if let ride = app.rides.first(where: { $0.id == rideID }) {
@@ -539,10 +540,21 @@ struct RideDetailsView: View {
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: showEditSheet)
+        .confirmationDialog("Delete this ride?",
+                            isPresented: Binding(get: { rideToDelete != nil }, set: { if !$0 { rideToDelete = nil } }),
+                            titleVisibility: .visible) {
+            Button("Delete ride", role: .destructive) {
+                if let id = rideToDelete?.id {
+                    Task { await app.deleteRide(id) }
+                }
+            }
+            Button("Cancel", role: .cancel) { rideToDelete = nil }
+        } message: {
+            Text("This will permanently cancel the ride for everyone.")
+        }
     }
 
     // MARK: - Hero Section
-
     private func heroSection(ride: Ride, isRideDay: Bool) -> some View {
         ZStack(alignment: .bottomLeading) {
             Group {
@@ -605,21 +617,23 @@ struct RideDetailsView: View {
             Spacer()
 
             if canEdit {
-                Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        showEditSheet = true
-                    }
+                Menu {
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            showEditSheet = true
+                        }
+                    } label: { Label("Edit ride", systemImage: "pencil") }
+                    Button(role: .destructive) { rideToDelete = ride } label: { Label("Delete ride", systemImage: "trash") }
                 } label: {
                     Circle().fill(Color.black.opacity(0.35))
                         .frame(width: 44, height: 44)
                         .overlay(
-                            Image(systemName: "pencil")
-                                .font(.system(size: 16, weight: .semibold))
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 17, weight: .semibold))
                                 .foregroundStyle(CV.cream)
                         )
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Edit ride details")
+                .accessibilityLabel("Ride options")
             }
 
             ShareLink(item: "Join my ride on Convoy: convoy://ride/\(ride.code)") {
@@ -636,8 +650,6 @@ struct RideDetailsView: View {
         .safeAreaPadding(.top)
         .padding(.top, 4)
     }
-
-    // MARK: - Sub-sections
 
     private func tag(ride: Ride, isRideDay: Bool) -> some View {
         let isToday = Calendar.current.isDateInToday(ride.departs)
@@ -736,8 +748,10 @@ struct RideDetailsView: View {
                 .padding(.leading, 18)
             }
             Spacer()
-            Button { app.push(.inviteCode) } label: {
-                Text(organisedByYou ? "Invite" : "Chat")
+            
+            // ✅ Always Invite
+            Button { app.push(.inviteCode(ride.id)) } label: {
+                Text("Invite")
                     .cvText(13, .semibold, inter: true)
                     .padding(.horizontal, 14)
                     .frame(height: 32)
@@ -786,7 +800,6 @@ struct RideDetailsView: View {
                 .background(Color(hex: 0x1E1E22), in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
             }
-
             // Edit button directly beside locked or start button (always available for organiser)
             if organisedByYou {
                 Button {
@@ -811,8 +824,6 @@ struct RideDetailsView: View {
             }
         }
     }
-
-    // MARK: - Not found
 
     private var notFound: some View {
         ZStack {

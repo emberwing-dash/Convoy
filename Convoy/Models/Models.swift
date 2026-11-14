@@ -31,13 +31,17 @@ struct Ride: Identifiable, Hashable {
     var ridersGoing: Int
     var listMeta: String
     var media: [RideMediaItem] = []
+    
+    // ✅ Stored unique 6-character code
+    var code: String
 
     init(id: UUID = UUID(), title: String, place: String, subtitle: String,
          tag: String, departs: Date, riders: [Rider], plan: PlanDraft = PlanDraft(),
          distance: String, duration: String, displayDate: String, displayTime: String,
          organiser: String = "you", organiserId: UUID? = nil, rsvp: RSVP = .organizing,
          whenTag: String? = nil,
-         lockText: String = "Start ride", ridersGoing: Int = 1, listMeta: String = "") {
+         lockText: String = "Start ride", ridersGoing: Int = 1, listMeta: String = "",
+         code: String? = nil) {
         self.id = id
         self.title = title
         self.place = place
@@ -57,13 +61,16 @@ struct Ride: Identifiable, Hashable {
         self.lockText = lockText
         self.ridersGoing = ridersGoing
         self.listMeta = listMeta
-    }
-
-    var code: String {
-        let cons = place.uppercased().filter { $0.isLetter && !"AEIOU".contains($0) }.prefix(3)
-        let h = Calendar.current.component(.hour, from: departs)
-        let h12 = h % 12 == 0 ? 12 : h % 12
-        return String(cons) + "\(h12)" + (h < 12 ? "AM" : "PM")
+        
+        if let code = code {
+            self.code = code
+        } else {
+            // Generate a unique 6-char code (e.g. 3 letters + 3 numbers)
+            let letters = place.uppercased().filter { $0.isLetter && !"AEIOU".contains($0) }.prefix(3)
+            let prefix = letters.isEmpty ? "RID" : String(letters)
+            let suffix = String(format: "%03d", Int.random(in: 100...999))
+            self.code = prefix + suffix
+        }
     }
 
     var daysAway: Int {
@@ -93,8 +100,6 @@ struct RideMediaItem: Identifiable, Hashable {
         self.createdDate = createdDate; self.caption = caption
     }
 }
-
-// MARK: - Entity → Ride mapping
 
 extension PersistedRideEntity {
     func toRide(displayName: String, avatarData: Data?) -> Ride {
@@ -138,7 +143,8 @@ extension PersistedRideEntity {
             displayDate: displayDate, displayTime: displayTime,
             organiser: organiser, rsvp: organiser == "you" ? .organizing : .going,
             whenTag: nil, lockText: "Start ride",
-            ridersGoing: 1, listMeta: "\(distance) · \(fromLocation) → \(toLocation)"
+            ridersGoing: 1, listMeta: "\(distance) · \(fromLocation) → \(toLocation)",
+            code: code
         )
     }
 }

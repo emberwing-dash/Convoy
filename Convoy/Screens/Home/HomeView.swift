@@ -79,7 +79,7 @@ struct HomeView: View {
                 .background(CV.cream, in: Capsule())
             }.buttonStyle(.plain)
 
-            Button { app.push(.joinCode) } label: {
+            Button { app.push(.joinCode(nil)) } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "qrcode").font(.system(size: 18, weight: .semibold))
                     Text("Join with a code").cvText(17, .semibold, tracking: -0.17, lineHeight: 22, inter: true)
@@ -333,11 +333,21 @@ struct Countdown: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             let s = max(0, Int(to.timeIntervalSince(ctx.date)))
-            HStack(spacing: 7) {
-                cell(s / 86400, "days")
-                cell(s % 86400 / 3600, "hrs")
-                cell(s % 3600 / 60, "min")
-                cell(s % 60, "sec", accent: true)
+            if s == 0 {
+                Text("Time to ride!")
+                    .cvText(24, .bold, color: CV.red, inter: true)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 64)
+                    .background(CV.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(CV.red.opacity(0.3), lineWidth: 1))
+            } else {
+                HStack(spacing: 7) {
+                    cell(s / 86400, "days")
+                    cell(s % 86400 / 3600, "hrs")
+                    cell(s % 3600 / 60, "min")
+                    cell(s % 60, "sec", accent: true)
+                }
             }
         }
     }
