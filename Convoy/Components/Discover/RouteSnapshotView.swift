@@ -7,13 +7,19 @@ struct RouteSnapshotView: View {
     var size: CGSize?
     var height: CGFloat
     var corner: CGFloat
+    var lineColor: UIColor
+    /// Open-ride previews hide the exact start and finish, so no pins are drawn.
+    var showsEndpoints: Bool
     @State private var image: UIImage?
 
-    init(coords: [Coord], size: CGSize? = nil, height: CGFloat = 120, corner: CGFloat = 0) {
+    init(coords: [Coord], size: CGSize? = nil, height: CGFloat = 120, corner: CGFloat = 0,
+         lineColor: UIColor = UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1), showsEndpoints: Bool = true) {
         self.coords = coords
         self.size = size
         self.height = size?.height ?? height
         self.corner = corner
+        self.lineColor = lineColor
+        self.showsEndpoints = showsEndpoints
     }
 
     private var targetSize: CGSize {
@@ -81,10 +87,10 @@ struct RouteSnapshotView: View {
             UIColor.black.withAlphaComponent(0.35).setStroke()
             path.lineWidth = 7
             path.stroke()
-            UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1).setStroke()
+            lineColor.setStroke()
             path.lineWidth = 4
             path.stroke()
-            if let a = pts.first, let b = pts.last {
+            if showsEndpoints, let a = pts.first, let b = pts.last {
                 dot(at: snap.point(for: a), fill: .white, r: 6)
                 dot(at: snap.point(for: b), fill: UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1), r: 8, ring: true)
             }

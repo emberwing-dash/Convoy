@@ -183,6 +183,7 @@ struct RideNavView: View {
         .background(SwipeBackEnabler())
         .onAppear {
             setupConfirmedRoute()
+            startRecording()
             locationService.startNavigationTracking()
         }
         .onDisappear {
@@ -615,6 +616,15 @@ struct RideNavView: View {
             .background(Color(hex: 0x1A1A1D).opacity(0.94), in: Capsule())
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
         }
+    }
+
+    /// Measures the ride actually ridden (distance, moving time, top speed) for stats and leaderboards.
+    private func startRecording() {
+        guard let ride = app.upcomingRide else { return }
+        let start = ride.plan.from.components(separatedBy: ",").first ?? ride.plan.from
+        let isHost = (ride.organiserId != nil && ride.organiserId == app.backendUserId) || ride.organiser == "you"
+        RideRecorder.shared.begin(rideId: ride.id, title: ride.title, startName: start,
+                                  riderCount: ride.acceptedRiders.count, isHost: isHost)
     }
 
     // MARK: - Arrived panel
@@ -1203,14 +1213,17 @@ struct RideCompleteView: View {
                 .frame(width: 393).at(0, 358)
 
             VStack(spacing: 0) {
+                let km = RideRecorder.shared.liveDistanceM / 1000
+                let recording = RideRecorder.shared.isRecording
                 row("point.topleft.down.to.point.bottomright.curvepath", CV.red,
-                    "Route Completed", "You arrived at your destination")
+                    "Route Completed", "You arrived at \(dest.isEmpty ? "your destination" : dest)")
                 sep
-                row("checkmark.seal.fill", CV.green,
-                    "GPS Nav Verified", "All maneuvers completed")
+                row(recording && km >= 0.1 ? "location.fill" : "location.slash", recording && km >= 0.1 ? CV.green : CV.muted,
+                    recording && km >= 0.1 ? "\(RideFormat.km(km)) km recorded" : "No GPS distance recorded",
+                    recording && km >= 0.1 ? "Measured from your GPS track" : "This ride won't add to your stats")
                 sep
                 row("sparkles", amberC,
-                    "Ride Logged", "Saved to your ride history")
+                    "Ride Summary", "See your time, speed and rider score")
             }
             .frame(width: 353)
             .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 26, style: .continuous))

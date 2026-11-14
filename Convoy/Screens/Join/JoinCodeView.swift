@@ -457,7 +457,7 @@ struct JoinCodeView: View {
             successMessage = "Request sent to \(ride.organiser)! Waiting for organiser..."
             startPollingForApproval()
         } else {
-            errorMessage = "Could not send join request. Please try again."
+            errorMessage = app.lastSocialError ?? "Could not send join request. Please try again."
         }
     }
 

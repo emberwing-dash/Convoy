@@ -4,13 +4,13 @@ import SwiftUI
 struct ProfileView: View {
     @Environment(AppState.self) private var app
     @State private var showSignOutConfirm = false
+    @State private var stats: RiderProfile?
 
     private var totalRides: Int { app.completedRides.count }
+    /// Distance actually ridden (GPS-recorded), from the server when available, else this device's logs.
     private var totalKm: String {
-        let km = app.completedRides
-            .compactMap { Double($0.distance.components(separatedBy: " ").first ?? "0") }
-            .reduce(0, +)
-        return km > 0 ? "\(Int(km))" : "0"
+        let local = RideRecorder.shared.logs.filter { $0.rejectedReason == nil }.reduce(0) { $0 + $1.distanceKm }
+        return RideFormat.km(max(stats?.totalKm ?? 0, local))
     }
     private var totalPlaces: Int {
         Set(app.completedRides.map { $0.place }).count
@@ -47,32 +47,25 @@ struct ProfileView: View {
                         .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
                     .padding(.top, 20)
 
+                    if let s = stats {
+                        HStack(spacing: 10) {
+                            Image(systemName: "bolt.fill").foregroundStyle(CVSocial.amber)
+                            Text("\(s.totalPoints.formatted()) pts · Lv \(s.level)").cvText(14, .semibold, inter: true)
+                            Spacer()
+                            Text("\(RiderScore.pointsToNextLevel(points: s.totalPoints)) pts to Lv \(s.level + 1)")
+                                .cvText(12, color: CV.muted, inter: true)
+                        }
+                        .padding(.horizontal, 16).frame(height: 48)
+                        .background(CVSocial.amber.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .padding(.top, 10)
+                    }
+
                     sectionTitle("RECENT RIDES & HISTORY").padding(.top, 26)
                     recentRidesSection.padding(.top, 8)
 
-                    sectionTitle("GARAGE").padding(.top, 24)
-                    Button { app.push(.garage) } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Add your motorcycle")
-                                    .cvText(15, .semibold, inter: true)
-                                Text("Track mileage, service and more")
-                                    .cvText(12, color: CV.cream.opacity(0.5), inter: true)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(CV.cream.opacity(0.5))
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(height: 72)
-                        .background(Color(hex: 0x1A1A1D),
-                                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 7)
+                    // Garage is not part of this release (its screens are design mock-ups with sample data),
+                    // so there is no entry point to it.
+
 
                     sectionTitle("SETTINGS").padding(.top, 24)
                     VStack(spacing: 0) {
@@ -121,6 +114,9 @@ struct ProfileView: View {
             }
             .padding(.top, 4)
             .frame(maxHeight: .infinity, alignment: .top)
+        }
+        .task {
+            if let me = await app.resolvedUserId() { stats = try? await app.social.profile(me) }
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)

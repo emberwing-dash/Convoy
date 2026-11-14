@@ -250,14 +250,6 @@ final class SupabaseManager {
         try await client.from("friendships").delete().eq("id", value: requestId).execute()
     }
 
-    /// Sends pending ride invites to selected friends.
-    func inviteFriendsToRide(rideId: UUID, userIds: [UUID]) async throws {
-        for userId in userIds {
-            let member = RideMemberInsert(ride_id: rideId, user_id: userId, role: "rider", status: "pending")
-            try? await client.from("ride_members").insert(member).execute()
-        }
-    }
-
     // MARK: - Crews (ATOMIC create)
 
     func createCrew(name: String, code: String, creatorId: UUID? = nil,
@@ -701,134 +693,7 @@ final class SupabaseManager {
         return (ride, .notMember)
     }
 
-    func requestToJoinRide(rideId: UUID, userId: UUID) async throws -> RideMembershipStatus {
-        let existing: [RideMemberRow] = try await client.from("ride_members")
-            .select()
-            .eq("ride_id", value: rideId)
-            .eq("user_id", value: userId)
-            .execute()
-            .value
-
-        if let current = existing.first {
-            if current.status == "accepted" {
-                return .accepted
-            }
-            if current.status == "declined" {
-                try await client.from("ride_members")
-                    .update(["status": "pending"])
-                    .eq("id", value: current.id)
-                    .execute()
-                return .pending
-            }
-            return .pending
-        }
-
-        let member = RideMemberInsert(ride_id: rideId, user_id: userId,
-                                      role: "rider", status: "pending")
-        try await client.from("ride_members").insert(member).execute()
-        return .pending
-    }
-
-    // MARK: - Hardened Ride Join Requests (RPC & Models)
-
-    struct CreateRideJoinParams: Encodable, Sendable {
-        let p_ride_id: UUID
-    }
-
-    struct RespondRideJoinParams: Encodable, Sendable {
-        let p_request_id: UUID
-        let p_action: String
-    }
-
-    struct CancelRideJoinParams: Encodable, Sendable {
-        let p_request_id: UUID
-    }
-
-    struct RespondRideJoinResult: Decodable, Sendable {
-        let request_id: UUID
-        let ride_id: UUID
-        let requester_id: UUID
-        let status: String
-        let members_count: Int
-    }
-
-    func createRideJoinRequest(rideId: UUID, userId: UUID) async throws -> RideJoinRequest {
-        do {
-            let res: RideJoinRequest = try await client.rpc(
-                "create_ride_join_request",
-                params: CreateRideJoinParams(p_ride_id: rideId)
-            )
-            .execute()
-            .value
-            return res
-        } catch {
-            let errStr = "\(error)"
-            if errStr.contains("Cannot send join request") ||
-               errStr.contains("already an accepted member") ||
-               errStr.contains("Unauthorized") ||
-               errStr.contains("idx_ride_join_requests_unique_pending") {
-                throw error
-            }
-            // Fallback for environments where RPC is not yet deployed:
-            _ = try await requestToJoinRide(rideId: rideId, userId: userId)
-            return RideJoinRequest(
-                rideId: rideId,
-                requesterId: userId,
-                organizerId: UUID(),
-                status: .pending
-            )
-        }
-    }
-
-    func respondRideJoinRequest(requestId: UUID, action: String, userId: UUID) async throws -> (status: RideJoinRequestStatus, membersCount: Int) {
-        do {
-            let res: RespondRideJoinResult = try await client.rpc(
-                "respond_ride_join_request",
-                params: RespondRideJoinParams(p_request_id: requestId, p_action: action)
-            )
-            .execute()
-            .value
-            let status = (res.status == "accepted" || action == "accept") ? RideJoinRequestStatus.accepted : RideJoinRequestStatus.declined
-            return (status, res.members_count)
-        } catch {
-            let errStr = "\(error)"
-            if errStr.contains("Forbidden") ||
-               errStr.contains("no longer pending") ||
-               errStr.contains("Invalid action") ||
-               errStr.contains("Unauthorized") {
-                throw error
-            }
-            // Fallback for legacy ride_members table:
-            if action == "accept" {
-                try await acceptRideJoin(memberId: requestId)
-                return (.accepted, 2)
-            } else {
-                try await declineRideJoin(memberId: requestId)
-                return (.declined, 1)
-            }
-        }
-    }
-
-    func cancelRideJoinRequest(requestId: UUID, userId: UUID) async throws -> RideJoinRequest {
-        do {
-            let res: RideJoinRequest = try await client.rpc(
-                "cancel_ride_join_request",
-                params: CancelRideJoinParams(p_request_id: requestId)
-            )
-            .execute()
-            .value
-            return res
-        } catch {
-            return RideJoinRequest(
-                id: requestId,
-                rideId: UUID(),
-                requesterId: userId,
-                organizerId: UUID(),
-                status: .cancelled
-            )
-        }
-    }
-
+    /// Join-by-code (QR / deep link): returns the ride, and sends a join request unless I'm already in.
     func joinRideByCode(_ code: String, userId: UUID) async throws -> (Ride, RideJoinStatus) {
         let rows: [RideRow] = try await client.from("rides")
             .select().eq("code", value: code.uppercased()).execute().value
@@ -836,27 +701,17 @@ final class SupabaseManager {
             throw NSError(domain: "Convoy", code: 404,
                           userInfo: [NSLocalizedDescriptionKey: "No ride with code \(code)"])
         }
-        let existing: [RideMemberRow] = try await client.from("ride_members")
-            .select().eq("ride_id", value: row.id).eq("user_id", value: userId)
-            .execute().value
-        if let current = existing.first {
-            if current.status == "accepted" {
-                let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
-                return (row.toRide(members: members, currentUserId: userId), .alreadyMember)
-            }
-            // pending or declined → normalize to pending (declined rows were previously deleted; keep this for safety)
-            if current.status == "declined" {
-                try await client.from("ride_members")
-                    .update(["status": "pending"]).eq("id", value: current.id).execute()
-            }
-            let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
-            return (row.toRide(members: members, currentUserId: userId), .requestSent)
-        }
-        try await client.from("ride_members").insert(RideMemberInsert(
-            ride_id: row.id, user_id: userId, role: "rider", status: "pending"
-        )).execute()
         let members = (try? await fetchRideMembers(rideId: row.id)) ?? []
-        return (row.toRide(members: members, currentUserId: userId), .requestSent)
+        let ride = row.toRide(members: members, currentUserId: userId)
+        if row.organiser_id == userId || members.contains(where: { $0.user_id == userId && $0.status == "accepted" }) {
+            return (ride, .alreadyMember)
+        }
+        do {
+            _ = try await SocialRepository.shared.requestToJoin(rideId: row.id, note: nil, viaFeed: false)
+        } catch let e as SocialError where e.message.contains("already asked") {
+            // A pending request already exists — that is the state we want.
+        }
+        return (ride, .requestSent)
     }
 
     /// Rides the user is an accepted member of. Loud on member-fetch errors.
@@ -882,31 +737,17 @@ final class SupabaseManager {
     }
 
     /// Rides the user has a pending join request on (organiser hasn't accepted yet).
+    /// Rides I have asked to join that the admin hasn't answered yet.
     func fetchMyPendingRideJoins(userId: UUID) async throws -> [Ride] {
-        let memberships: [RideMemberRow] = try await client.from("ride_members")
-            .select().eq("user_id", value: userId).eq("status", value: "pending")
+        nonisolated struct Row: Decodable, Sendable { let ride_id: UUID }
+        let pending: [Row] = try await client.from("ride_join_requests")
+            .select("ride_id").eq("requester_id", value: userId).eq("status", value: "pending")
             .execute().value
-        let rideIds = memberships.map { $0.ride_id }
+        let rideIds = pending.map(\.ride_id)
         guard !rideIds.isEmpty else { return [] }
         let rows: [RideRow] = try await client.from("rides")
             .select().in("id", values: rideIds).execute().value
         return rows.map { $0.toRide(members: [], currentUserId: userId) }
-    }
-
-    func fetchIncomingRideJoins(for userId: UUID) async throws -> [RideJoinWithDetails] {
-        try await client.from("ride_members")
-            .select("*, rides!ride_members_ride_id_fkey!inner(*), profiles!ride_members_user_id_fkey(*)")
-            .eq("status", value: "pending")
-            .eq("rides.organiser_id", value: userId)
-            .execute().value
-    }
-
-    func acceptRideJoin(memberId: UUID) async throws {
-        try await client.from("ride_members").update(["status": "accepted"]).eq("id", value: memberId).execute()
-    }
-
-    func declineRideJoin(memberId: UUID) async throws {
-        try await client.from("ride_members").delete().eq("id", value: memberId).execute()
     }
 
     func fetchRideMembers(rideId: UUID) async throws -> [RideMemberWithProfile] {

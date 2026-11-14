@@ -4,12 +4,20 @@ import MapKit
 
 struct FillUp: Hashable { var odo: Int; var litres: Double; var price: Double }
 enum CrewSegment { case crews, friends }
+enum CrewSection: Hashable { case feed, leaderboard, crews }
 enum RidePhase { case starting, navigating }
 enum AppTab: Hashable { case ride, discover, crew }
 
 // MARK: - Notifications
-enum NotificationType: String, Codable, Hashable { case friendRequest, crewInvite, rideJoin }
-enum NotificationStatus: String, Codable, Hashable { case pending, accepted, declined }
+enum NotificationType: String, Codable, Hashable {
+    case friendRequest, crewInvite, rideJoin
+    // Informational entries from the server inbox (no accept / decline).
+    case rideJoinAccepted, rideJoinDeclined, newFollower, postLike, postComment
+
+    var isRideRelated: Bool { self == .rideJoin || self == .rideJoinAccepted || self == .rideJoinDeclined }
+    var isSocial: Bool { self == .newFollower || self == .postLike || self == .postComment }
+}
+enum NotificationStatus: String, Codable, Hashable { case pending, accepted, declined, info }
 
 struct AppNotification: Identifiable, Codable, Hashable {
     let id: UUID
@@ -24,6 +32,10 @@ struct AppNotification: Identifiable, Codable, Hashable {
     let actorName: String?
     let actorHandle: String?
     let targetTitle: String?
+    /// The rider behind the notification (for opening their profile / following back).
+    var actorId: UUID? = nil
+    /// Feed post a like or comment refers to.
+    var postId: UUID? = nil
     var status: NotificationStatus
     var processedAt: Date?
 
@@ -50,7 +62,7 @@ struct AppNotification: Identifiable, Codable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, type, title, subtitle, avatarData, date, requestId, crewId
-        case rideId, actorName, actorHandle, targetTitle, status, processedAt
+        case rideId, actorName, actorHandle, targetTitle, status, processedAt, actorId, postId
     }
 
     init(from decoder: Decoder) throws {
@@ -69,6 +81,8 @@ struct AppNotification: Identifiable, Codable, Hashable {
         targetTitle = try c.decodeIfPresent(String.self, forKey: .targetTitle)
         status = try c.decodeIfPresent(NotificationStatus.self, forKey: .status) ?? .pending
         processedAt = try c.decodeIfPresent(Date.self, forKey: .processedAt)
+        actorId = try c.decodeIfPresent(UUID.self, forKey: .actorId)
+        postId = try c.decodeIfPresent(UUID.self, forKey: .postId)
     }
 }
 
@@ -91,6 +105,7 @@ enum Route: Hashable {
     case shareCard, rideStart, rideNav, rideComplete
     case inviteCode(UUID)
     case notifications
+    case riderProfile(UUID), rideRequests(UUID)
     case userSearch(SearchContext)
     case chatbot
     case placeholder(String)
@@ -135,10 +150,8 @@ final class AppState {
     var friends: [ProfileRow] = []
     var notifications: [AppNotification] = []
     var outgoingRideRequests: [RideJoinRequest] = []
-    var incomingRideRequests: [RideJoinRequest] = []
     var pendingFriendRequests: [FriendshipWithProfile] = []
     var incomingCrewInvites: [CrewInviteWithDetails] = []
-    var incomingRideJoins: [RideJoinWithDetails] = []
     var pendingRideJoinRequests: Set<UUID> = []
 
     // Cache timestamps
@@ -168,6 +181,7 @@ final class AppState {
     var rideDay = false
     var draft = PlanDraft()
     var crewSegment: CrewSegment = .crews
+    var crewSection: CrewSection = .feed
 
     /// Non-nil while editing an existing ride.
     var editingRideID: UUID? = nil
@@ -188,21 +202,17 @@ final class AppState {
     // Planner
     let planner = RoutePlanner()
 
+    // Crew tab: feed, leaderboards, requests and the live notification inbox
+    let social = SocialStore()
+    /// Last user-facing error from a social / join action, shown by the screen that triggered it.
+    var lastSocialError: String? = nil
+    /// The ride log produced when the current ride finished (shown on the trip summary).
+    var lastRideLog: RideLog? = nil
+
     // MARK: - Computed
     var upcomingRide: Ride? { rides.first }
     var sortedRides: [Ride] { rides.sorted { $0.departs < $1.departs } }
-    var hasUnreadNotifications: Bool { notifications.contains { $0.status == .pending } }
-
-    /// Development-only seeding of sample profile / ride / join-request for local previews.
-    /// Compiled out of release builds, and even in DEBUG only runs when the app is launched
-    /// with `-seedDemoData`. Production never injects demo data into real rides.
-    static var isDemoSeedEnabled: Bool {
-        #if DEBUG
-        return ProcessInfo.processInfo.arguments.contains("-seedDemoData")
-        #else
-        return false
-        #endif
-    }
+    var hasUnreadNotifications: Bool { unreadNotificationCount > 0 }
 
     init() {
         if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
@@ -210,12 +220,6 @@ final class AppState {
             self.displayName = profile.displayName.isEmpty ? "Rider" : profile.displayName
             self.handle = profile.handle.isEmpty ? "rider" : profile.handle
             self.avatarImageData = profile.avatarImageData
-        } else if Self.isDemoSeedEnabled {
-            // DEBUG-only, opt-in via `-seedDemoData`: skip onboarding with a sample identity.
-            StorageService.shared.saveOnboardingCompleted(name: "Joydip", handle: "joydip")
-            self.phase = .main
-            self.displayName = "Joydip"
-            self.handle = "joydip"
         }
         // Production / normal launch with no stored profile: remain in `.onboarding`
         // (the default) so the real onboarding flow captures the authenticated identity.
@@ -245,25 +249,6 @@ final class AppState {
             .map { $0.toRide(displayName: displayName, avatarData: avatarImageData) }
             .sorted { $0.departs < $1.departs }
 
-        if Self.isDemoSeedEnabled, !self.rides.contains(where: { $0.code.uppercased() == "ECR777" }) {
-            let demoRide = Ride(
-                title: "ECR Coastal Sunrise Ride",
-                place: "Mahabalipuram",
-                subtitle: "Chennai to Mahabalipuram via ECR",
-                tag: "Group ride",
-                departs: Calendar.current.date(byAdding: .day, value: 3, to: Date()) ?? Date(),
-                riders: [Rider(name: "Vikram")],
-                distance: "55 km",
-                duration: "1h 15m",
-                displayDate: "Sun, Nov 8",
-                displayTime: "05:30 AM",
-                organiser: "Vikram",
-                code: "ECR777"
-            )
-            self.rides.append(demoRide)
-            StorageService.shared.saveRide(demoRide)
-        }
-
         self.completedRides = StorageService.shared.loadCompletedRides()
         self.crews = StorageService.shared.loadCrews().map(CrewGroup.from)
         self.friends = StorageService.shared.loadCachedFriends()
@@ -272,39 +257,6 @@ final class AppState {
         self.outgoingRideRequests = cachedRequests
         self.pendingRideJoinRequests = Set(cachedRequests.filter { $0.status == .pending }.map { $0.rideId })
 
-        if Self.isDemoSeedEnabled, !self.notifications.contains(where: { $0.type == .rideJoin && $0.status == .pending }) {
-            let myRide = self.rides.first { $0.organiser == "you" || $0.organiser == displayName } ?? self.rides.first
-            let reqId = UUID()
-            let sampleReq = RideJoinRequest(
-                id: reqId,
-                rideId: myRide?.id ?? UUID(),
-                requesterId: UUID(),
-                organizerId: self.backendUserId ?? UUID(),
-                status: .pending,
-                requesterName: "Devon Lane",
-                requesterHandle: "devon_r1",
-                rideTitle: myRide?.title ?? "Group Ride"
-            )
-            self.incomingRideRequests.insert(sampleReq, at: 0)
-
-            let sampleNotif = AppNotification(
-                id: UUID(),
-                type: .rideJoin,
-                title: "Ride Join Request",
-                subtitle: "Devon Lane wants to join \(myRide?.title ?? "your ride").",
-                avatarData: nil,
-                date: Date().addingTimeInterval(-180),
-                requestId: reqId,
-                crewId: nil,
-                rideId: myRide?.id,
-                actorName: "Devon Lane",
-                actorHandle: "devon_r1",
-                targetTitle: myRide?.title ?? "Group Ride",
-                status: .pending
-            )
-            self.notifications.insert(sampleNotif, at: 0)
-            StorageService.shared.saveNotifications(self.notifications)
-        }
         self.fillUps = StorageService.shared.loadFillUps().map { FillUp(odo: $0.odo, litres: $0.litres, price: $0.price) }
 
         (savedRoutes, savedPlaces) = Self.savedItems(from: StorageService.shared.loadSavedRoutes())
@@ -445,6 +397,15 @@ final class AppState {
         async let crews: () = loadCrews(force: force)
         async let pending: () = refreshMyPendingRideJoins()
         _ = await (rides, notifs, friends, crews, pending)
+        await startSocial()
+    }
+
+    /// Connects the live notification inbox and uploads any rides recorded while offline.
+    func startSocial() async {
+        guard let userId = await resolvedUserId() else { return }
+        social.onNotificationsChanged = { [weak self] in self?.rebuildNotifications() }
+        await social.start(userId: userId)
+        await social.uploadPendingRideLogs()
     }
 
     // MARK: - Rides
@@ -479,6 +440,8 @@ final class AppState {
     }
 
     // MARK: - Notifications
+    /// Rebuilds the notification centre from friend requests, crew invites, pending join requests on
+    /// rides I run, and the server inbox (accepted / declined requests, followers, likes, comments).
     func refreshNotifications(force: Bool = false) async {
         if !force, let loadedAt = notificationsLoadedAt,
            Date().timeIntervalSince(loadedAt) < notificationStaleness { return }
@@ -486,112 +449,86 @@ final class AppState {
 
         async let friendReqsTask  = fetchFriendReqs(userId)
         async let crewInvitesTask = fetchCrewInvites(userId)
-        async let rideJoinsTask   = fetchRideJoins(userId)
+        async let socialTask: () = social.refreshInboxAndRequests()
 
         let friendReqs  = await friendReqsTask
         let crewInvites = await crewInvitesTask
-        let rideJoins   = await rideJoinsTask
+        _ = await socialTask
 
+        pendingFriendRequests = friendReqs
+        incomingCrewInvites = crewInvites
+        rebuildNotifications()
+        notificationsLoadedAt = Date()
+    }
+
+    /// Called whenever the social inbox changes (including live Realtime inserts).
+    func rebuildNotifications() {
         var fresh: [AppNotification] = []
 
-        for req in friendReqs {
+        for req in pendingFriendRequests {
             let name = req.profiles?.display_name ?? "Someone"
-            let username = req.profiles?.username ?? "rider"
+            let username = req.profiles?.username ?? ""
             fresh.append(AppNotification(
-                id: req.id, type: .friendRequest,
-                title: "Friend Request",
-                subtitle: "\(name) (@\(username)) wants to be friends.",
+                id: req.id, type: .friendRequest, title: "Friend Request",
+                subtitle: "\(name) wants to be friends.",
                 avatarData: req.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
-                date: parseISODate(req.created_at) ?? Date(),
-                requestId: req.id,
-                crewId: nil,
-                rideId: nil,
-                actorName: name,
-                actorHandle: username,
-                targetTitle: nil
-            ))
+                date: parseISODate(req.created_at) ?? Date(), requestId: req.id, crewId: nil,
+                actorName: name, actorHandle: username))
+            fresh[fresh.count - 1].actorId = req.sender_id
         }
-        for invite in crewInvites {
+        for invite in incomingCrewInvites {
             let inviterName = invite.profiles?.display_name ?? "Someone"
             let crewName = invite.crews?.name ?? "a crew"
             fresh.append(AppNotification(
-                id: invite.id, type: .crewInvite,
-                title: "Crew Invite",
+                id: invite.id, type: .crewInvite, title: "Crew Invite",
                 subtitle: "\(inviterName) invited you to join \(crewName).",
                 avatarData: invite.crews?.avatar_data.flatMap { Data(base64Encoded: $0) }
                           ?? invite.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
-                date: parseISODate(invite.created_at) ?? Date(),
-                requestId: invite.id,
-                crewId: invite.crew_id,
-                rideId: nil,
-                actorName: inviterName,
-                actorHandle: nil,
-                targetTitle: crewName
-            ))
+                date: parseISODate(invite.created_at) ?? Date(), requestId: invite.id, crewId: invite.crew_id,
+                actorName: inviterName, targetTitle: crewName))
         }
-        for join in rideJoins {
-            let riderName = join.profiles?.display_name ?? "A rider"
-            let username = join.profiles?.username ?? "rider"
-            let rideTitle = join.rides?.title ?? "your ride"
-
-            let joinReq = RideJoinRequest(
-                id: join.id,
-                rideId: join.ride_id,
-                requesterId: join.user_id,
-                organizerId: userId,
-                status: .pending,
-                requesterName: riderName,
-                requesterHandle: username,
-                requesterAvatarData: join.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
-                rideTitle: rideTitle
-            )
-            if let idx = self.incomingRideRequests.firstIndex(where: { $0.id == join.id }) {
-                self.incomingRideRequests[idx] = joinReq
-            } else {
-                self.incomingRideRequests.append(joinReq)
-            }
-
+        for req in social.incoming {
             fresh.append(AppNotification(
-                id: join.id, type: .rideJoin,
-                title: "Ride Join Request",
-                subtitle: "\(riderName) (@\(username)) wants to join \(rideTitle).",
-                avatarData: join.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
-                date: parseISODate(join.joined_at) ?? Date(),
-                requestId: join.id,
-                crewId: nil,
-                rideId: join.ride_id,
-                actorName: riderName,
-                actorHandle: username,
-                targetTitle: rideTitle
-            ))
+                id: req.id, type: .rideJoin, title: "Ride Join Request",
+                subtitle: req.note.map { "“\($0)”" } ?? "\(req.rider.name) wants to join \(req.rideTitle).",
+                avatarData: req.rider.avatarData, date: req.createdAt, requestId: req.id, crewId: nil,
+                rideId: req.rideId, actorName: req.rider.name, actorHandle: req.rider.username,
+                targetTitle: req.rideTitle))
+            fresh[fresh.count - 1].actorId = req.rider.id
+        }
+        for item in social.inbox {
+            let type: NotificationType = {
+                switch item.kind {
+                case .rideJoinAccepted: return .rideJoinAccepted
+                case .rideJoinDeclined: return .rideJoinDeclined
+                case .newFollower: return .newFollower
+                case .postLike: return .postLike
+                case .postComment: return .postComment
+                }
+            }()
+            fresh.append(AppNotification(
+                id: item.id, type: type, title: item.kind.rawValue, subtitle: item.body,
+                avatarData: item.actor?.avatarData, date: item.createdAt,
+                requestId: item.id, crewId: nil, rideId: item.rideId,
+                actorName: item.actor?.name, actorHandle: item.actor?.username,
+                targetTitle: item.rideTitle, status: .info, processedAt: item.isRead ? item.createdAt : nil))
+            fresh[fresh.count - 1].actorId = item.actor?.id
+            fresh[fresh.count - 1].postId = item.postId
         }
 
-        await MainActor.run {
-            let cutoff = Date().addingTimeInterval(-self.notificationRetention)
-            let recentProcessed = self.notifications.filter {
-                $0.status != .pending && ($0.processedAt ?? .distantPast) > cutoff
-            }
-            let processedRequestIds = Set(recentProcessed.map { $0.requestId })
-            let freshFiltered = fresh.filter { !processedRequestIds.contains($0.requestId) }
-
-            // Retain any pending locally created notifications (e.g. from local tests/offline joins)
-            let localPending = self.notifications.filter { notif in
-                notif.status == .pending && !fresh.contains(where: { f in f.requestId == notif.requestId })
-            }
-            var seen = Set<String>()
-            var combined: [AppNotification] = []
-            for n in freshFiltered + localPending + recentProcessed {
-                let key = "\(n.type.rawValue)_\(n.requestId)"
-                if seen.insert(key).inserted { combined.append(n) }
-            }
-            combined.sort { $0.date > $1.date }
-            self.notifications = combined
-            self.pendingFriendRequests = friendReqs
-            self.incomingCrewInvites = crewInvites
-            self.incomingRideJoins = rideJoins
-            self.notificationsLoadedAt = Date()
-            StorageService.shared.saveNotifications(combined)
+        // Keep requests I just handled visible for a while so the outcome is clear.
+        let cutoff = Date().addingTimeInterval(-notificationRetention)
+        let freshKeys = Set(fresh.map { "\($0.type.rawValue)_\($0.requestId)" })
+        let recentlyHandled = notifications.filter {
+            ($0.status == .accepted || $0.status == .declined) && ($0.processedAt ?? .distantPast) > cutoff
+                && !freshKeys.contains("\($0.type.rawValue)_\($0.requestId)")
         }
+        notifications = (fresh + recentlyHandled).sorted { $0.date > $1.date }
+        StorageService.shared.saveNotifications(notifications)
+    }
+
+    var unreadNotificationCount: Int {
+        notifications.filter { $0.status == .pending || ($0.status == .info && $0.processedAt == nil) }.count
     }
 
     private func parseISODate(_ s: String?) -> Date? {
@@ -610,121 +547,61 @@ final class AppState {
     private func fetchCrewInvites(_ userId: UUID) async -> [CrewInviteWithDetails] {
         (try? await SupabaseManager.shared.fetchIncomingCrewInvites(for: userId)) ?? incomingCrewInvites
     }
-    private func fetchRideJoins(_ userId: UUID) async -> [RideJoinWithDetails] {
-        (try? await SupabaseManager.shared.fetchIncomingRideJoins(for: userId)) ?? incomingRideJoins
-    }
 
-    // MARK: - Dedicated Ride Join Request Operations
+    // MARK: - Ride join requests (server is the source of truth)
+
+    private func markHandled(requestId: UUID, _ status: NotificationStatus) {
+        if let idx = notifications.firstIndex(where: { $0.requestId == requestId && $0.type == .rideJoin }) {
+            notifications[idx].status = status
+            notifications[idx].processedAt = Date()
+            StorageService.shared.saveNotifications(notifications)
+        }
+    }
 
     @discardableResult
     func acceptRideJoinRequest(requestId: UUID) async -> Bool {
-        let userId = await resolvedUserId() ?? UUID()
-        _ = try? await SupabaseManager.shared.respondRideJoinRequest(requestId: requestId, action: "accept", userId: userId)
-
-        await MainActor.run {
-            // 1. Update in incoming requests
-            if let idx = self.incomingRideRequests.firstIndex(where: { $0.id == requestId }) {
-                self.incomingRideRequests[idx].status = .accepted
-                self.incomingRideRequests[idx].updatedAt = Date()
-            }
-            // 2. Update in outgoing requests if present
-            if let idx = self.outgoingRideRequests.firstIndex(where: { $0.id == requestId }) {
-                self.outgoingRideRequests[idx].status = .accepted
-                self.outgoingRideRequests[idx].updatedAt = Date()
-                self.pendingRideJoinRequests.remove(self.outgoingRideRequests[idx].rideId)
-                StorageService.shared.saveRideJoinRequests(self.outgoingRideRequests)
-            }
-            // 3. Update decoupled notification view item if present
-            if let idx = self.notifications.firstIndex(where: { $0.requestId == requestId }) {
-                self.notifications[idx].status = .accepted
-                self.notifications[idx].processedAt = Date()
-                StorageService.shared.saveNotifications(self.notifications)
-            }
-            // 4. Remove from legacy incoming joins list
-            self.incomingRideJoins.removeAll { $0.id == requestId }
-
-            // 5. Add rider to the matching ride
-            let req = self.incomingRideRequests.first { $0.id == requestId }
-            let notif = self.notifications.first { $0.requestId == requestId }
-            let targetRideId = req?.rideId ?? notif?.rideId
-            let targetTitle = req?.rideTitle ?? notif?.targetTitle
-            let riderName = req?.requesterName ?? notif?.actorName ?? "Rider"
-            let riderAvatar = req?.requesterAvatarData ?? notif?.avatarData
-
-            let matchIndex = self.rides.firstIndex { r in
-                if let tId = targetRideId, r.id == tId { return true }
-                if let t = targetTitle, r.title.caseInsensitiveCompare(t) == .orderedSame { return true }
-                return false
-            }
-            if let rIdx = matchIndex {
-                var ride = self.rides[rIdx]
-                if !ride.riders.contains(where: { $0.name == riderName }) {
-                    ride.riders.append(Rider(name: riderName, avatarData: riderAvatar))
-                }
-                ride.ridersGoing = max(ride.ridersGoing + 1, ride.riders.count)
-                self.rides[rIdx] = ride
-                StorageService.shared.saveRide(ride)
-            }
-        }
-
-        await refreshRides(force: true)
-        return true
+        await respondToJoinRequest(requestId: requestId, accept: true)
     }
 
     @discardableResult
     func declineRideJoinRequest(requestId: UUID) async -> Bool {
-        let userId = await resolvedUserId() ?? UUID()
-        _ = try? await SupabaseManager.shared.respondRideJoinRequest(requestId: requestId, action: "decline", userId: userId)
+        await respondToJoinRequest(requestId: requestId, accept: false)
+    }
 
-        await MainActor.run {
-            // 1. Update in incoming requests (status: .declined, preserving audit trail)
-            if let idx = self.incomingRideRequests.firstIndex(where: { $0.id == requestId }) {
-                self.incomingRideRequests[idx].status = .declined
-                self.incomingRideRequests[idx].updatedAt = Date()
-            }
-            // 2. Update in outgoing requests if present
-            if let idx = self.outgoingRideRequests.firstIndex(where: { $0.id == requestId }) {
-                self.outgoingRideRequests[idx].status = .declined
-                self.outgoingRideRequests[idx].updatedAt = Date()
-                self.pendingRideJoinRequests.remove(self.outgoingRideRequests[idx].rideId)
-                StorageService.shared.saveRideJoinRequests(self.outgoingRideRequests)
-            }
-            // 3. Update decoupled notification view item if present
-            if let idx = self.notifications.firstIndex(where: { $0.requestId == requestId }) {
-                self.notifications[idx].status = .declined
-                self.notifications[idx].processedAt = Date()
-                StorageService.shared.saveNotifications(self.notifications)
-            }
-            // 4. Remove from legacy incoming joins list
-            self.incomingRideJoins.removeAll { $0.id == requestId }
+    private func respondToJoinRequest(requestId: UUID, accept: Bool) async -> Bool {
+        lastSocialError = nil
+        let request = social.incoming.first { $0.id == requestId }
+            ?? IncomingJoinRequest(id: requestId, rideId: UUID(), rideTitle: "", rideDeparts: nil, note: nil, viaFeed: false,
+                                   createdAt: .now, rider: RiderRef(id: UUID(), name: nil, username: nil, avatarBase64: nil),
+                                   ridesCount: 0, totalKm: 0, sharedCrews: 0, rodeTogether: 0, members: 0, maxRiders: nil)
+        do {
+            try await social.respond(to: request, accept: accept)
+            markHandled(requestId: requestId, accept ? .accepted : .declined)
+            if accept { await refreshRides(force: true) }
+            await social.loadFeed(force: true)
+            return true
+        } catch {
+            lastSocialError = SocialError.from(error).message
+            // The request may have been handled elsewhere; resync so the card shows the truth.
+            await social.refreshInboxAndRequests()
+            return false
         }
-        return true
     }
 
     @discardableResult
-    func cancelRideJoinRequest(requestId: UUID) async -> Bool {
-        let userId = await resolvedUserId() ?? UUID()
-        _ = try? await SupabaseManager.shared.cancelRideJoinRequest(requestId: requestId, userId: userId)
-
-        await MainActor.run {
-            if let idx = self.outgoingRideRequests.firstIndex(where: { $0.id == requestId }) {
-                let rideId = self.outgoingRideRequests[idx].rideId
-                self.outgoingRideRequests[idx].status = .cancelled
-                self.outgoingRideRequests[idx].updatedAt = Date()
-                self.pendingRideJoinRequests.remove(rideId)
-                StorageService.shared.saveRideJoinRequests(self.outgoingRideRequests)
-            }
-            if let idx = self.incomingRideRequests.firstIndex(where: { $0.id == requestId }) {
-                self.incomingRideRequests[idx].status = .cancelled
-                self.incomingRideRequests[idx].updatedAt = Date()
-            }
-            if let idx = self.notifications.firstIndex(where: { $0.requestId == requestId }) {
-                self.notifications[idx].status = .declined
-                self.notifications[idx].processedAt = Date()
-                StorageService.shared.saveNotifications(self.notifications)
-            }
+    func cancelRideJoinRequest(rideId: UUID) async -> Bool {
+        lastSocialError = nil
+        do {
+            try await social.cancelRequest(rideId: rideId)
+            pendingRideJoinRequests.remove(rideId)
+            outgoingRideRequests.removeAll { $0.rideId == rideId }
+            StorageService.shared.saveRideJoinRequests(outgoingRideRequests)
+            await refreshMyPendingRideJoins()
+            return true
+        } catch {
+            lastSocialError = SocialError.from(error).message
+            return false
         }
-        return true
     }
 
     /// Dismissing or deleting a notification leaves the underlying RideJoinRequest and membership intact.
@@ -759,6 +636,8 @@ final class AppState {
             await loadCrews(force: true)
         case .rideJoin:
             await acceptRideJoinRequest(requestId: notif.requestId)
+        case .rideJoinAccepted, .rideJoinDeclined, .newFollower, .postLike, .postComment:
+            break
         }
     }
 
@@ -786,6 +665,8 @@ final class AppState {
             }
         case .rideJoin:
             await declineRideJoinRequest(requestId: notif.requestId)
+        case .rideJoinAccepted, .rideJoinDeclined, .newFollower, .postLike, .postComment:
+            break
         }
     }
 
@@ -897,6 +778,10 @@ final class AppState {
     }
 
     func signOut() async {
+        await social.reset()
+        RideRecorder.shared.clearAll()
+        lastRideLog = nil
+        lastSocialError = nil
         try? await SupabaseManager.shared.signOut()
 
         backendUserId = nil
@@ -905,7 +790,6 @@ final class AppState {
         notifications = []
         pendingFriendRequests = []
         incomingCrewInvites = []
-        incomingRideJoins = []
         notificationsLoadedAt = nil
         crewsLoadedAt = nil
         friendsLoadedAt = nil
@@ -1247,6 +1131,14 @@ final class AppState {
         if let idx = rides.firstIndex(where: { $0.id == id }) {
             rides[idx].media.append(contentsOf: activeRideMedia)
         }
+        // Close the GPS recording for this ride; its distance and time feed stats and leaderboards.
+        let destination = rides.first(where: { $0.id == id })?.plan.to ?? ""
+        if let log = RideRecorder.shared.finish(rideId: id, endName: destination.components(separatedBy: ",").first ?? destination) {
+            lastRideLog = log
+            Task { await social.uploadPendingRideLogs() }
+        } else {
+            lastRideLog = RideRecorder.shared.log(forRide: id)
+        }
         activeRideMedia.removeAll()
         StorageService.shared.markRideCompleted(id: id)
         completedRides = StorageService.shared.loadCompletedRides()
@@ -1266,10 +1158,10 @@ final class AppState {
         guard !clean.isEmpty else { return nil }
 
         func resolveStatus(for ride: Ride, defaultStatus: RideMembershipStatus) -> RideMembershipStatus {
-            if ride.organiser == "you" || ride.organiser.lowercased() == displayName.lowercased() {
-                return .isOrganiser
-            }
-            if ride.riders.contains(where: { $0.name.lowercased() == displayName.lowercased() }) {
+            // Rides created on this device and not yet synced carry organiser "you" and no organiser id.
+            if let oid = ride.organiserId { if oid == backendUserId { return .isOrganiser } }
+            else if ride.organiser == "you" { return .isOrganiser }
+            if let me = backendUserId, ride.riders.contains(where: { $0.id == me && $0.status == .accepted }) {
                 return .accepted
             }
             if let req = outgoingRideRequests.first(where: { $0.rideId == ride.id }) {
@@ -1310,95 +1202,35 @@ final class AppState {
         return nil
     }
 
-    /// Sends a join request for a found ride.
+    /// Sends a join request for a found ride. On failure `lastSocialError` says why.
     @discardableResult
-    func sendRideJoinRequest(ride: Ride) async -> Bool {
-        // 1. Own ride check: Organizer cannot request to join their own ride
-        if ride.organiser == "you" || ride.organiser.lowercased() == displayName.lowercased() {
-            print("[RideJoin] Organizer cannot join own ride")
+    func sendRideJoinRequest(ride: Ride, note: String? = nil) async -> Bool {
+        lastSocialError = nil
+        guard let userId = await resolvedUserId() else {
+            lastSocialError = "You're not signed in yet. Check your connection and try again."
             return false
         }
-
-        // 2. Already joined check
-        if ride.riders.contains(where: { $0.name.lowercased() == displayName.lowercased() }) {
-            print("[RideJoin] Already a member of this ride")
-            return true
-        }
-
-        // 3. Duplicate pending check: avoid re-sending if already pending
-        if outgoingRideRequests.contains(where: { $0.rideId == ride.id && $0.status == .pending }) {
-            print("[RideJoin] Request already pending")
-            return true
-        }
-
-        // 4. Completed / ended ride check
-        if completedRides.contains(where: { $0.id == ride.id }) {
-            print("[RideJoin] Cannot join completed ride")
+        if ride.organiserId == userId || (ride.organiserId == nil && ride.organiser == "you") {
+            lastSocialError = "You're the admin of this ride."
             return false
         }
-
-        let userId = await resolvedUserId() ?? UUID()
-        let createdReq = try? await SupabaseManager.shared.createRideJoinRequest(rideId: ride.id, userId: userId)
-        let requestId = createdReq?.id ?? UUID()
-
-        await MainActor.run {
-            let joinRequest = RideJoinRequest(
-                id: requestId,
-                rideId: ride.id,
-                requesterId: userId,
-                organizerId: UUID(),
-                status: .pending,
-                createdAt: Date(),
-                updatedAt: Date(),
-                requesterName: displayName,
-                requesterHandle: handle.isEmpty ? "rider" : handle,
-                requesterAvatarData: avatarImageData,
-                rideTitle: ride.title
-            )
-
-            if let idx = self.outgoingRideRequests.firstIndex(where: { $0.rideId == ride.id }) {
-                self.outgoingRideRequests[idx] = joinRequest
-            } else {
-                self.outgoingRideRequests.append(joinRequest)
-            }
-            self.pendingRideJoinRequests.insert(ride.id)
-            StorageService.shared.saveRideJoinRequests(self.outgoingRideRequests)
-
-            // If the organizer is on this device (e.g. testing or local trip creation),
-            // record incoming request and generate the notification for the admin.
-            let isHostLocal = ride.organiser == "you" ||
-                              ride.organiser.lowercased() == displayName.lowercased() ||
-                              rides.contains(where: { $0.id == ride.id && ($0.organiser == "you" || $0.organiser.lowercased() == displayName.lowercased()) })
-
-            if isHostLocal {
-                if let iIdx = self.incomingRideRequests.firstIndex(where: { $0.id == joinRequest.id }) {
-                    self.incomingRideRequests[iIdx] = joinRequest
-                } else {
-                    self.incomingRideRequests.insert(joinRequest, at: 0)
-                }
-
-                let notif = AppNotification(
-                    id: UUID(),
-                    type: .rideJoin,
-                    title: "Ride Join Request",
-                    subtitle: "\(displayName) wants to join \(ride.title).",
-                    avatarData: avatarImageData,
-                    date: Date(),
-                    requestId: joinRequest.id,
-                    crewId: nil,
-                    rideId: ride.id,
-                    actorName: displayName,
-                    actorHandle: handle.isEmpty ? "rider" : handle,
-                    targetTitle: ride.title,
-                    status: .pending
-                )
-                if !notifications.contains(where: { $0.requestId == joinRequest.id && $0.status == .pending }) {
-                    notifications.insert(notif, at: 0)
-                    StorageService.shared.saveNotifications(notifications)
-                }
-            }
+        if ride.riders.contains(where: { $0.id == userId && $0.status == .accepted }) { return true }
+        do {
+            let requestId = try await SocialRepository.shared.requestToJoin(rideId: ride.id, note: note, viaFeed: false)
+            let request = RideJoinRequest(
+                id: requestId, rideId: ride.id, requesterId: userId, organizerId: ride.organiserId ?? userId,
+                status: .pending, requesterName: displayName, requesterHandle: handle,
+                requesterAvatarData: avatarImageData, rideTitle: ride.title)
+            outgoingRideRequests.removeAll { $0.rideId == ride.id }
+            outgoingRideRequests.append(request)
+            pendingRideJoinRequests.insert(ride.id)
+            StorageService.shared.saveRideJoinRequests(outgoingRideRequests)
+            await refreshMyPendingRideJoins()
+            return true
+        } catch {
+            lastSocialError = SocialError.from(error).message
+            return false
         }
-        return true
     }
 
     func joinRideByCode(_ code: String) async -> RideJoinOutcome {

@@ -479,6 +479,7 @@ struct RideDetailsView: View {
     @State private var showEditSheet = false
     @State private var rideDayOverride = false
     @State private var rideToDelete: Ride? = nil
+    @State private var openingToCrew = false
 
     var body: some View {
         if let ride = app.rides.first(where: { $0.id == rideID }) {
@@ -514,6 +515,9 @@ struct RideDetailsView: View {
                         RouteSummaryCard(draft: ride.plan, numberedStops: false)
                         riders(ride: ride, solo: solo, isRideDay: isRideDay,
                                organisedByYou: organisedByYou)
+                        if organisedByYou && !ride.isCompleted && !ride.isPast {
+                            crewFeedCard(ride: ride)
+                        }
                         cta(ride: ride, isRideDay: isRideDay, invited: invited,
                             organisedByYou: organisedByYou)
                     }
@@ -552,6 +556,44 @@ struct RideDetailsView: View {
             Button("Cancel", role: .cancel) { rideToDelete = nil }
         } message: {
             Text("This will permanently cancel the ride for everyone.")
+        }
+    }
+
+    // MARK: - Crew feed (admin)
+
+    /// Lets the admin open the ride to join requests from the Crew feed, and jump to pending requests.
+    private func crewFeedCard(ride: Ride) -> some View {
+        let post = app.social.feed.first { $0.isMine && $0.openRide?.rideId == ride.id }?.openRide
+        let pending = app.social.requests(forRide: ride.id).count
+        return HStack(spacing: 12) {
+            Image(systemName: post == nil ? "megaphone.fill" : "person.badge.plus")
+                .font(.system(size: 15)).foregroundStyle(CV.green)
+                .frame(width: 40, height: 40).background(CV.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(post == nil ? "Open to your crew" : (post?.acceptsRequests == true ? "Taking requests" : "Not taking requests"))
+                    .cvText(15, .semibold, inter: true)
+                Text(post == nil ? "Post it to the Crew feed so riders can ask to join"
+                     : pending > 0 ? "\(pending) request\(pending == 1 ? "" : "s") waiting for you" : "No pending requests")
+                    .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+            }
+            Spacer()
+            Button {
+                if post == nil { openingToCrew = true } else { app.push(.rideRequests(ride.id)) }
+            } label: {
+                Text(post == nil ? "Post" : "Requests")
+                    .cvText(13, .semibold, color: post == nil || pending > 0 ? .white : CV.cream, inter: true)
+                    .padding(.horizontal, 14).frame(height: 32)
+                    .background(post == nil || pending > 0 ? CV.red : Color.white.opacity(0.08), in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+        .task { await app.social.loadFeed() }
+        .sheet(isPresented: $openingToCrew) {
+            NavigationStack { OpenRideForm(ride: ride) { openingToCrew = false } }
+                .presentationDragIndicator(.visible)
         }
     }
 

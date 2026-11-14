@@ -1,0 +1,251 @@
+// Social.swift — Crew tab models: feed posts, riders, leaderboards, join requests, inbox.
+import Foundation
+
+struct RiderRef: Hashable, Sendable {
+    let id: UUID
+    var name: String
+    var username: String
+    var avatarData: Data?
+
+    init(id: UUID, name: String?, username: String?, avatarBase64: String?) {
+        self.id = id
+        self.name = (name?.isEmpty == false ? name : nil) ?? "Rider"
+        self.username = username ?? ""
+        self.avatarData = avatarBase64.flatMap { Data(base64Encoded: $0) }
+    }
+}
+
+enum FeedPostKind: String, Sendable { case rideLog = "ride_log", openRide = "open_ride" }
+
+struct RideRecap: Hashable, Sendable {
+    var title: String
+    var startName: String
+    var endName: String
+    var distanceM: Int
+    var movingS: Int
+    var maxSpeedKmh: Double
+    var path: [Coord]
+    var riderCount: Int
+    var endedAt: Date?
+
+    var avgSpeedKmh: Double { movingS > 0 ? Double(distanceM) / Double(movingS) * 3.6 : 0 }
+}
+
+struct OpenRide: Hashable, Sendable {
+    var rideId: UUID
+    var title: String
+    var departs: Date?
+    var fromArea: String
+    var toArea: String
+    var routeKm: Double
+    var preview: [Coord]
+    var members: Int
+    var maxRiders: Int?
+    var acceptsRequests: Bool
+    var isCompleted: Bool
+    var myRequest: RideJoinRequestStatus?
+    var iAmMember: Bool
+    var pendingRequests: Int
+
+    var spotsLeft: Int? { maxRiders.map { max(0, $0 - members) } }
+    var isFull: Bool { spotsLeft == 0 }
+}
+
+struct FeedPost: Identifiable, Hashable, Sendable {
+    let id: UUID
+    var kind: FeedPostKind
+    var createdAt: Date
+    var caption: String
+    var author: RiderRef
+    var isMine: Bool
+    var likeCount: Int
+    var commentCount: Int
+    var likedByMe: Bool
+    var recap: RideRecap?
+    var openRide: OpenRide?
+}
+
+struct SuggestedRider: Identifiable, Hashable, Sendable {
+    var id: UUID { rider.id }
+    var rider: RiderRef
+    var reason: String
+    var totalKm: Double
+    var rides: Int
+    var monthKm: Double
+}
+
+enum LeaderboardMetric: String, CaseIterable, Sendable { case score, distance }
+
+/// A leaderboard window. `.allTime` has no start; months are calendar months in the device time zone.
+enum LeaderboardPeriod: Hashable, Sendable {
+    case allTime
+    case month(monthsAgo: Int)
+
+    func bounds(now: Date = .now, calendar: Calendar = .current) -> (from: Date?, to: Date?) {
+        switch self {
+        case .allTime: return (nil, nil)
+        case .month(let ago):
+            let thisMonth = calendar.dateInterval(of: .month, for: now)?.start ?? now
+            let start = calendar.date(byAdding: .month, value: -ago, to: thisMonth) ?? thisMonth
+            let end = calendar.date(byAdding: .month, value: 1, to: start) ?? now
+            return (start, end)
+        }
+    }
+
+    func label(now: Date = .now, calendar: Calendar = .current) -> String {
+        switch self {
+        case .allTime: return "ALL-TIME"
+        case .month(0): return "THIS MONTH"
+        case .month:
+            guard let start = bounds(now: now, calendar: calendar).from else { return "" }
+            let f = DateFormatter(); f.calendar = calendar; f.dateFormat = "MMM"
+            return f.string(from: start).uppercased()
+        }
+    }
+
+    func subtitle(now: Date = .now, calendar: Calendar = .current) -> String {
+        switch self {
+        case .allTime: return "All time"
+        case .month(let ago):
+            guard let start = bounds(now: now, calendar: calendar).from else { return "" }
+            let f = DateFormatter(); f.calendar = calendar; f.dateFormat = "MMMM"
+            return (ago == 0 ? "This month · " : "") + f.string(from: start)
+        }
+    }
+}
+
+struct LeaderboardEntry: Identifiable, Hashable, Sendable {
+    var id: UUID { rider.id }
+    var rank: Int
+    var rider: RiderRef
+    var value: Double
+    var rides: Int
+    var level: Int
+    var isMe: Bool
+}
+
+struct LeaderboardBoard: Hashable, Sendable {
+    var entries: [LeaderboardEntry]       // ranked list (top N, plus me if outside)
+    var ridersRanked: Int
+    var total: Double
+
+    var me: LeaderboardEntry? { entries.first { $0.isMe } }
+    var podium: [LeaderboardEntry] { Array(entries.filter { $0.rank <= 3 }.prefix(3)) }
+    static let empty = LeaderboardBoard(entries: [], ridersRanked: 0, total: 0)
+}
+
+struct IncomingJoinRequest: Identifiable, Hashable, Sendable {
+    let id: UUID
+    var rideId: UUID
+    var rideTitle: String
+    var rideDeparts: Date?
+    var note: String?
+    var viaFeed: Bool
+    var createdAt: Date
+    var rider: RiderRef
+    var ridesCount: Int
+    var totalKm: Double
+    var sharedCrews: Int
+    var rodeTogether: Int
+    var members: Int
+    var maxRiders: Int?
+}
+
+enum InboxKind: String, Sendable {
+    case rideJoinAccepted = "ride_join_accepted"
+    case rideJoinDeclined = "ride_join_declined"
+    case newFollower = "new_follower"
+    case postLike = "post_like"
+    case postComment = "post_comment"
+}
+
+struct InboxItem: Identifiable, Hashable, Sendable {
+    let id: UUID
+    var kind: InboxKind
+    var createdAt: Date
+    var isRead: Bool
+    var body: String
+    var actor: RiderRef?
+    var rideId: UUID?
+    var rideTitle: String?
+    var postId: UUID?
+    var iFollowActor: Bool
+}
+
+struct RiderProfile: Hashable, Sendable {
+    var rider: RiderRef
+    var followers: Int
+    var following: Int
+    var iFollow: Bool
+    var followsMe: Bool
+    var totalKm: Double
+    var rides: Int
+    var monthKm: Double
+    var monthPoints: Int
+    var totalPoints: Int
+    var level: Int
+    var sharedCrews: Int
+}
+
+struct PostComment: Identifiable, Hashable, Sendable {
+    let id: UUID
+    var body: String
+    var createdAt: Date
+    var author: RiderRef
+    var isMine: Bool
+}
+
+// MARK: - Formatting shared by the Crew screens
+
+enum RideFormat {
+    static func km(_ km: Double) -> String {
+        if km <= 0 { return "0" }
+        if km < 10 { return String(format: "%.1f", km) }
+        return Int(km.rounded()).formatted()
+    }
+
+    static func compact(_ v: Double) -> String {
+        switch v {
+        case ..<1000: return v == v.rounded() ? Int(v).formatted() : String(format: "%.1f", v)
+        case ..<10_000: return String(format: "%.1fK", v / 1000)
+        case ..<1_000_000: return "\(Int((v / 1000).rounded()))K"
+        default: return String(format: "%.1fM", v / 1_000_000)
+        }
+    }
+
+    static func duration(_ seconds: Int) -> String {
+        let h = seconds / 3600, m = (seconds % 3600) / 60
+        if h == 0 { return "\(m)m" }
+        return m == 0 ? "\(h)h" : "\(h)h \(String(format: "%02d", m))m"
+    }
+
+    static func relative(_ date: Date, now: Date = .now) -> String {
+        let s = Int(now.timeIntervalSince(date))
+        if s < 60 { return "Just now" }
+        if s < 3600 { return "\(s / 60)m ago" }
+        if s < 86_400 { return "\(s / 3600)h ago" }
+        if s < 7 * 86_400 { return "\(s / 86_400)d ago" }
+        return date.formatted(.dateTime.day().month(.abbreviated))
+    }
+
+    static func rideDate(_ date: Date?) -> String {
+        guard let date else { return "Date to be set" }
+        return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + " · "
+            + date.formatted(.dateTime.hour().minute())
+    }
+
+    static func parse(_ s: String?) -> Date? {
+        guard let s, !s.isEmpty else { return nil }
+        let a = ISO8601DateFormatter(); a.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = a.date(from: s) { return d }
+        let b = ISO8601DateFormatter(); b.formatOptions = [.withInternetDateTime]
+        if let d = b.date(from: s) { return d }
+        // Postgres text form: "2026-11-16 04:45:00+05:30"
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+        for fmt in ["yyyy-MM-dd HH:mm:ssXXXXX", "yyyy-MM-dd HH:mm:ss.SSSSSSXXXXX", "yyyy-MM-dd HH:mm:ssX", "yyyy-MM-dd HH:mm:ss.SSSSSSX"] {
+            f.dateFormat = fmt
+            if let d = f.date(from: s) { return d }
+        }
+        return nil
+    }
+}

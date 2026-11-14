@@ -262,6 +262,8 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
             self.currentLocation = latest
             self.locationError = nil
             self.updateRouteProgress(location: latest)
+            // Every fix counts towards the distance actually ridden, not only the newest one.
+            for fix in locations { RideRecorder.shared.ingest(fix) }
         }
     }
 

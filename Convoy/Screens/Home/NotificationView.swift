@@ -4,7 +4,7 @@ import SwiftUI
 enum NotificationFilter: String, CaseIterable, Identifiable {
     case all = "All"
     case rides = "Rides"
-    case friends = "Friends"
+    case people = "People"
     case crews = "Crews"
     var id: String { rawValue }
 }
@@ -14,20 +14,20 @@ struct NotificationView: View {
     @State private var filter: NotificationFilter = .all
 
     private var pendingCount: Int {
-        app.notifications.filter { $0.status == .pending }.count
+        app.unreadNotificationCount
+    }
+
+    private func matches(_ n: AppNotification, _ f: NotificationFilter) -> Bool {
+        switch f {
+        case .all: return true
+        case .rides: return n.type.isRideRelated
+        case .people: return n.type == .friendRequest || n.type.isSocial
+        case .crews: return n.type == .crewInvite
+        }
     }
 
     private var filteredNotifications: [AppNotification] {
-        switch filter {
-        case .all:
-            return app.notifications
-        case .rides:
-            return app.notifications.filter { $0.type == .rideJoin }
-        case .friends:
-            return app.notifications.filter { $0.type == .friendRequest }
-        case .crews:
-            return app.notifications.filter { $0.type == .crewInvite }
-        }
+        app.notifications.filter { matches($0, filter) }
     }
 
     var body: some View {
@@ -71,6 +71,16 @@ struct NotificationView: View {
         }
         .task {
             await app.refreshNotifications(force: true)
+        }
+        // Live inserts (Realtime) rebuild the list; nothing to poll.
+        .onDisappear {
+            Task { await app.social.markInboxRead(); app.rebuildNotifications() }
+        }
+        .alert("Couldn't update the request", isPresented: Binding(
+            get: { app.lastSocialError != nil }, set: { if !$0 { app.lastSocialError = nil } })) {
+            Button("OK", role: .cancel) { app.lastSocialError = nil }
+        } message: {
+            Text(app.lastSocialError ?? "")
         }
     }
 
@@ -119,14 +129,7 @@ struct NotificationView: View {
             HStack(spacing: 8) {
                 ForEach(NotificationFilter.allCases) { f in
                     let isSelected = filter == f
-                    let count: Int = {
-                        switch f {
-                        case .all: return app.notifications.count
-                        case .rides: return app.notifications.filter { $0.type == .rideJoin }.count
-                        case .friends: return app.notifications.filter { $0.type == .friendRequest }.count
-                        case .crews: return app.notifications.filter { $0.type == .crewInvite }.count
-                        }
-                    }()
+                    let count = app.notifications.filter { matches($0, f) }.count
 
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -167,7 +170,7 @@ struct NotificationView: View {
             Image(systemName: "tray.full.fill")
         case .rides:
             Image(systemName: "flag.2.crossed.fill")
-        case .friends:
+        case .people:
             Image(systemName: "person.2.fill")
         case .crews:
             Image(systemName: "shield.fill")
@@ -181,6 +184,7 @@ struct NotificationView: View {
             HStack(alignment: .top, spacing: 12) {
                 ZStack(alignment: .bottomTrailing) {
                     AvatarChip(data: notif.avatarData, name: notif.actorName ?? notif.title, size: 46)
+                        .onTapGesture { if let id = notif.actorId { app.push(.riderProfile(id)) } }
 
                     // Type mini badge icon
                     typeBadge(notif.type)
@@ -208,8 +212,20 @@ struct NotificationView: View {
             }
 
             // Trip / Destination Callout (For ride joins)
-            if notif.type == .rideJoin {
+            if notif.type == .rideJoin, notif.status == .pending,
+               let req = app.social.incoming.first(where: { $0.id == notif.requestId }) {
+                requestDetails(req)
+            }
+            if notif.type.isRideRelated {
                 rideCalloutView(notif)
+            }
+            if notif.type == .postComment, !notif.subtitle.isEmpty {
+                Text("“\(notif.subtitle)”")
+                    .cvText(14, color: CV.cream, lineHeight: 19, inter: true)
+                    .lineLimit(3)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
 
             // Action area
@@ -219,7 +235,9 @@ struct NotificationView: View {
 
                 Spacer()
 
-                if notif.status == .pending {
+                if notif.status == .info {
+                    infoAction(notif)
+                } else if notif.status == .pending {
                     HStack(spacing: 10) {
                         // Decline Button
                         Button {
@@ -283,7 +301,77 @@ struct NotificationView: View {
         .padding(16)
         .background(Color(hex: 0x18181B), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .strokeBorder(notif.status == .pending ? CV.red.opacity(0.2) : Color.white.opacity(0.07), lineWidth: 1))
+            .strokeBorder(isUnread(notif) ? CV.red.opacity(0.2) : Color.white.opacity(0.07), lineWidth: 1))
+    }
+
+    private func isUnread(_ n: AppNotification) -> Bool {
+        n.status == .pending || (n.status == .info && n.processedAt == nil)
+    }
+
+    /// What the admin needs to decide: the rider's real stats and their message.
+    private func requestDetails(_ req: IncomingJoinRequest) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                statPill("\(req.ridesCount) ride\(req.ridesCount == 1 ? "" : "s")")
+                statPill("\(RideFormat.km(req.totalKm)) km")
+                if req.sharedCrews > 0 { statPill("\(req.sharedCrews) shared crew\(req.sharedCrews == 1 ? "" : "s")", CV.green) }
+                if req.rodeTogether > 0 { statPill("Rode together", CV.green) }
+                if req.ridesCount == 0 { statPill("New to Convoy") }
+            }
+            if let note = req.note {
+                Text("“\(note)”")
+                    .cvText(14, color: CV.cream, lineHeight: 19, inter: true)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            if let max = req.maxRiders {
+                Text("Accepting makes it \(min(req.members + 1, max)) of \(max) riders")
+                    .cvText(12, color: CV.muted, inter: true)
+            }
+        }
+    }
+
+    private func statPill(_ t: String, _ c: Color = CV.muted) -> some View {
+        Text(t)
+            .cvText(11, .semibold, color: c, inter: true)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(c.opacity(0.14), in: Capsule())
+    }
+
+    @ViewBuilder
+    private func infoAction(_ notif: AppNotification) -> some View {
+        switch notif.type {
+        case .rideJoinAccepted:
+            pillButton("Open ride", filled: true) {
+                Task {
+                    await app.refreshRides(force: true)
+                    if let id = notif.rideId, app.rides.contains(where: { $0.id == id }) { app.push(.rideDetails(id)) }
+                }
+            }
+        case .newFollower:
+            if let id = notif.actorId {
+                let following = app.social.isFollowing(id)
+                pillButton(following ? "Following" : "Follow back", filled: !following) {
+                    Task { try? await app.social.setFollowing(id, !following) }
+                }
+            }
+        case .postLike, .postComment:
+            pillButton("View post", filled: false) { app.popToRoot(); app.tab = .crew }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func pillButton(_ title: String, filled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .cvText(13, .bold, color: filled ? CV.ink : CV.cream, inter: true)
+                .padding(.horizontal, 16).padding(.vertical, 8)
+                .background(filled ? CV.cream : Color(hex: 0x2A2A2E), in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.white.opacity(filled ? 0 : 0.08), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     private func rideCalloutView(_ notif: AppNotification) -> some View {
@@ -348,6 +436,16 @@ struct NotificationView: View {
         case .crewInvite:
             let crew = notif.targetTitle ?? "a crew"
             return "Invited you to join '\(crew)'"
+        case .rideJoinAccepted:
+            return "Accepted you on '\(notif.targetTitle ?? "their ride")' — meeting point and code are unlocked"
+        case .rideJoinDeclined:
+            return "Couldn't fit you on '\(notif.targetTitle ?? "their ride")'"
+        case .newFollower:
+            return "Started following you"
+        case .postLike:
+            return "Liked your ride"
+        case .postComment:
+            return "Commented on your ride"
         }
     }
 
@@ -366,6 +464,16 @@ struct NotificationView: View {
                     Image(systemName: "person.fill").font(.system(size: 8))
                 case .crewInvite:
                     Image(systemName: "shield.fill").font(.system(size: 8))
+                case .rideJoinAccepted:
+                    Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
+                case .rideJoinDeclined:
+                    Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                case .newFollower:
+                    Image(systemName: "person.badge.plus").font(.system(size: 8))
+                case .postLike:
+                    Image(systemName: "heart.fill").font(.system(size: 8))
+                case .postComment:
+                    Image(systemName: "bubble.left.fill").font(.system(size: 8))
                 }
             }
             .foregroundStyle(Color.white)
@@ -378,6 +486,11 @@ struct NotificationView: View {
             case .rideJoin: return ("TRIP JOIN", CV.red)
             case .friendRequest: return ("FRIEND", Color(hex: 0xFFA500))
             case .crewInvite: return ("CREW", Color(hex: 0xAF52DE))
+            case .rideJoinAccepted: return ("ACCEPTED", CV.green)
+            case .rideJoinDeclined: return ("DECLINED", CV.muted)
+            case .newFollower: return ("FOLLOWER", Color(hex: 0xFFB020))
+            case .postLike: return ("LIKE", CV.red)
+            case .postComment: return ("COMMENT", Color(hex: 0xFFB020))
             }
         }()
 
@@ -393,6 +506,10 @@ struct NotificationView: View {
         case .rideJoin: return CV.red
         case .friendRequest: return Color(hex: 0xFFA500)
         case .crewInvite: return Color(hex: 0xAF52DE)
+        case .rideJoinAccepted: return CV.green
+        case .rideJoinDeclined: return CV.dim
+        case .newFollower, .postComment: return Color(hex: 0xFFB020)
+        case .postLike: return CV.red
         }
     }
 
@@ -427,8 +544,8 @@ struct NotificationView: View {
                 Text(filter == .all ? "All caught up" : "No \(filter.rawValue.lowercased()) notifications")
                     .cvText(18, .bold, color: Color(hex: 0xF5EDDE), inter: true)
                 Text(filter == .all
-                     ? "When riders request to join your trips or friends invite you, they'll show up here."
-                     : "No pending or recent notifications in this category.")
+                     ? "Join requests, replies to your requests, new followers and reactions to your rides show up here as they happen."
+                     : "Nothing here yet.")
                     .cvText(13, color: CV.muted, lineHeight: 18, inter: true)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 280)
