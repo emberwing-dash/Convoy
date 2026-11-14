@@ -6,46 +6,94 @@ struct FieldLabel: View {
     var body: some View { Text(text).cvText(14, .semibold, color: CV.cream.opacity(0.6), inter: true) }
 }
 
-/// From → (stops) → To summary card. Laid out on the 46pt row grid.
+/// From → (stops) → To summary card. Fully dynamic & responsive to any iPhone screen size.
 struct RouteSummaryCard: View {
     let draft: PlanDraft
     var numberedStops = true
 
+    @State private var resolvedStart: String?
+
     private enum Kind { case start, stop, end }
 
+    private var startTitle: String {
+        if let resolvedStart, !resolvedStart.isEmpty {
+            return resolvedStart
+        }
+        let from = draft.from.trimmingCharacters(in: .whitespaces)
+        return from.isEmpty ? "Start point" : short(from)
+    }
+
     private var rows: [(Kind, String, String)] {
-        var r: [(Kind, String, String)] = [(.start, short(draft.from), "Start")]
+        var r: [(Kind, String, String)] = [(.start, startTitle, "Start")]
         for (i, s) in draft.stops.enumerated() {
-            r.append((.stop, s, numberedStops ? "Stop \(i + 1)" : "Stop"))
+            r.append((.stop, short(s), numberedStops ? "Stop \(i + 1)" : "Stop"))
         }
         r.append((.end, short(draft.to), "End"))
         return r
     }
 
     private func short(_ s: String) -> String {
-        s.components(separatedBy: ",").first ?? s
+        s.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? s
     }
 
     var body: some View {
-        let rows = rows
-        ZStack(alignment: .topLeading) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                let y = CGFloat(14 + 46 * i)
-                marker(row.0).frame(width: 14, height: 14).offset(x: 16, y: y + 2)
-                Text(row.1).cvText(16, .semibold, inter: true).lineLimit(1)
-                    .frame(width: 236, alignment: .leading).offset(x: 44, y: y)
-                Text(row.2).cvText(13, color: CV.cream.opacity(0.4), inter: true)
-                    .frame(width: 60, alignment: .trailing).offset(x: 277, y: y + 1)
-                if i < rows.count - 1 {
-                    Circle().fill(CV.cream.opacity(0.35)).frame(width: 3, height: 3).offset(x: 21.5, y: y + 22)
-                    Circle().fill(CV.cream.opacity(0.35)).frame(width: 3, height: 3).offset(x: 21.5, y: y + 30)
-                    Rectangle().fill(Color.white.opacity(0.07)).frame(width: 293, height: 1).offset(x: 44, y: y + 32)
+        let currentRows = rows
+        VStack(spacing: 0) {
+            ForEach(Array(currentRows.enumerated()), id: \.offset) { i, row in
+                HStack(spacing: 14) {
+                    marker(row.0)
+                        .frame(width: 14, height: 14)
+
+                    Text(row.1)
+                        .cvText(16, .semibold, inter: true)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(row.2)
+                        .cvText(13, color: CV.cream.opacity(0.45), inter: true)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 50)
+
+                if i < currentRows.count - 1 {
+                    HStack(spacing: 0) {
+                        Color.clear.frame(width: 44)
+                        Rectangle()
+                            .fill(Color.white.opacity(0.07))
+                            .frame(height: 1)
+                    }
+                    .padding(.trailing, 16)
                 }
             }
         }
-        .frame(width: 353, height: CGFloat(46 * (rows.count - 1) + 46), alignment: .topLeading)
+        .frame(maxWidth: .infinity)
         .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        .task(id: draft.from) {
+            await resolveStartingLocation()
+        }
+    }
+
+    private func resolveStartingLocation() async {
+        let from = draft.from.trimmingCharacters(in: .whitespaces)
+        if !from.isEmpty && from.caseInsensitiveCompare("Current Location") != .orderedSame {
+            return
+        }
+
+        let coord = draft.selected?.coords.first?.cl
+            ?? draft.startCoord?.cl
+            ?? LocationService.shared.currentLocation?.coordinate
+
+        guard let targetCoord = coord else { return }
+
+        let geocoded = await LocationService.shared.reverseGeocode(coordinate: targetCoord)
+        let clean = geocoded.trimmingCharacters(in: .whitespaces)
+        if !clean.isEmpty && !clean.contains("0.0000") {
+            let primaryName = clean.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? clean
+            if !primaryName.isEmpty {
+                resolvedStart = primaryName
+            }
+        }
     }
 
     @ViewBuilder private func marker(_ k: Kind) -> some View {

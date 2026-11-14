@@ -4,22 +4,55 @@ import MapKit
 
 struct RouteSnapshotView: View {
     let coords: [Coord]
-    let size: CGSize
-    var corner: CGFloat = 0
+    var size: CGSize?
+    var height: CGFloat
+    var corner: CGFloat
     @State private var image: UIImage?
 
-    var body: some View {
-        ZStack {
-            Color(hex: 0x24402F)
-            if let image { Image(uiImage: image).resizable().scaledToFill() }
-        }
-        .frame(width: size.width, height: size.height)
-        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-        // ✅ Fix: re-render whenever the polyline changes (not only when count changes)
-        .task(id: coords) { await render() }
+    init(coords: [Coord], size: CGSize? = nil, height: CGFloat = 120, corner: CGFloat = 0) {
+        self.coords = coords
+        self.size = size
+        self.height = size?.height ?? height
+        self.corner = corner
     }
 
-    private func render() async {
+    var body: some View {
+        GeometryReader { geo in
+            let w: CGFloat = {
+                if let explicitW = size?.width, explicitW > 0 && explicitW != 353 && explicitW != 393 && explicitW != 345 {
+                    return explicitW
+                }
+                return geo.size.width > 0 ? geo.size.width : UIScreen.main.bounds.width
+            }()
+            let h: CGFloat = {
+                if let explicitH = size?.height, explicitH > 0 {
+                    return explicitH
+                }
+                return height
+            }()
+            let targetSize = CGSize(width: max(w, 1), height: max(h, 1))
+
+            ZStack {
+                Color(hex: 0x24402F)
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: targetSize.width, height: targetSize.height)
+                        .clipped()
+                }
+            }
+            .frame(width: targetSize.width, height: targetSize.height)
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+            .task(id: "\(coords.count)_\(Int(targetSize.width))_\(Int(targetSize.height))") {
+                await render(size: targetSize)
+            }
+        }
+        .frame(height: size?.height ?? height)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func render(size: CGSize) async {
         let pts = coords.map(\.cl)
         guard pts.count > 1,
               var region = RoutePlanner.region(for: pts, padding: 1.5) else { return }

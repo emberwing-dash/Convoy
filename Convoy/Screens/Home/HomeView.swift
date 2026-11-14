@@ -231,7 +231,7 @@ struct UpcomingRideCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topLeading) {
                     if let summary = ride.plan.selected {
-                        RouteSnapshotView(coords: summary.coords, size: CGSize(width: 353, height: 128))
+                        RouteSnapshotView(coords: summary.coords, height: 128)
                             .frame(height: 128).clipped()
                     } else {
                         LinearGradient(colors: [Color(hex: 0x2A2A2E), Color(hex: 0x1A1A1D)],

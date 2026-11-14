@@ -559,7 +559,7 @@ struct RideDetailsView: View {
         ZStack(alignment: .bottomLeading) {
             Group {
                 if let summary = ride.plan.selected {
-                    RouteSnapshotView(coords: summary.coords, size: CGSize(width: 393, height: 290))
+                    RouteSnapshotView(coords: summary.coords, height: 290)
                 } else {
                     LinearGradient(
                         colors: [Color(hex: 0x2A2A2E), Color(hex: 0x0B0B0C)],
@@ -706,7 +706,7 @@ struct RideDetailsView: View {
 
             Group {
                 if let r = ride.plan.selected {
-                    RouteSnapshotView(coords: r.coords, size: CGSize(width: 353, height: 120))
+                    RouteSnapshotView(coords: r.coords, height: 120)
                 } else {
                     Rectangle().fill(Color(hex: 0x101013))
                 }

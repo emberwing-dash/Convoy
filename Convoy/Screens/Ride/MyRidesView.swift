@@ -152,7 +152,9 @@ struct MyRidesView: View {
                 Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(CV.cream.opacity(0.4))
             }
-            .padding(12).frame(width: 353, height: 76)
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .frame(height: 76)
             .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
