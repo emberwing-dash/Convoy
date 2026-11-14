@@ -1,21 +1,25 @@
 import SwiftUI
 
+// WelcomeView.swift
+// Step 1 of Onboarding: Google Authentication & Welcome to Convoy
+
 struct WelcomeView: View {
-    var onSlid: () -> Void
+    var onGoogleSignIn: () -> Void
+    var onContinueGuest: () -> Void
 
     var body: some View {
         DesignCanvas(background: ContourBackdrop()) {
             hero.at(0, 0)
-            wordmark.at(0, 64)
+            wordmark.at(0, 56)
             LinearGradient(stops: [
                 .init(color: CV.bg.opacity(0), location: 0),
-                .init(color: CV.bg, location: 0.292),
+                .init(color: CV.bg, location: 0.28),
                 .init(color: CV.bg, location: 1)
             ], startPoint: .top, endPoint: .bottom)
                 .frame(width: 393, height: 480 + 60)
-                .at(0, 372)
+                .at(0, 340)
                 .allowsHitTesting(false)
-            content.at(20, 512)
+            content.at(20, 485)
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
@@ -51,22 +55,46 @@ struct WelcomeView: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 32) {
-            VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("GROUP RIDES, LIVE").cvEyebrow()
                 Text("Ride out.\nRoll together.")
-                    .cvText(44, .semibold, tracking: -1.76, lineHeight: 48)
+                    .cvText(38, .semibold, tracking: -1.5, lineHeight: 42)
                 Text("Your whole crew on one live map. Nobody gets left behind.")
-                    .cvText(17, color: CV.muted, tracking: -0.17, lineHeight: 24)
+                    .cvText(15, color: CV.muted, tracking: -0.17, lineHeight: 22)
             }
-            SlideToRide(onComplete: onSlid)
+
+            VStack(spacing: 12) {
+                // Primary: Continue with Google
+                Button(action: onGoogleSignIn) {
+                    HStack(spacing: 12) {
+                        Image("logo_google")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                        Text("Continue with Google")
+                            .cvText(16, .semibold, tracking: -0.2)
+                            .foregroundStyle(Color.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Color.white.opacity(0.12), in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+
+                // Secondary: Slide to get rolling
+                SlideToRide(onComplete: onContinueGuest)
+            }
         }
         .frame(width: 353, alignment: .leading)
     }
 }
 
 #Preview {
-    NavigationStack { WelcomeView(onSlid: {}) }
-        .environment(AppState())
-        .preferredColorScheme(.dark)
+    NavigationStack {
+        WelcomeView(onGoogleSignIn: {}, onContinueGuest: {})
+    }
+    .environment(AppState())
+    .preferredColorScheme(.dark)
 }

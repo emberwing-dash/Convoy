@@ -117,47 +117,19 @@ struct ConvoyTabBar: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
-    // MARK: - Chatbot button (right side, circular liquid glass)
+    // MARK: - Chatbot button (right side, circular) — Ellis
 
     private var chatbotButton: some View {
         Button {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             app.push(.chatbot)
         } label: {
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Circle()
-                            .fill(Color(hex: 0x141417).opacity(0.68))
-                    )
-                    .overlay(
-                        Circle()
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.35),
-                                        Color.white.opacity(0.12),
-                                        Color.white.opacity(0.04)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    )
-
-                Image("chatbot_logo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 48, height: 48)
-                    .clipShape(Circle())
-            }
-            .frame(width: 56, height: 56)
-            .shadow(color: CV.red.opacity(0.38), radius: 14, x: 0, y: 5)
-            .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 12)
+            Image("ellis_logo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 68, height: 68)
         }
         .buttonStyle(PressScale())
-        .accessibilityLabel("Open Convoy Assistant")
+        .accessibilityLabel("Ask Ellis")
     }
 }

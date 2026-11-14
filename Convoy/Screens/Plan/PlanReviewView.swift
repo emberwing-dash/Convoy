@@ -140,42 +140,95 @@ struct PlanReviewView: View {
     // MARK: - When card
 
     private var whenCard: some View {
-        HStack(spacing: 8) {
-            Text("Starts").cvText(16, .medium, inter: true).padding(.leading, 16)
-            Spacer()
-            Button {
-                focused = false
-                tempDate = app.draft.starts
-                showingDatePicker = true
-            } label: {
-                pillContent(icon: "calendar",
-                            text: app.draft.starts.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
-            }
-            .buttonStyle(.plain)
+        VStack(spacing: 10) {
+            // Row 1: Only Date & Time (full width, spacious, no truncation)
+            HStack(spacing: 10) {
+                // Date Button
+                Button {
+                    focused = false
+                    tempDate = app.draft.starts
+                    showingDatePicker = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color(hex: 0xFF6B00))
+                        Text(app.draft.starts.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
+                            .cvText(15, .semibold, inter: true)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
 
+                // Time Button
+                Button {
+                    focused = false
+                    tempTime = app.draft.starts
+                    showingTimePicker = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color(hex: 0xFF6B00))
+                        Text(app.draft.starts.formatted(.dateTime.hour().minute()))
+                            .cvText(15, .semibold, inter: true)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Row 2: Start now pushed below
             Button {
                 focused = false
-                tempTime = app.draft.starts
-                showingTimePicker = true
+                withAnimation(.snappy) {
+                    app.draft.starts = Date()
+                }
             } label: {
-                pillContent(icon: "clock",
-                            text: app.draft.starts.formatted(.dateTime.hour().minute()))
+                let isNow = abs(app.draft.starts.timeIntervalSinceNow) < 60
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(isNow ? CV.ink : Color(hex: 0xFF6B00))
+                    Text("Start now")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(isNow ? CV.ink : Color.white)
+                    Spacer()
+                    if isNow {
+                        Text("Active")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(CV.ink)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.white.opacity(0.35), in: Capsule())
+                    }
+                }
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(isNow ? Color(hex: 0xFF6B00) : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(isNow ? Color(hex: 0xFF6B00) : Color.white.opacity(0.08), lineWidth: 1)
+                )
             }
             .buttonStyle(.plain)
-            .padding(.trailing, 12)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 60)
-        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 
     private func pillContent(icon: String, text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(CV.red)
+                .foregroundStyle(Color(hex: 0xFF6B00))
             Text(text).cvText(14, .semibold, inter: true)
         }
         .padding(.horizontal, 12)
@@ -192,7 +245,7 @@ struct PlanReviewView: View {
                            in: Calendar.current.startOfDay(for: .now)...,
                            displayedComponents: .date)
                     .datePickerStyle(.graphical)
-                    .tint(CV.red)
+                    .tint(Color(hex: 0xFF6B00))
                     .padding()
                 Spacer()
             }
@@ -202,7 +255,7 @@ struct PlanReviewView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { apply(date: tempDate); showingDatePicker = false }
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(CV.red)
+                        .foregroundStyle(Color(hex: 0xFF6B00))
                 }
             }
             .preferredColorScheme(.dark)
@@ -225,7 +278,7 @@ struct PlanReviewView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { apply(time: tempTime); showingTimePicker = false }
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(CV.red)
+                        .foregroundStyle(Color(hex: 0xFF6B00))
                 }
             }
             .preferredColorScheme(.dark)
@@ -246,6 +299,14 @@ struct PlanReviewView: View {
         let tc = cal.dateComponents([.hour, .minute], from: time)
         var cur = cal.dateComponents([.year, .month, .day, .hour, .minute], from: app.draft.starts)
         cur.hour = tc.hour; cur.minute = tc.minute; cur.second = 0
-        if let merged = cal.date(from: cur) { app.draft.starts = merged }
+        if var merged = cal.date(from: cur) {
+            // If user sets a time earlier than now on the current day, advance to next day
+            if merged < Date() && cal.isDateInToday(merged) {
+                if let nextDay = cal.date(byAdding: .day, value: 1, to: merged) {
+                    merged = nextDay
+                }
+            }
+            app.draft.starts = merged
+        }
     }
 }

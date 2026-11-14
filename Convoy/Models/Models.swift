@@ -221,7 +221,7 @@ extension PersistedRideEntity {
             riders: restoredRiders,
             plan: plan, distance: distance, duration: duration,
             displayDate: displayDate, displayTime: displayTime,
-            organiser: organiser, rsvp: .organizing,
+            organiser: organiser, rsvp: organiser == "you" ? .organizing : .going,
             whenTag: nil, lockText: "Start ride",
             ridersGoing: max(1, restoredRiders.filter { $0.status == .accepted }.count),
             listMeta: "\(distance) · \(fromLocation) → \(toLocation)",
