@@ -16,40 +16,41 @@ struct RouteSnapshotView: View {
         self.corner = corner
     }
 
-    var body: some View {
-        GeometryReader { geo in
-            let w: CGFloat = {
-                if let explicitW = size?.width, explicitW > 0 && explicitW != 353 && explicitW != 393 && explicitW != 345 {
-                    return explicitW
-                }
-                return geo.size.width > 0 ? geo.size.width : UIScreen.main.bounds.width
-            }()
-            let h: CGFloat = {
-                if let explicitH = size?.height, explicitH > 0 {
-                    return explicitH
-                }
-                return height
-            }()
-            let targetSize = CGSize(width: max(w, 1), height: max(h, 1))
-
-            ZStack {
-                Color(hex: 0x24402F)
-                if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: targetSize.width, height: targetSize.height)
-                        .clipped()
-                }
+    private var targetSize: CGSize {
+        let screenW = UIScreen.main.bounds.width
+        let w: CGFloat
+        if let s = size, s.width > 0 {
+            if s.width == 353 || s.width == 345 {
+                w = max(screenW - 40, 280)
+            } else if s.width == 393 {
+                w = screenW
+            } else {
+                w = s.width
             }
-            .frame(width: targetSize.width, height: targetSize.height)
-            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-            .task(id: "\(coords.count)_\(Int(targetSize.width))_\(Int(targetSize.height))") {
-                await render(size: targetSize)
+        } else {
+            w = max(screenW - 40, 280)
+        }
+        let h = size?.height ?? height
+        return CGSize(width: w, height: h)
+    }
+
+    var body: some View {
+        let resolvedSize = targetSize
+        ZStack {
+            Color(hex: 0x141417)
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: resolvedSize.width, height: resolvedSize.height)
+                    .clipped()
             }
         }
-        .frame(height: size?.height ?? height)
-        .frame(maxWidth: .infinity)
+        .frame(width: resolvedSize.width, height: resolvedSize.height)
+        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+        .task(id: coords) {
+            await render(size: resolvedSize)
+        }
     }
 
     private func render(size: CGSize) async {
@@ -60,7 +61,9 @@ struct RouteSnapshotView: View {
         region.span.longitudeDelta = max(region.span.longitudeDelta, 0.03)
 
         let opts = MKMapSnapshotter.Options()
-        opts.region = region; opts.size = size; opts.scale = 3
+        opts.region = region
+        opts.size = size
+        opts.scale = UIScreen.main.scale
         opts.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
         opts.pointOfInterestFilter = .excludingAll
         guard let snap = try? await MKMapSnapshotter(options: opts).start() else { return }
@@ -73,9 +76,14 @@ struct RouteSnapshotView: View {
                 let p = snap.point(for: c)
                 i == 0 ? path.move(to: p) : path.addLine(to: p)
             }
-            path.lineJoinStyle = .round; path.lineCapStyle = .round
-            UIColor.black.withAlphaComponent(0.35).setStroke(); path.lineWidth = 7; path.stroke()
-            UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1).setStroke(); path.lineWidth = 4; path.stroke()
+            path.lineJoinStyle = .round
+            path.lineCapStyle = .round
+            UIColor.black.withAlphaComponent(0.35).setStroke()
+            path.lineWidth = 7
+            path.stroke()
+            UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1).setStroke()
+            path.lineWidth = 4
+            path.stroke()
             if let a = pts.first, let b = pts.last {
                 dot(at: snap.point(for: a), fill: .white, r: 6)
                 dot(at: snap.point(for: b), fill: UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1), r: 8, ring: true)

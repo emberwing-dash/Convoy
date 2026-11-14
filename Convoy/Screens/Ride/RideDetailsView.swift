@@ -523,6 +523,7 @@ struct RideDetailsView: View {
                 }
             }
             .scrollIndicators(.hidden)
+            .ignoresSafeArea(edges: .top)
 
             // Top Buttons: Back + Edit (if organiser) + Share
             topButtons(ride: ride, canEdit: organisedByYou)
@@ -647,8 +648,7 @@ struct RideDetailsView: View {
             }
         }
         .padding(.horizontal, 20)
-        .safeAreaPadding(.top)
-        .padding(.top, 4)
+        .padding(.top, 56)
     }
 
     private func tag(ride: Ride, isRideDay: Bool) -> some View {
@@ -830,21 +830,21 @@ struct RideDetailsView: View {
                     .buttonStyle(.plain)
                 } else {
                     // Locked capsule with countdown timer
-                    VStack(spacing: 3) {
-                        Image(systemName: "lock")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(CV.cream.opacity(0.5))
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(CV.cream.opacity(0.6))
 
                         RideCountdownView(departs: ride.departs) {
                             withAnimation { rideDayOverride = true }
                         }
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(CV.cream.opacity(0.85))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(CV.cream.opacity(0.9))
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
                     .background(Color(hex: 0x1E1E22), in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
                 }
 
                 // Edit button directly beside locked or start button (always available for organiser)
