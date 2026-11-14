@@ -29,7 +29,6 @@ struct RootView: View {
                 .zIndex(999)
             }
         }
-        .ignoresSafeArea()
         .onAppear {
             let isTesting = ProcessInfo.processInfo.arguments.contains("-skipAnimation")
                 || ProcessInfo.processInfo.arguments.contains("-pushRoute")

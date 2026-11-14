@@ -23,7 +23,6 @@ struct PlanDetailsView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 12)
-                .safeAreaPadding(.top)
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
@@ -64,7 +63,6 @@ struct PlanDetailsView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
-        .ignoresSafeArea()
         .onTapGesture { focused = false }
         .safeAreaInset(edge: .bottom) {
             PrimaryButton(title: "Initiate plan") {

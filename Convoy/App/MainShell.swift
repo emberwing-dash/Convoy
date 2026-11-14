@@ -27,7 +27,6 @@ struct MainShell: View {
                 ConvoyTabBar(selection: $app.tab)
                     .padding(.bottom, 8)
             }
-            .ignoresSafeArea()
             .navigationBarBackButtonHidden()
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Route.self) { route in

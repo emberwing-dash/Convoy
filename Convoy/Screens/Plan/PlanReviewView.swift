@@ -31,7 +31,6 @@ struct PlanReviewView: View {
                         Color.clear.frame(width: 40, height: 40)
                     }
                     .padding(.top, 4)
-                    .safeAreaPadding(.top)
 
                     // Header
                     VStack(alignment: .leading, spacing: 4) {
@@ -92,7 +91,6 @@ struct PlanReviewView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
-        .ignoresSafeArea()
         .onTapGesture { focused = false }
         .sheet(isPresented: $showingDatePicker) { dateSheet }
         .sheet(isPresented: $showingTimePicker) { timeSheet }
