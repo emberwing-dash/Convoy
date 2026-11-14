@@ -193,3 +193,33 @@ enum CLLocationShim {
         #expect(RideMath.trimEnds(Array(line.prefix(50)), metres: 400).isEmpty)   // 1 km is too short to share safely
     }
 }
+
+@MainActor @Suite struct RosterGroupingTests {
+    func m(_ name: String, _ source: RideMemberSource, crew: (UUID, String)? = nil, status: RiderStatus = .accepted,
+           organiser: Bool = false) -> RosterMember {
+        RosterMember(rider: RiderRef(id: UUID(), name: name, username: nil, avatarBase64: nil), isOrganiser: organiser,
+                     status: status, source: source, crewId: crew?.0, crewName: crew?.1, joinedAt: nil, iFollow: false, isMe: false)
+    }
+
+    @Test func groupsFollowTripOrderAndSplitCrews() {
+        let andhra = (UUID(), "Andhra Boyz"), warriors = (UUID(), "Weekend Warriors")
+        let members = [
+            m("Rohan", .feed), m("Kavya", .admin, organiser: true), m("Ravi", .crew, crew: andhra),
+            m("Arjun", .friend), m("Sai", .crew, crew: warriors), m("Teja", .crew, crew: andhra),
+            m("Meera", .friend, status: .invited), m("Old", .joined), m("Gone", .feed, status: .declined), m("Isha", .code),
+        ]
+        let groups = RosterGroup.make(members)
+        #expect(groups.map(\.title) == ["Admin", "Andhra Boyz", "Weekend Warriors", "Invited friends",
+                                        "From the Crew feed", "With the ride code", "Joined"])
+        #expect(groups[1].members.map(\.rider.name) == ["Ravi", "Teja"])
+        #expect(groups[3].members.count == 2 && groups[3].acceptedCount == 1)   // invited stays visible, not counted
+        #expect(!groups.flatMap(\.members).contains { $0.rider.name == "Gone" })  // declined riders are left out
+        #expect(Set(groups.map(\.id)).count == groups.count)
+    }
+
+    @Test func unknownSourcesFallBackToJoined() {
+        #expect(RideMemberSource(raw: nil) == .joined)
+        #expect(RideMemberSource(raw: "something-new") == .joined)
+        #expect(RideMemberSource(raw: "feed") == .feed)
+    }
+}

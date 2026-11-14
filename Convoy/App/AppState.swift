@@ -889,10 +889,11 @@ final class AppState {
             name: displayName,
             avatarData: avatarImageData,
             status: .accepted,
-            role: "organiser"
+            role: "organiser",
+            source: "admin"
         )
         var allRiders: [Rider] = [organiserRider]
-        var invitedUserIds: [UUID] = []
+        var invites: [RideInvite] = []
 
         // If a crew was selected in PlanWhoView, invite its members
         if let crewId = selectedCrew, let crew = crews.first(where: { $0.id == crewId }) {
@@ -905,9 +906,11 @@ final class AppState {
                     name: member.name,
                     avatarData: member.avatarData,
                     status: .invited,
-                    role: "member"
+                    role: "member",
+                    source: "crew",
+                    crewId: crewId
                 ))
-                invitedUserIds.append(member.id)
+                invites.append(RideInvite(userId: member.id, source: "crew", crewId: crewId))
             }
         }
 
@@ -922,9 +925,10 @@ final class AppState {
                     name: friend.display_name,
                     avatarData: friend.avatar_data.flatMap { Data(base64Encoded: $0) },
                     status: .invited,
-                    role: "member"
+                    role: "member",
+                    source: "friend"
                 ))
-                invitedUserIds.append(friend.id)
+                invites.append(RideInvite(userId: friend.id, source: "friend", crewId: nil))
             }
         }
 
@@ -960,7 +964,7 @@ final class AppState {
         if let userId = backendUserId {
             Task {
                 do {
-                    let result = try await SupabaseManager.shared.createRide(ride, userId: userId, invitedUserIds: invitedUserIds)
+                    let result = try await SupabaseManager.shared.createRide(ride, userId: userId, invites: invites)
                     await self.handleRideCreationResult(result, rideId: ride.id)
                 } catch {
                     print("[AppState] Failed to create ride on Supabase: \(error)")
@@ -999,9 +1003,13 @@ final class AppState {
         var newlySuccessful: [UUID] = []
         var stillFailed: [UUID] = []
 
+        let knownRiders = rides.first(where: { $0.id == rideId })?.riders ?? []
         for userId in failedUserIds {
             do {
-                try await SupabaseManager.shared.inviteRiderToRide(rideId: rideId, userId: userId)
+                // Retry with the same reason they were invited (crew or friend).
+                let rider = knownRiders.first { $0.id == userId }
+                try await SupabaseManager.shared.inviteRiderToRide(rideId: rideId, userId: userId,
+                                                                   source: rider?.source ?? "friend", crewId: rider?.crewId)
                 newlySuccessful.append(userId)
             } catch {
                 stillFailed.append(userId)
@@ -1041,7 +1049,8 @@ final class AppState {
             name: friend.display_name,
             avatarData: friend.avatar_data.flatMap { Data(base64Encoded: $0) },
             status: .invited,
-            role: "member"
+            role: "member",
+            source: "friend"
         )
         rides[idx].riders.append(newRider)
         StorageService.shared.saveRide(rides[idx])

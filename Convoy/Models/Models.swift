@@ -14,13 +14,20 @@ struct Rider: Identifiable, Codable, Hashable, Sendable {
     var avatarData: Data?
     var status: RiderStatus
     var role: String
+    /// How they got onto the ride: admin / crew / friend / feed / code / joined (see RideMemberSource).
+    var source: String? = nil
+    /// The crew they came with, when source is "crew".
+    var crewId: UUID? = nil
 
-    init(id: UUID = UUID(), name: String, avatarData: Data? = nil, status: RiderStatus = .accepted, role: String = "member") {
+    init(id: UUID = UUID(), name: String, avatarData: Data? = nil, status: RiderStatus = .accepted, role: String = "member",
+         source: String? = nil, crewId: UUID? = nil) {
         self.id = id
         self.name = name
         self.avatarData = avatarData
         self.status = status
         self.role = role
+        self.source = source
+        self.crewId = crewId
     }
 }
 

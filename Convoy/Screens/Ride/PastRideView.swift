@@ -22,6 +22,7 @@ struct PastRideView: View {
                         header(r)
                         map(r)
                         if let log { metrics(log); points(log); share(log) } else { notRecorded(r) }
+                        TripRidersSection(rideId: pastID)
                         Button { app.popToRoot(); app.tab = .ride } label: {
                             Text("Done").cvText(15, .semibold, color: CV.ink, inter: true)
                                 .frame(maxWidth: .infinity).frame(height: 52)

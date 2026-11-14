@@ -199,6 +199,21 @@ final class SocialRepository {
         catch { throw SocialError.from(error) }
     }
 
+    // MARK: Ride roster
+
+    /// Everyone on a ride and how they joined. Empty unless I'm the admin or an accepted rider.
+    func rideRoster(rideId: UUID) async throws -> [RosterMember] {
+        nonisolated struct P: Encodable, Sendable { let p_ride_id: UUID }
+        let rows: [RosterRow] = try await call("ride_roster", P(p_ride_id: rideId))
+        return rows.map { $0.model }
+    }
+
+    /// Sends crew invites (the normal crew-invite flow: each rider accepts or declines).
+    func inviteToCrew(crewId: UUID, userIds: [UUID], me: UUID) async throws -> Int {
+        do { return try await SupabaseManager.shared.inviteUsersToCrew(crewId: crewId, userIds: userIds, invitedBy: me) }
+        catch { throw SocialError.from(error) }
+    }
+
     // MARK: Leaderboard
 
     func leaderboard(_ metric: LeaderboardMetric, period: LeaderboardPeriod, limit: Int = 10) async throws -> LeaderboardBoard {
@@ -319,5 +334,18 @@ nonisolated private struct BoardRow: Decodable, Sendable {
     var model: LeaderboardEntry {
         LeaderboardEntry(rank: rank, rider: RiderRef(id: user_id, name: display_name, username: username, avatarBase64: avatar_data),
                          value: value, rides: rides, level: level, isMe: is_me)
+    }
+}
+
+nonisolated private struct RosterRow: Decodable, Sendable {
+    let user_id: UUID; let display_name: String?; let username: String?; let avatar_data: String?; let role: String
+    let status: String; let source: String; let crew_id: UUID?; let crew_name: String?; let joined_at: String?
+    let i_follow: Bool; let is_me: Bool
+    var model: RosterMember {
+        RosterMember(rider: RiderRef(id: user_id, name: display_name, username: username, avatarBase64: avatar_data),
+                     isOrganiser: role == "organiser",
+                     status: status == "accepted" ? .accepted : status == "declined" ? .declined : .invited,
+                     source: RideMemberSource(raw: source), crewId: crew_id, crewName: crew_name,
+                     joinedAt: RideFormat.parse(joined_at), iFollow: i_follow, isMe: is_me)
     }
 }

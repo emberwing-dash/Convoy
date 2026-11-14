@@ -514,6 +514,7 @@ struct RideDetailsView: View {
                         RouteSummaryCard(draft: ride.plan, numberedStops: false)
                         riders(ride: ride, solo: solo, isRideDay: isRideDay,
                                organisedByYou: organisedByYou)
+                        if !solo { RideRosterCard(ride: ride) }
                         cta(ride: ride, isRideDay: isRideDay, invited: invited,
                             organisedByYou: organisedByYou)
                     }

@@ -435,7 +435,7 @@ final class SupabaseManager {
     }
 
     @discardableResult
-    func createRide(_ ride: Ride, userId: UUID, invitedUserIds: [UUID] = []) async throws -> RideCreationResult {
+    func createRide(_ ride: Ride, userId: UUID, invites: [RideInvite] = []) async throws -> RideCreationResult {
         let stopsData = (try? JSONEncoder().encode(ride.plan.stops)) ?? Data("[]".utf8)
         let stopsJSON = String(data: stopsData, encoding: .utf8) ?? "[]"
         let selected = ride.plan.selected
@@ -505,7 +505,7 @@ final class SupabaseManager {
                 route_minutes: selected?.minutes ?? 0
             )
             try await client.from("rides").insert(payload).execute()
-            let member = RideMemberInsert(ride_id: ride.id, user_id: userId, role: "organiser", status: "accepted")
+            let member = RideMemberInsert(ride_id: ride.id, user_id: userId, role: "organiser", status: "accepted", source: "admin")
             do {
                 try await client.from("ride_members").insert(member).execute()
             } catch {
@@ -517,9 +517,11 @@ final class SupabaseManager {
         var failedInvites: [UUID] = []
 
         // Persist invited participants relationships
-        for inviteeId in invitedUserIds {
+        for invite in invites {
+            let inviteeId = invite.userId
             guard inviteeId != userId else { continue }
-            let inviteMember = RideMemberInsert(ride_id: ride.id, user_id: inviteeId, role: "rider", status: "invited")
+            let inviteMember = RideMemberInsert(ride_id: ride.id, user_id: inviteeId, role: "rider", status: "invited",
+                                                source: invite.source, crew_id: invite.crewId)
             do {
                 try await client.from("ride_members").insert(inviteMember).execute()
                 successfulInvites.append(inviteeId)
@@ -593,8 +595,9 @@ final class SupabaseManager {
             .execute()
     }
 
-    func inviteRiderToRide(rideId: UUID, userId: UUID) async throws {
-        let insert = RideMemberInsert(ride_id: rideId, user_id: userId, role: "rider", status: "invited")
+    func inviteRiderToRide(rideId: UUID, userId: UUID, source: String = "friend", crewId: UUID? = nil) async throws {
+        let insert = RideMemberInsert(ride_id: rideId, user_id: userId, role: "rider", status: "invited",
+                                      source: source, crew_id: crewId)
         try await client.from("ride_members").insert(insert).execute()
     }
 
@@ -967,6 +970,16 @@ struct RideMemberInsert: Codable {
     let user_id: UUID
     let role: String
     let status: String
+    /// Left out of the request when nil, so the database default ('joined') applies.
+    var source: String? = nil
+    var crew_id: UUID? = nil
+}
+
+/// Someone the admin invites while creating a ride, and why (crew or friend).
+struct RideInvite: Sendable, Hashable {
+    let userId: UUID
+    let source: String
+    let crewId: UUID?
 }
 
 struct RideMemberRow: Codable, Sendable {
@@ -984,6 +997,8 @@ struct RideMemberWithProfile: Codable, Identifiable, Sendable {
     let user_id: UUID
     let role: String
     let status: String?
+    var source: String? = nil
+    var crew_id: UUID? = nil
     let profiles: ProfileRow?
 }
 
@@ -1080,7 +1095,9 @@ extension RideRow {
                 name: m.profiles?.display_name ?? "Rider",
                 avatarData: m.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) },
                 status: st,
-                role: m.role
+                role: m.role,
+                source: m.source,
+                crewId: m.crew_id
             )
         }
         let date = ISO8601DateFormatter().date(from: departs) ?? Date()

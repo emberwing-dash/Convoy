@@ -249,3 +249,69 @@ enum RideFormat {
         return nil
     }
 }
+
+// MARK: - Ride roster (who is on a trip and how they got there)
+
+enum RideMemberSource: String, Sendable, CaseIterable {
+    case admin, crew, friend, feed, code, joined
+
+    init(raw: String?) { self = RideMemberSource(rawValue: raw ?? "") ?? .joined }
+
+    /// Group heading on the trip ("Andhra Boyz" is used instead for crew groups).
+    var groupTitle: String {
+        switch self {
+        case .admin: return "Admin"
+        case .crew: return "Crew"
+        case .friend: return "Invited friends"
+        case .feed: return "From the Crew feed"
+        case .code: return "With the ride code"
+        case .joined: return "Joined"
+        }
+    }
+}
+
+struct RosterMember: Identifiable, Hashable, Sendable {
+    var id: UUID { rider.id }
+    var rider: RiderRef
+    var isOrganiser: Bool
+    var status: RiderStatus
+    var source: RideMemberSource
+    var crewId: UUID?
+    var crewName: String?
+    var joinedAt: Date?
+    var iFollow: Bool
+    var isMe: Bool
+}
+
+struct RosterGroup: Identifiable, Hashable, Sendable {
+    /// Stable key: the source, or "crew:<id>" for each crew.
+    let id: String
+    var title: String
+    var source: RideMemberSource
+    var members: [RosterMember]
+
+    var acceptedCount: Int { members.filter { $0.status == .accepted }.count }
+
+    /// Groups riders in trip order: admin, each crew (by name), invited friends, feed, code, joined.
+    /// Declined riders are left out; invited riders stay in their group so the admin can see who hasn't answered.
+    static func make(_ members: [RosterMember]) -> [RosterGroup] {
+        var groups: [RosterGroup] = []
+        let active = members.filter { $0.status != .declined }
+        for source in RideMemberSource.allCases {
+            let inSource = active.filter { $0.source == source }
+            guard !inSource.isEmpty else { continue }
+            if source == .crew {
+                let byCrew = Dictionary(grouping: inSource) { $0.crewId }
+                let ordered = byCrew.keys.sorted { (byCrew[$0]?.first?.crewName ?? "") < (byCrew[$1]?.first?.crewName ?? "") }
+                for key in ordered {
+                    let ms = byCrew[key] ?? []
+                    groups.append(RosterGroup(id: "crew:\(key?.uuidString ?? "unknown")",
+                                              title: ms.first?.crewName ?? "Crew", source: .crew, members: ms))
+                }
+            } else {
+                groups.append(RosterGroup(id: source.rawValue, title: source.groupTitle, source: source, members: inSource))
+            }
+        }
+        return groups
+    }
+}

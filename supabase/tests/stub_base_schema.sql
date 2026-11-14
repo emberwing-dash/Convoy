@@ -56,6 +56,9 @@ ALTER TABLE public.ride_members ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Organiser can update ride member status" ON public.ride_members FOR UPDATE
     USING (EXISTS (SELECT 1 FROM public.rides r WHERE r.id = ride_members.ride_id AND r.organiser_id = auth.uid()));
 CREATE POLICY "Ride members can view roster" ON public.ride_members FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users join as pending riders or organiser adds members" ON public.ride_members FOR INSERT
+    WITH CHECK ((auth.uid() = user_id AND role = 'rider' AND status = 'pending')
+                OR EXISTS (SELECT 1 FROM public.rides r WHERE r.id = ride_members.ride_id AND r.organiser_id = auth.uid()));
 CREATE PUBLICATION supabase_realtime;
 
 -- Supabase grants table privileges to API roles by default; RLS does the filtering.
