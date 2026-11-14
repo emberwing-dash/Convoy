@@ -1,5 +1,7 @@
 // PlanReviewView.swift
 import SwiftUI
+import MapKit
+import CoreLocation
 
 struct PlanReviewView: View {
     @Environment(AppState.self) private var app
@@ -9,43 +11,53 @@ struct PlanReviewView: View {
     @State private var tempDate = Date()
     @State private var tempTime = Date()
     @State private var showNameError = false
+    @State private var startPlaceDisplayName: String = ""
+
+    private enum WaypointKind { case start, stop, end }
 
     var body: some View {
         @Bindable var app = app
         ZStack(alignment: .top) {
             ContourBackdrop()
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 14) {
+                    // Top Bar (Balanced, no awkward cutoffs)
                     HStack {
                         RoundIconButton(symbol: "chevron.left") { app.pop() }
                         Spacer()
+                        Text("Trip Summary")
+                            .cvText(16, .semibold, color: CV.cream.opacity(0.9), tracking: -0.2, inter: true)
+                        Spacer()
+                        Color.clear.frame(width: 40, height: 40)
                     }
                     .padding(.top, 4)
 
-                    Text("New ride").cvText(17, .semibold, tracking: -0.204, inter: true)
-                        .frame(maxWidth: .infinity, alignment: .center)
+                    // Header
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Ride Confirmation")
+                            .cvText(28, .bold, tracking: -0.6, inter: true)
+                        Text("Review your details before initiating the ride.")
+                            .cvText(15, color: CV.cream.opacity(0.65), inter: true)
+                    }
+                    .padding(.top, 4)
 
-                    Text("What's the plan?").cvText(32, .bold, tracking: -0.64, inter: true)
-                        .padding(.top, 8)
-                    Text("Name your ride and set the time.")
-                        .cvText(16, color: CV.cream.opacity(0.65), inter: true)
-
-                    FieldLabel(text: "Ride name").padding(.top, 14)
+                    // 1. Ride Name at Top
+                    FieldLabel(text: "RIDE NAME").padding(.top, 6)
                     VStack(alignment: .leading, spacing: 6) {
                         TextField("", text: $app.draft.name,
                                   prompt: Text(app.draft.to.isEmpty
                                                ? "e.g. Morning ride"
-                                               : "e.g. Ride to \(app.draft.to.components(separatedBy: ",")[0])")
+                                               : "e.g. Ride to \(shortPlace(app.draft.to))")
                                                 .foregroundColor(CV.cream.opacity(0.40)))
                             .focused($focused)
-                            .tint(CV.red)
+                            .tint(Color(hex: 0xFF5C00))
                             .cvText(17, .semibold, tracking: -0.102, inter: true)
                             .padding(.horizontal, 16)
-                            .frame(height: 56)
+                            .frame(height: 54)
                             .glassRounded(18)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .strokeBorder(showNameError ? CV.red : Color.clear, lineWidth: 1.5)
+                                    .strokeBorder(showNameError ? CV.red : Color.white.opacity(0.08), lineWidth: 1.5)
                             )
                             .onChange(of: app.draft.name) { _, _ in
                                 if showNameError && !app.draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -60,11 +72,15 @@ struct PlanReviewView: View {
                         }
                     }
 
-                    routeMap.padding(.top, 10)
-                    RouteSummaryCard(draft: app.draft, numberedStops: false)
-                        .padding(.top, 4)
+                    // 2. Dynamic Route Map
+                    FieldLabel(text: "ROUTE & MAP").padding(.top, 8)
+                    routeMap
 
-                    FieldLabel(text: "When").padding(.top, 14)
+                    // 3. Route Waypoints Card (Start, Stops, End with real place name)
+                    routeWaypointsCard
+
+                    // 4. When / Departure Time
+                    FieldLabel(text: "WHEN").padding(.top, 8)
                     whenCard
                 }
                 .padding(.horizontal, 20)
@@ -97,6 +113,7 @@ struct PlanReviewView: View {
             )
         }
         .task {
+            await resolveStartLocationName()
             if app.draft.selected == nil &&
                (!app.draft.from.isEmpty || app.draft.startCoord != nil) &&
                (!app.draft.to.isEmpty || app.draft.endCoord != nil) {
@@ -105,36 +122,210 @@ struct PlanReviewView: View {
         }
     }
 
-    // MARK: - Route map (sized to full width, fixed height)
+    // MARK: - Dynamic Route Map (GeometryReader-driven, adapts to all screen widths)
 
     private var routeMap: some View {
-        ZStack(alignment: .topLeading) {
-            if let r = app.draft.selected {
-                RouteSnapshotView(coords: r.coords, size: CGSize(width: 353, height: 160))
-            } else if let sc = app.draft.startCoord, let ec = app.draft.endCoord {
-                let waypoints = [sc] + app.draft.stopCoords + [ec]
-                RouteSnapshotView(coords: waypoints, size: CGSize(width: 353, height: 160))
-            } else {
-                Rectangle().fill(Color(hex: 0x101013))
+        GeometryReader { geo in
+            let mapWidth = geo.size.width
+            let mapHeight = geo.size.height
+
+            ZStack(alignment: .top) {
+                if let r = app.draft.selected {
+                    RouteSnapshotView(coords: r.coords, size: CGSize(width: mapWidth, height: mapHeight))
+                } else if let sc = app.draft.startCoord, let ec = app.draft.endCoord {
+                    let waypoints = [sc] + app.draft.stopCoords + [ec]
+                    RouteSnapshotView(coords: waypoints, size: CGSize(width: mapWidth, height: mapHeight))
+                } else {
+                    Rectangle().fill(Color(hex: 0x141416))
+                }
+
+                // Top shadow gradient for pill legibility
+                LinearGradient(
+                    colors: [Color.black.opacity(0.65), Color.black.opacity(0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 56)
+                .allowsHitTesting(false)
+
+                // Responsive Pills Overlay
+                HStack(spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("\(app.draft.distanceText(app.draft.style)) · \(app.draft.durationText(app.draft.style))")
+                            .cvText(12, .semibold, color: .white, inter: true)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
+                    .background(Color(hex: 0xFF5C00), in: Capsule())
+                    .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 2)
+
+                    Spacer(minLength: 8)
+
+                    Button { app.popToLast(2) } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Edit route")
+                                .cvText(12, .semibold, color: .white, inter: true)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 32)
+                        .background(Color(hex: 0x141416).opacity(0.9), in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                        .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(10)
             }
-            Text("\(app.draft.distanceText(app.draft.style)) · \(app.draft.durationText(app.draft.style))")
-                .cvText(13, .semibold, color: .white, inter: true)
-                .padding(.horizontal, 12).frame(height: 30)
-                .background(CV.red, in: Capsule())
-                .offset(x: 12, y: 12)
-            Button { app.popToLast(2) } label: {
-                Text("Edit route").cvText(13, .semibold, color: .white, inter: true)
-                    .padding(.horizontal, 12).frame(height: 30)
-                    .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .offset(x: 256, y: 12)
+            .frame(width: mapWidth, height: mapHeight)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            )
         }
-        .frame(height: 160)
+        .frame(height: 185)
         .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+    }
+
+    // MARK: - Dynamic Route Waypoints Card
+
+    private var routeWaypointsCard: some View {
+        let startName = startPlaceDisplayName.isEmpty ? shortPlace(app.draft.from) : startPlaceDisplayName
+        let endName = shortPlace(app.draft.to)
+        let stops = app.draft.stops
+
+        return VStack(spacing: 0) {
+            // Start
+            waypointRow(
+                icon: .start,
+                title: startName.isEmpty ? "Current Location" : startName,
+                tag: "Start",
+                showDivider: !stops.isEmpty || !endName.isEmpty
+            )
+
+            // Stops
+            ForEach(Array(stops.enumerated()), id: \.offset) { idx, stopName in
+                waypointRow(
+                    icon: .stop,
+                    title: shortPlace(stopName),
+                    tag: stops.count > 1 ? "Stop \(idx + 1)" : "Stop",
+                    showDivider: idx < stops.count - 1 || !endName.isEmpty
+                )
+            }
+
+            // End
+            waypointRow(
+                icon: .end,
+                title: endName.isEmpty ? "Destination" : endName,
+                tag: "End",
+                showDivider: false
+            )
+        }
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private func waypointRow(icon: WaypointKind, title: String, tag: String, showDivider: Bool) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                switch icon {
+                case .start:
+                    Circle()
+                        .strokeBorder(CV.cream, lineWidth: 3)
+                        .frame(width: 14, height: 14)
+                case .stop:
+                    RoundedRectangle(cornerRadius: 3)
+                        .strokeBorder(CV.cream, lineWidth: 2)
+                        .frame(width: 14, height: 14)
+                case .end:
+                    ZStack {
+                        Circle().fill(Color(hex: 0xFF5C00)).frame(width: 14, height: 14)
+                        Circle().fill(.white).frame(width: 4, height: 4)
+                    }
+                }
+
+                Text(title)
+                    .cvText(16, .semibold, inter: true)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(tag)
+                    .cvText(13, color: CV.cream.opacity(0.45), inter: true)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 48)
+
+            if showDivider {
+                HStack(spacing: 0) {
+                    VStack(spacing: 3) {
+                        Circle().fill(CV.cream.opacity(0.35)).frame(width: 2.5, height: 2.5)
+                        Circle().fill(CV.cream.opacity(0.35)).frame(width: 2.5, height: 2.5)
+                    }
+                    .frame(width: 14)
+                    .padding(.leading, 16)
+
+                    Rectangle()
+                        .fill(Color.white.opacity(0.06))
+                        .frame(height: 1)
+                        .padding(.leading, 12)
+                        .padding(.trailing, 16)
+                }
+                .frame(height: 8)
+            }
+        }
+    }
+
+    // MARK: - Location Reverse Geocoding
+
+    private func resolveStartLocationName() async {
+        let currentFrom = app.draft.from.trimmingCharacters(in: .whitespaces)
+
+        // If user explicitly picked or typed a named location, keep it
+        if !currentFrom.isEmpty && currentFrom.caseInsensitiveCompare("Current Location") != .orderedSame {
+            startPlaceDisplayName = shortPlace(currentFrom)
+            return
+        }
+
+        // Determine best coordinate for start
+        let targetCoord: CLLocationCoordinate2D? = {
+            if let sc = app.draft.startCoord?.cl { return sc }
+            if let first = app.draft.selected?.coords.first?.cl { return first }
+            if let loc = LocationService.shared.currentLocation?.coordinate { return loc }
+            return nil
+        }()
+
+        guard let coord = targetCoord else {
+            startPlaceDisplayName = "Current Location"
+            return
+        }
+
+        let geocoded = await LocationService.shared.reverseGeocode(coordinate: coord)
+        let clean = geocoded.trimmingCharacters(in: .whitespaces)
+        if !clean.isEmpty && !clean.contains("0.0000") {
+            let primaryName = clean.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? clean
+            if !primaryName.isEmpty {
+                startPlaceDisplayName = primaryName
+                app.draft.from = primaryName
+                return
+            }
+        }
+
+        if startPlaceDisplayName.isEmpty {
+            startPlaceDisplayName = currentFrom.isEmpty ? "Current Location" : currentFrom
+        }
+    }
+
+    private func shortPlace(_ s: String) -> String {
+        s.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? s
     }
 
     // MARK: - When card
