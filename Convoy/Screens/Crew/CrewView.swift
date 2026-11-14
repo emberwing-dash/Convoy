@@ -7,7 +7,7 @@ struct CrewView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ContourBackdrop().ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Crew")
@@ -20,6 +20,7 @@ struct CrewView: View {
                 }
                 .padding(.horizontal, 20).padding(.bottom, 130)
             }
+            .safeAreaPadding(.top)
             .scrollIndicators(.hidden)
             .refreshable {
                 await app.loadCrews(force: true)
@@ -34,6 +35,7 @@ struct CrewView: View {
                 }
             }
         }
+        .ignoresSafeArea()
     }
 
     private var segmented: some View {

@@ -40,7 +40,7 @@ struct DiscoverView: View {
         }
         .scrollIndicators(.hidden)
         .background(CV.bg.ignoresSafeArea())
-        .ignoresSafeArea(edges: .top)
+        .ignoresSafeArea()
         .originPicker(isPresented: $pickingOrigin)
         .tripBar(bottom: 86)
         .task { await store.loadIfNeeded(); app.retryPendingSavedSync() }

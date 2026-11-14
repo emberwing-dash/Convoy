@@ -6,7 +6,7 @@ struct HomeView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ContourBackdrop().ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
@@ -17,9 +17,11 @@ struct HomeView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 130)
             }
+            .safeAreaPadding(.top)
             .scrollBounceBehavior(.basedOnSize)
             .scrollIndicators(.hidden)
         }
+        .ignoresSafeArea()
         .task {
             await app.refreshRides(force: false)
             await app.refreshNotifications(force: false)

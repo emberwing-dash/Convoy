@@ -134,6 +134,7 @@ struct DesignCanvas<Background: View, Content: View>: View {
                 .frame(width: safeW, height: safeH, alignment: .topLeading)
                 .offset(x: -ins.leading, y: -ins.top)
         }
+        .ignoresSafeArea()
         .background(alignment: .topLeading) {
             background.ignoresSafeArea()
         }

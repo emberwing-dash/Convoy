@@ -20,8 +20,12 @@ struct MyRidesView: View {
             ZStack {
                 Text("My rides").cvText(17, .semibold, inter: true)
                 HStack { CircleBackButton { app.pop() }; Spacer() }.padding(.horizontal, 20)
-            }.padding(.top, 4).frame(maxHeight: .infinity, alignment: .top)
+            }
+            .padding(.top, 4)
+            .safeAreaPadding(.top)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
+        .ignoresSafeArea()
         .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
     }

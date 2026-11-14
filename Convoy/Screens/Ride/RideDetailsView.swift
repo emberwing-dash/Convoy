@@ -523,6 +523,7 @@ struct RideDetailsView: View {
                 }
             }
             .scrollIndicators(.hidden)
+            .ignoresSafeArea()
 
             // Top Buttons: Back + Edit (if organiser) + Share
             topButtons(ride: ride, canEdit: organisedByYou)
@@ -536,6 +537,7 @@ struct RideDetailsView: View {
                 .zIndex(99)
             }
         }
+        .ignoresSafeArea()
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())

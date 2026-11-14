@@ -120,8 +120,10 @@ struct ProfileView: View {
                 }.padding(.horizontal, 20)
             }
             .padding(.top, 4)
+            .safeAreaPadding(.top)
             .frame(maxHeight: .infinity, alignment: .top)
         }
+        .ignoresSafeArea()
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())

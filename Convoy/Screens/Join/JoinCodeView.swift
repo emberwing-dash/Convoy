@@ -75,7 +75,9 @@ struct JoinCodeView: View {
             .scrollDismissesKeyboard(.interactively).scrollIndicators(.hidden)
 
             CircleBackButton { app.pop() }
-                .padding(.leading, 20).padding(.top, 4)
+                .padding(.leading, 20)
+                .padding(.top, 4)
+                .safeAreaPadding(.top)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             TextField("", text: $code)
@@ -100,6 +102,7 @@ struct JoinCodeView: View {
         }
         .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
+        .ignoresSafeArea()
         .sheet(isPresented: $showScanner) {
             QRScannerView(isPresented: $showScanner) { scannedValue in
                 if let extracted = extractCode(from: scannedValue) {

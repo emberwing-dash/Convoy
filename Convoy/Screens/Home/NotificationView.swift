@@ -62,8 +62,10 @@ struct NotificationView: View {
             CircleBackButton { app.pop() }
                 .padding(.leading, 20)
                 .padding(.top, 4)
+                .safeAreaPadding(.top)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .ignoresSafeArea()
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .refreshable {
