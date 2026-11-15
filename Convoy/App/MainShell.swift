@@ -24,8 +24,11 @@ struct MainShell: View {
                         .allowsHitTesting(app.tab == .crew)
                         .accessibilityHidden(app.tab != .crew)
                 }
+                .transaction { transaction in
+                    transaction.animation = nil
+                }
                 ConvoyTabBar(selection: $app.tab)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 2)
             }
             .navigationBarBackButtonHidden()
             .toolbar(.hidden, for: .navigationBar)
@@ -67,6 +70,7 @@ struct MainShell: View {
                 case .notifications:      NotificationView()
                 case .riderProfile(let id): RiderProfileView(riderID: id)
                 case .rideRequests(let id): RideRequestsView(rideID: id)
+                case .allRiders:          AllRidersView()
                 case .userSearch(let ctx): UserSearchView(context: ctx)
                 case .chatbot:            ChatbotView()
                 case .placeholder(let t): PlaceholderScreen(title: t, canPop: true)

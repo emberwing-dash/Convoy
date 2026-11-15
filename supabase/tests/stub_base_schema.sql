@@ -60,6 +60,18 @@ CREATE POLICY "Users join as pending riders or organiser adds members" ON public
     WITH CHECK ((auth.uid() = user_id AND role = 'rider' AND status = 'pending')
                 OR EXISTS (SELECT 1 FROM public.rides r WHERE r.id = ride_members.ride_id AND r.organiser_id = auth.uid()));
 CREATE PUBLICATION supabase_realtime;
+-- Minimal Supabase Storage schema.
+CREATE SCHEMA storage;
+CREATE TABLE storage.buckets (id TEXT PRIMARY KEY, name TEXT NOT NULL, public BOOLEAN DEFAULT false,
+    file_size_limit BIGINT, allowed_mime_types TEXT[]);
+CREATE TABLE storage.objects (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), bucket_id TEXT REFERENCES storage.buckets(id),
+    name TEXT NOT NULL, owner UUID);
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+CREATE FUNCTION storage.foldername(name TEXT) RETURNS TEXT[] LANGUAGE sql IMMUTABLE AS
+$$ SELECT (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1] $$;
+GRANT USAGE ON SCHEMA storage TO anon, authenticated;
+GRANT ALL ON storage.objects TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION storage.foldername(TEXT) TO anon, authenticated;
 
 -- Supabase grants table privileges to API roles by default; RLS does the filtering.
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;

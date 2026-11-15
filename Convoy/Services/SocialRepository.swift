@@ -6,10 +6,16 @@ import Supabase
 struct SocialError: LocalizedError, Equatable {
     let message: String
     var errorDescription: String? { message }
+    /// A request the app itself cancelled (screen changed); never shown to the rider.
+    static let cancelledMessage = "cancelled"
+    var isCancellation: Bool { message == Self.cancelledMessage }
 
     static func from(_ error: Error) -> SocialError {
         if let e = error as? SocialError { return e }
         let raw = (error as? PostgrestError)?.message ?? "\(error)"
+        #if DEBUG
+        print("[SocialRepository] Error raw: \(raw), full: \(error)")
+        #endif
         let known: [(String, String)] = [
             ("Ride is full", "This ride is full."),
             ("not taking requests", "This ride isn't taking requests any more."),
@@ -21,18 +27,28 @@ struct SocialError: LocalizedError, Equatable {
             ("no longer pending", "This request was already handled."),
             ("Only the ride admin", "Only the ride admin can do that."),
             ("Only the trip organizer", "Only the ride admin can do that."),
+            ("Forbidden", "Only the ride admin can do that."),
+            ("Ride not found", "Ride could not be found on server. Try again shortly."),
+            ("Ride log not found", "Ride record not found on server."),
             ("Max riders must be between", "Pick a rider limit at least as big as the riders already going."),
             ("not plausible", "This ride's GPS data looked wrong, so it wasn't counted."),
             ("too old to record", "This ride is too old to add to your stats."),
+            ("ends in the future", "This ride hasn't finished yet."),
             ("Post not found", "This post isn't available any more."),
             ("Unauthorized", "Your session expired. Reopen the app to sign in again."),
+            ("User not authenticated", "Your session expired. Reopen the app to sign in again."),
             ("JWT", "Your session expired. Reopen the app to sign in again."),
+            ("row-level security", "Your session expired. Please sign in again."),
+            ("check constraint", "Ride data could not be saved to server."),
             // The 20261115000000_crew_social migration hasn't been applied to this project yet.
             ("PGRST202", "Crew features aren't switched on for this server yet."),
             ("Could not find the function", "Crew features aren't switched on for this server yet."),
             ("does not exist", "Crew features aren't switched on for this server yet."),
         ]
         if let hit = known.first(where: { raw.contains($0.0) }) { return SocialError(message: hit.1) }
+        if error is CancellationError || (error as? URLError)?.code == .cancelled {
+            return SocialError(message: SocialError.cancelledMessage)
+        }
         if (error as? URLError) != nil || raw.contains("NSURLErrorDomain") || raw.contains("offline") {
             return SocialError(message: "You're offline. Check your connection and try again.")
         }
@@ -91,6 +107,12 @@ final class SocialRepository {
     // MARK: Ride logs
 
     func record(_ log: RideLog) async throws -> (serverId: UUID, points: Int, riders: Int, isHost: Bool) {
+        let elapsed = max(1, log.elapsedS)
+        var moving = min(log.movingS, elapsed)
+        let distance = max(0, log.distanceM)
+        if distance > 0 && moving == 0 {
+            moving = 1
+        }
         nonisolated struct P: Encodable, Sendable {
             let p_client_log_id: UUID; let p_ride_id: UUID?; let p_title: String; let p_start_name: String
             let p_end_name: String; let p_started_at: String; let p_ended_at: String; let p_distance_m: Int
@@ -100,7 +122,7 @@ final class SocialRepository {
         let r: R = try await call("record_ride_log", P(
             p_client_log_id: log.id, p_ride_id: log.rideId, p_title: log.title, p_start_name: log.startName,
             p_end_name: log.endName, p_started_at: Self.iso(log.startedAt), p_ended_at: Self.iso(log.endedAt),
-            p_distance_m: log.distanceM, p_moving_s: log.movingS, p_elapsed_s: log.elapsedS,
+            p_distance_m: distance, p_moving_s: moving, p_elapsed_s: elapsed,
             p_max_speed_kmh: log.maxSpeedKmh,
             // Everyone can see shared rides, so the uploaded track never includes the start or finish.
             p_path_polyline: RideMath.encode(RideMath.trimEnds(log.path))))
@@ -182,6 +204,37 @@ final class SocialRepository {
         return rows.map { $0.model }
     }
 
+    /// Fetches all active riders across Convoy for the community directory
+    func allRiders(limit: Int = 100) async throws -> [SuggestedRider] {
+        // 1. Try suggested_riders RPC first with a wide limit
+        if let suggested = try? await suggestions(limit: limit), !suggested.isEmpty {
+            return suggested
+        }
+        // 2. Direct fallback to profiles table
+        do {
+            let profiles: [ProfileRow] = try await client.from("profiles")
+                .select()
+                .limit(limit)
+                .execute().value
+            return profiles.map { p in
+                SuggestedRider(
+                    rider: RiderRef(
+                        id: p.id,
+                        name: p.display_name,
+                        username: p.username,
+                        avatarBase64: p.avatar_data
+                    ),
+                    reason: "Convoy Rider",
+                    totalKm: 0,
+                    rides: 0,
+                    monthKm: 0
+                )
+            }
+        } catch {
+            throw SocialError.from(error)
+        }
+    }
+
     func profile(userId: UUID) async throws -> RiderProfile? {
         nonisolated struct P: Encodable, Sendable { let p_user_id: UUID }
         let rows: [ProfileStatsRow] = try await call("rider_profile", P(p_user_id: userId))
@@ -243,6 +296,9 @@ nonisolated private struct FeedRow: Decodable, Sendable {
     let route_km: Double?; let route_preview: [[Double]]?; let members_count: Int?; let max_riders: Int?
     let accepts_requests: Bool?; let ride_completed: Bool?; let my_request_status: String?; let i_am_member: Bool?
     let pending_requests: Int?
+    var cover_source: String? = nil; var cover_url: String? = nil; var cover_credit: String? = nil
+    var cover_license: String? = nil; var cover_page_url: String? = nil
+    var dest_lat: Double? = nil; var dest_lon: Double? = nil
 
     var model: FeedPost {
         let kind = FeedPostKind(rawValue: kind) ?? .rideLog
@@ -263,10 +319,15 @@ nonisolated private struct FeedRow: Decodable, Sendable {
                             myRequest: my_request_status.flatMap(RideJoinRequestStatus.init(rawValue:)),
                             iAmMember: i_am_member ?? false, pendingRequests: pending_requests ?? 0)
         }
+        let cover: RideCover? = cover_source.flatMap(CoverSource.init(rawValue:)).map {
+            RideCover(source: $0, url: cover_url.flatMap(URL.init(string:)), credit: cover_credit,
+                      license: cover_license, pageURL: cover_page_url.flatMap(URL.init(string:)))
+        }
+        let dest = (dest_lat != nil && dest_lon != nil) ? Coord(lat: dest_lat!, lon: dest_lon!) : nil
         return FeedPost(id: post_id, kind: kind, createdAt: RideFormat.parse(created_at) ?? .now, caption: caption ?? "",
                         author: RiderRef(id: author_id, name: author_name, username: author_username, avatarBase64: author_avatar),
                         isMine: is_mine, likeCount: like_count, commentCount: comment_count, likedByMe: liked_by_me,
-                        recap: recap, openRide: open)
+                        recap: recap, openRide: open, cover: cover, destination: dest)
     }
 }
 

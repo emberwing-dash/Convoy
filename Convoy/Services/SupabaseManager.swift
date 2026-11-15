@@ -935,6 +935,17 @@ struct RideRow: Codable, Sendable {
     let route_coords_json: String?
     let route_km: Double?
     let route_minutes: Int?
+    var cover_source: String? = nil
+    var cover_url: String? = nil
+    var cover_credit: String? = nil
+    var cover_license: String? = nil
+    var cover_page_url: String? = nil
+
+    var cover: RideCover? {
+        guard let s = cover_source.flatMap(CoverSource.init(rawValue:)) else { return nil }
+        return RideCover(source: s, url: cover_url.flatMap(URL.init(string:)), credit: cover_credit,
+                         license: cover_license, pageURL: cover_page_url.flatMap(URL.init(string:)))
+    }
 }
 
 // Kept for backward compat; not used by the RPC path.
@@ -1112,7 +1123,7 @@ extension RideRow {
             return "host"
         }()
 
-        return Ride(
+        var ride = Ride(
             id: id, title: title, place: place ?? "",
             subtitle: subtitle ?? "", tag: tag ?? "Group ride",
             departs: date, riders: riders, plan: plan,
@@ -1125,5 +1136,7 @@ extension RideRow {
             listMeta: "\(distance ?? "") · \(from_location ?? "") → \(to_location ?? "")",
             code: code
         )
+        ride.cover = cover
+        return ride
     }
 }

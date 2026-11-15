@@ -223,3 +223,52 @@ enum CLLocationShim {
         #expect(RideMemberSource(raw: "feed") == .feed)
     }
 }
+
+@MainActor @Suite struct PlacePhotoRulesTests {
+    let img = URL(string: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/X.jpg/1600px-X.jpg")!
+
+    @Test func onlyRealFreelyLicensedLandscapePhotos() {
+        #expect(PlacePhotoService.isUsable(file: "Nandi Hills view.jpg", mime: "image/jpeg", w: 4000, h: 3000, url: img, license: "CC BY-SA 4.0"))
+        #expect(PlacePhotoService.isUsable(file: "Temple.jpg", mime: "image/jpeg", w: 2000, h: 1300, url: img, license: "Public domain"))
+        #expect(!PlacePhotoService.isUsable(file: "Karnataka locator map.jpg", mime: "image/jpeg", w: 4000, h: 3000, url: img, license: "CC BY-SA 4.0"))
+        #expect(!PlacePhotoService.isUsable(file: "Flag of India.png", mime: "image/png", w: 4000, h: 3000, url: img, license: "Public domain"))
+        #expect(!PlacePhotoService.isUsable(file: "Small.jpg", mime: "image/jpeg", w: 640, h: 480, url: img, license: "CC BY 2.0"))
+        #expect(!PlacePhotoService.isUsable(file: "Portrait.jpg", mime: "image/jpeg", w: 2000, h: 3000, url: img, license: "CC BY 2.0"))
+        #expect(!PlacePhotoService.isUsable(file: "Drawing.svg", mime: "image/svg+xml", w: 4000, h: 3000, url: img, license: "CC0"))
+        #expect(!PlacePhotoService.isUsable(file: "Fair use.jpg", mime: "image/jpeg", w: 4000, h: 3000, url: img, license: "Fair use"))
+        #expect(!PlacePhotoService.isUsable(file: "X.jpg", mime: "image/jpeg", w: 4000, h: 3000,
+                                            url: URL(string: "https://evil.example/x.jpg")!, license: "CC0"))
+    }
+
+    @Test func creditsAndKeys() {
+        #expect(PlacePhotoService.plainText("<a href=\"//x\">Ravi &amp; Co</a>") == "Ravi & Co")
+        #expect(PlacePhotoService.placeKey(name: "Nandi Hills, Karnataka, India", coord: Coord(lat: 13.37024, lon: 77.68351))
+                == "13.370,77.684|nandi hills")
+        #expect(PlacePhotoService.matches("Nandi Hills", "nandi hills"))
+        #expect(!PlacePhotoService.matches("Chikkaballapur", "nandi hills"))
+        let c = RideCover(source: .wikimedia, url: img, credit: "A. Rao", license: "CC BY-SA 4.0", pageURL: nil)
+        #expect(c.creditLine == "A. Rao · CC BY-SA 4.0")
+        #expect(RideCover.satellite.creditLine == nil)
+    }
+}
+
+@MainActor @Suite struct PlaceNameMatchTests {
+    @Test func photosMustNameThePlace() {
+        let tokens = PlacePhotoService.nameTokens("Nandi Hills")
+        #expect(tokens == ["nandi"])
+        #expect(PlacePhotoService.mentions("Sunset at nandi hills Bangalore.jpg", tokens: tokens))
+        #expect(!PlacePhotoService.mentions("The Indian Ape (Rhesus Macaque) photographed.jpg", tokens: tokens))
+        #expect(PlacePhotoService.nameTokens("Mahabalipuram, Tamil Nadu").first == "mahabalipuram")
+        #expect(PlacePhotoService.isUsable(file: "Nandi hills bengaluru.jpg", mime: "image/jpeg", w: 4208, h: 2368,
+                                           url: URL(string: "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e8/N.jpg/1600px-N.jpg")!,
+                                           license: "CC BY-SA 4.0"))
+    }
+}
+
+@MainActor @Suite struct PlacePhotoThumbTests {
+    @Test func gridUsesSmallerThumbnail() {
+        let p = PlacePhoto(url: URL(string: "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/A.jpg/1920px-A.jpg?x=1")!,
+                           credit: "x", license: "CC BY", page: nil, w: 4000, h: 3000)
+        #expect(p.gridURL.absoluteString == "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/A.jpg/500px-A.jpg?x=1")
+    }
+}

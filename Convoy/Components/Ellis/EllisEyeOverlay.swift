@@ -24,12 +24,17 @@ struct EllisEyeOverlay: View {
             // Measured normalized visor center and dimensions
             let visorCenterX = w * 0.58
             let visorCenterY = h * 0.554
-            let visorW = w * 0.56
+            let visorW = w * 0.54
             let visorH = h * 0.28
 
+            // Scale lookOffset proportionally to mascot size (normalized to 110pt reference)
+            let scaleFactor = w / 110.0
+            let clampedLookX = max(-4 * scaleFactor, min(4 * scaleFactor, lookOffset.width * scaleFactor))
+            let clampedLookY = max(-3 * scaleFactor, min(3 * scaleFactor, lookOffset.height * scaleFactor))
+
             // Eye positions
-            let leftEyeCenter  = CGPoint(x: w * 0.478 + lookOffset.width, y: h * 0.554 + lookOffset.height)
-            let rightEyeCenter = CGPoint(x: w * 0.732 + lookOffset.width, y: h * 0.554 + lookOffset.height)
+            let leftEyeCenter  = CGPoint(x: w * 0.478 + clampedLookX, y: h * 0.554 + clampedLookY)
+            let rightEyeCenter = CGPoint(x: w * 0.732 + clampedLookX, y: h * 0.554 + clampedLookY)
 
             let eyeW = w * 0.116
             let eyeH = h * 0.074
@@ -38,14 +43,14 @@ struct EllisEyeOverlay: View {
 
             ZStack {
                 if isOverlayActive {
-                    // 1. Dark visor patch that covers the original eyes seamlessly
-                    Ellipse()
-                        .fill(visorColor)
-                        .frame(width: visorW, height: visorH)
-                        .position(x: visorCenterX, y: visorCenterY)
+                    // Dark visor patch + expressive eyes strictly clipped to the visor ellipse
+                    // This mathematically guarantees eyes never escape the helmet
+                    ZStack {
+                        Ellipse()
+                            .fill(visorColor)
+                            .frame(width: visorW, height: visorH)
+                            .position(x: visorCenterX, y: visorCenterY)
 
-                    // 2. Left & Right expressive eyes
-                    Group {
                         singleEye(
                             isLeft: true,
                             center: leftEyeCenter,
@@ -62,6 +67,16 @@ struct EllisEyeOverlay: View {
                             mascotW: w
                         )
                     }
+                    .clipShape(
+                        Path { p in
+                            p.addEllipse(in: CGRect(
+                                x: visorCenterX - visorW / 2,
+                                y: visorCenterY - visorH / 2,
+                                width: visorW,
+                                height: visorH
+                            ))
+                        }
+                    )
                 }
             }
             .animation(.easeInOut(duration: 0.14), value: expression)
@@ -71,7 +86,7 @@ struct EllisEyeOverlay: View {
     // MARK: - Eye Shape Renderer
     @ViewBuilder
     private func singleEye(isLeft: Bool, center: CGPoint, w: CGFloat, h: CGFloat, mascotW: CGFloat) -> some View {
-        let strokeW = max(3.5, mascotW * 0.028)
+        let strokeW = max(1.8, min(3.5, mascotW * 0.038))
 
         switch expression {
         case .idle, .blink, .doubleBlink:
@@ -80,17 +95,17 @@ struct EllisEyeOverlay: View {
 
         case .happy, .celebrating:
             // Extra cheerful arched eyes (^ ^)
-            happyArc(center: center, w: w * 1.05, h: h * 1.15, stroke: strokeW * 1.1)
+            happyArc(center: center, w: w * 1.05, h: h * 1.15, stroke: strokeW * 1.05)
 
         case .excited:
             // Joyful star/wide crescent eyes
             excitedEye(center: center, w: w, h: h, stroke: strokeW)
 
         case .surprised:
-            // Wide round open eyes (O O)
+            // Wide round open eyes (O O) - sized to eyeW, not mascot width!
             Circle()
                 .strokeBorder(eyeColor, lineWidth: strokeW)
-                .frame(width: w * 0.88, height: w * 0.88)
+                .frame(width: w * 0.95, height: w * 0.95)
                 .position(center)
 
         case .listening:
@@ -98,10 +113,10 @@ struct EllisEyeOverlay: View {
             ZStack {
                 Circle()
                     .strokeBorder(eyeColor, lineWidth: strokeW)
-                    .frame(width: w * 0.82, height: w * 0.82)
+                    .frame(width: w * 0.9, height: w * 0.9)
                 Circle()
                     .fill(eyeColor)
-                    .frame(width: w * 0.38, height: w * 0.38)
+                    .frame(width: w * 0.42, height: w * 0.42)
             }
             .position(center)
 

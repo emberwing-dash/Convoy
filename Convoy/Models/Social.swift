@@ -63,6 +63,9 @@ struct FeedPost: Identifiable, Hashable, Sendable {
     var likedByMe: Bool
     var recap: RideRecap?
     var openRide: OpenRide?
+    /// Destination photo of the ride this post is about, and an area-level point (≈1 km) for satellite fallback.
+    var cover: RideCover? = nil
+    var destination: Coord? = nil
 }
 
 struct SuggestedRider: Identifiable, Hashable, Sendable {

@@ -9,11 +9,15 @@ struct CrewComposeSheet: View {
     @State private var openRide: Ride?
 
     private var shareable: [RideLog] {
-        RideRecorder.shared.logs.filter { $0.postId == nil && $0.rejectedReason == nil && $0.distanceM >= 100 }
+        RideRecorder.shared.logs.filter { $0.postId == nil && $0.rejectedReason == nil }
     }
     private var hosting: [Ride] {
-        guard let me = app.backendUserId else { return [] }
-        return app.rides.filter { $0.organiserId == me && !$0.isPast && !$0.isCompleted }
+        let me = app.backendUserId ?? SupabaseManager.shared.currentUserId
+        return app.rides.filter { r in
+            guard !r.isPast && !r.isCompleted else { return false }
+            if let me, r.organiserId == me { return true }
+            return r.organiser.lowercased() == "you" || r.rsvp == .organizing || r.id == app.lastCreatedRideID
+        }
     }
 
     var body: some View {
@@ -192,7 +196,7 @@ struct OpenRideForm: View {
         Task {
             defer { posting = false }
             do {
-                try await app.social.postOpenRide(rideId: ride.id, caption: caption.trimmingCharacters(in: .whitespacesAndNewlines),
+                try await app.social.postOpenRide(ride: ride, caption: caption.trimmingCharacters(in: .whitespacesAndNewlines),
                                                   maxRiders: maxRiders)
                 app.crewSection = .feed
                 onDone()

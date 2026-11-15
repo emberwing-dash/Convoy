@@ -98,7 +98,8 @@ final class SocialStore {
             feedState = .loaded
             feedLoadedAt = .now
         } catch {
-            feedState = .failed(SocialError.from(error).message)
+            let e = SocialError.from(error)
+            if !e.isCancellation { feedState = .failed(e.message) } else if feed.isEmpty { feedState = .idle }
         }
     }
 
@@ -140,6 +141,17 @@ final class SocialStore {
     }
 
     // MARK: Open rides
+
+    func postOpenRide(ride: Ride, caption: String, maxRiders: Int) async throws {
+        let authId = try await SupabaseManager.shared.ensureAuthenticatedUser()
+        do {
+            _ = try await SupabaseManager.shared.createRide(ride, userId: authId)
+        } catch {
+            print("[SocialStore] Ensure ride in Supabase note: \(error)")
+        }
+        _ = try await repo.postOpenRide(rideId: ride.id, caption: caption, maxRiders: maxRiders)
+        await loadFeed(force: true)
+    }
 
     func postOpenRide(rideId: UUID, caption: String, maxRiders: Int) async throws {
         _ = try await repo.postOpenRide(rideId: rideId, caption: caption, maxRiders: maxRiders)
@@ -215,15 +227,30 @@ final class SocialStore {
 
     // MARK: Riders
 
+    func shuffleSuggestions() {
+        if !suggestions.isEmpty {
+            suggestions.shuffle()
+        }
+    }
+
     func loadSuggestions(force: Bool = false) async {
-        if !force, suggestionsState == .loaded { return }
+        if !force, suggestionsState == .loaded {
+            suggestions.shuffle()
+            return
+        }
         if suggestions.isEmpty { suggestionsState = .loading }
         do {
-            suggestions = try await repo.suggestions()
+            let fetched = try await repo.suggestions(limit: 30)
+            suggestions = fetched.shuffled()
             suggestionsState = .loaded
         } catch {
-            suggestionsState = .failed(SocialError.from(error).message)
+            let e = SocialError.from(error)
+            if !e.isCancellation { suggestionsState = .failed(e.message) } else if suggestions.isEmpty { suggestionsState = .idle }
         }
+    }
+
+    func allRiders(limit: Int = 100) async throws -> [SuggestedRider] {
+        return try await repo.allRiders(limit: limit)
     }
 
     func isFollowing(_ id: UUID) -> Bool { following.contains(id) }
@@ -289,6 +316,8 @@ final class SocialStore {
 
     /// Uploads (if needed) and posts a recorded ride to the Crew feed.
     func share(_ log: RideLog, caption: String) async throws -> RideLog {
+        _ = try? await SupabaseManager.shared.ensureAuthenticatedUser()
+
         var l = recorder.logs.first { $0.id == log.id } ?? log
         if let reason = l.rejectedReason { throw SocialError(message: reason) }
         if l.serverId == nil {

@@ -479,6 +479,8 @@ struct RideDetailsView: View {
     @State private var showEditSheet = false
     @State private var rideDayOverride = false
     @State private var rideToDelete: Ride? = nil
+    @State private var openingToCrew = false
+    @State private var changingCover = false
 
     var body: some View {
         if let ride = app.rides.first(where: { $0.id == rideID }) {
@@ -508,8 +510,11 @@ struct RideDetailsView: View {
                 VStack(spacing: 0) {
                     heroSection(ride: ride, isRideDay: isRideDay)
 
-                    VStack(spacing: 20) {
+                    VStack(spacing: 16) {
                         stats(ride: ride)
+                        if organisedByYou && !ride.isCompleted && !ride.isPast {
+                            crewFeedCard(ride: ride)
+                        }
                         routeSection(ride: ride)
                         RouteSummaryCard(draft: ride.plan, numberedStops: false)
                         riders(ride: ride, solo: solo, isRideDay: isRideDay,
@@ -519,8 +524,8 @@ struct RideDetailsView: View {
                             organisedByYou: organisedByYou)
                     }
                     .padding(.horizontal, 20)
-                    .padding(.top, 6)
-                    .padding(.bottom, 40)
+                    .padding(.top, 10)
+                    .padding(.bottom, 48)
                 }
             }
             .scrollIndicators(.hidden)
@@ -542,6 +547,15 @@ struct RideDetailsView: View {
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: showEditSheet)
+        .sheet(isPresented: $openingToCrew) {
+            NavigationStack {
+                OpenRideForm(ride: ride) {
+                    openingToCrew = false
+                    Task { await app.social.loadFeed() }
+                }
+            }
+            .presentationDragIndicator(.visible)
+        }
         .confirmationDialog("Delete this ride?",
                             isPresented: Binding(get: { rideToDelete != nil }, set: { if !$0 { rideToDelete = nil } }),
                             titleVisibility: .visible) {
@@ -556,26 +570,80 @@ struct RideDetailsView: View {
         }
     }
 
+    // MARK: - Crew feed (admin)
+
+    /// Lets the admin open the ride to join requests from the Crew feed, and jump to pending requests.
+    private func crewFeedCard(ride: Ride) -> some View {
+        let post = app.social.feed.first { $0.isMine && $0.openRide?.rideId == ride.id }?.openRide
+        let pending = app.social.requests(forRide: ride.id).count
+        let isPosted = post != nil
+
+        return HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(hex: 0xFF3B30).opacity(0.15))
+                    .frame(width: 42, height: 42)
+                Image(systemName: isPosted ? "person.2.badge.gearshape.fill" : "megaphone.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(CV.red)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(isPosted ? "Open to Crew" : "Post to Crew Feed")
+                        .cvText(15, .semibold, inter: true)
+                    if isPosted {
+                        Circle().fill(CV.green).frame(width: 6, height: 6)
+                    }
+                }
+                Text(isPosted
+                     ? (pending > 0 ? "\(pending) request\(pending == 1 ? "" : "s") waiting for you" : "Taking requests from Crew feed")
+                     : "Open to other riders so they can ask to join")
+                    .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Button {
+                if isPosted {
+                    app.push(.rideRequests(ride.id))
+                } else {
+                    openingToCrew = true
+                }
+            } label: {
+                Text(isPosted ? (pending > 0 ? "Requests (\(pending))" : "Manage") : "Post")
+                    .cvText(13, .semibold, color: .white, inter: true)
+                    .padding(.horizontal, 16)
+                    .frame(height: 34)
+                    .background(isPosted && pending == 0 ? Color.white.opacity(0.12) : CV.red, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+        .task { await app.social.loadFeed() }
+    }
+
     // MARK: - Hero Section
     private func heroSection(ride: Ride, isRideDay: Bool) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            Group {
-                if let summary = ride.plan.selected {
-                    RouteSnapshotView(coords: summary.coords, height: 290)
-                } else {
-                    LinearGradient(
-                        colors: [Color(hex: 0x2A2A2E), Color(hex: 0x0B0B0C)],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    )
-                }
-            }
-            .frame(height: 290)
-            .clipped()
+        let screenW = UIScreen.main.bounds.width
+        return ZStack(alignment: .bottomLeading) {
+            // Destination photo on top; the route map is in the Route section below.
+            RideCoverImage(cover: RideCoverService.shared.cover(for: ride), destination: ride.plan.endCoord, height: 310,
+                           placeName: RideCoverService.destinationName(ride))
+                .frame(width: screenW, height: 310)
+                .clipped()
 
             LinearGradient(
                 stops: [
-                    .init(color: .clear, location: 0.45),
-                    .init(color: CV.bg, location: 1),
+                    .init(color: Color.black.opacity(0.45), location: 0.0),
+                    .init(color: Color.clear, location: 0.28),
+                    .init(color: Color.clear, location: 0.50),
+                    .init(color: CV.bg.opacity(0.85), location: 0.82),
+                    .init(color: CV.bg, location: 1.0),
                 ],
                 startPoint: .top, endPoint: .bottom
             )
@@ -584,7 +652,7 @@ struct RideDetailsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 tag(ride: ride, isRideDay: isRideDay)
                 Text(ride.title)
-                    .cvText(26, .bold, tracking: -0.52, inter: true)
+                    .cvText(28, .bold, tracking: -0.52, inter: true)
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     Image(systemName: "mappin.circle.fill")
@@ -597,8 +665,30 @@ struct RideDetailsView: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
+
+            // Licence credit, and for the admin a way to change the photo.
+            HStack(spacing: 8) {
+                Spacer()
+                CoverCreditChip(cover: RideCoverService.shared.cover(for: ride))
+                if RideCoverService.shared.isAdmin(ride, app: app) {
+                    Button { changingCover = true } label: {
+                        Label("Cover", systemImage: "camera.fill")
+                            .cvText(12, .semibold, color: .white, inter: true)
+                            .padding(.horizontal, 10).frame(height: 28)
+                            .background(Color.black.opacity(0.5), in: Capsule())
+                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.2), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Change cover photo")
+                }
+            }
+            .padding(.horizontal, 20)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(.top, 168)   // below the back / menu / share buttons
         }
-        .frame(height: 290)
+        .frame(width: screenW, height: 310)
+        .task(id: ride.id) { await RideCoverService.shared.ensureCover(for: ride, app: app) }
+        .sheet(isPresented: $changingCover) { CoverPickerSheet(ride: ride) }
     }
 
     // MARK: - Top Buttons (Back, Edit if organiser, and Share)
@@ -773,6 +863,10 @@ struct RideDetailsView: View {
             }
             .buttonStyle(.plain)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
         .frame(maxWidth: .infinity)
     }
 

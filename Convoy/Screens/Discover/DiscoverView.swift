@@ -141,7 +141,8 @@ struct DiscoverView: View {
 
     @ViewBuilder private var nearYou: some View {
         let near = store.placesNear(nearCategory.map { [$0] } ?? [], minimum: 6)
-        let cats = [nil] + PlaceCategory.browseable.filter { c in store.places.contains { $0.category == c } }.map(Optional.some)
+        let activeCategories = Set(store.places.map(\.category))
+        let cats = [nil] + PlaceCategory.browseable.filter { activeCategories.contains($0) }.map(Optional.some)
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "Explore near you",
                           subtitle: near.radiusKm.map { "Within \(Int($0)) km of \(store.originName)" }) { app.push(.discoverPlaces) }

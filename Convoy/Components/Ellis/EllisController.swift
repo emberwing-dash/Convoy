@@ -357,13 +357,15 @@ public final class EllisController {
         let haptic = UISelectionFeedbackGenerator()
         haptic.selectionChanged()
 
+        let jumpScale: CGFloat = max(0.4, min(1.0, mascotSize / 110.0))
+
         switch tapReactionIndex {
         case 0:
             // 1. Surprised reaction followed by a small jump
             expression = .surprised
             if !reduceMotion {
                 withAnimation(.spring(response: 0.22, dampingFraction: 0.5)) {
-                    offsetY = -18
+                    offsetY = -16 * jumpScale
                     squashX = 0.94
                     squashY = 1.08
                 }
@@ -375,45 +377,45 @@ public final class EllisController {
             expression = .angry
             if !reduceMotion {
                 withAnimation(.linear(duration: 0.06).repeatCount(4, autoreverses: true)) {
-                    offsetX = 6
-                    rotation = 6
+                    offsetX = 5 * jumpScale
+                    rotation = 5
                 }
             }
             scheduleRestore(after: 0.50)
 
         case 2:
-            // 3. Quick 360-degree spin
+            // 3. Cheerful tilt & hop
             expression = .excited
             if !reduceMotion {
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.65)) {
-                    rotation += 360
-                    offsetY = -12
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.65)) {
+                    rotation = 8
+                    offsetY = -12 * jumpScale
                 }
             }
-            scheduleRestore(after: 0.55)
+            scheduleRestore(after: 0.50)
 
         case 3:
-            // 4. Happy double jump
+            // 4. Happy bounce
             expression = .happy
             if !reduceMotion {
                 withAnimation(.spring(response: 0.2, dampingFraction: 0.55)) {
-                    offsetY = -16
+                    offsetY = -14 * jumpScale
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
                     withAnimation(.spring(response: 0.2, dampingFraction: 0.55)) {
-                        self.offsetY = -20
+                        self.offsetY = -16 * jumpScale
                     }
                 }
             }
-            scheduleRestore(after: 0.58)
+            scheduleRestore(after: 0.55)
 
         case 4:
             // 5. Curious head tilt
             expression = .confused
             if !reduceMotion {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) {
-                    rotation = 14
-                    lookOffset = CGSize(width: -4, height: -2)
+                    rotation = 10
+                    lookOffset = CGSize(width: -2 * jumpScale, height: -1 * jumpScale)
                 }
             }
             scheduleRestore(after: 0.50)
@@ -423,9 +425,9 @@ public final class EllisController {
             expression = .celebrating
             if !reduceMotion {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.5)) {
-                    squashX = 1.15
-                    squashY = 0.85
-                    offsetY = -14
+                    squashX = 1.12
+                    squashY = 0.88
+                    offsetY = -12 * jumpScale
                 }
             }
             scheduleRestore(after: 0.48)

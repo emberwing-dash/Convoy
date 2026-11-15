@@ -26,10 +26,10 @@ struct RouteSnapshotView: View {
         let screenW = UIScreen.main.bounds.width
         let w: CGFloat
         if let s = size, s.width > 0 {
-            if s.width == 353 || s.width == 345 {
-                w = max(screenW - 40, 280)
-            } else if s.width == 393 {
+            if s.width >= screenW - 10 {
                 w = screenW
+            } else if s.width == 353 || s.width == 345 {
+                w = max(screenW - 40, 280)
             } else {
                 w = s.width
             }

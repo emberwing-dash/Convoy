@@ -174,7 +174,7 @@ struct PastRideView: View {
     private func share(_ l: RideLog) -> some View {
         if l.postId != nil {
             InfoBanner(icon: "checkmark.circle.fill", color: CV.green, text: "Shared to your Crew feed")
-        } else if l.rejectedReason == nil && l.distanceM >= 100 {
+        } else if l.rejectedReason == nil {
             Button { sharing = true } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "person.3.fill")

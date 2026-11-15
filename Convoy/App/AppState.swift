@@ -105,7 +105,7 @@ enum Route: Hashable {
     case shareCard, rideStart, rideNav, rideComplete
     case inviteCode(UUID)
     case notifications
-    case riderProfile(UUID), rideRequests(UUID)
+    case riderProfile(UUID), rideRequests(UUID), allRiders
     case userSearch(SearchContext)
     case chatbot
     case placeholder(String)
@@ -780,6 +780,7 @@ final class AppState {
     func signOut() async {
         await social.reset()
         RideRecorder.shared.clearAll()
+        RideCoverStore.shared.clearAll()
         lastRideLog = nil
         lastSocialError = nil
         try? await SupabaseManager.shared.signOut()

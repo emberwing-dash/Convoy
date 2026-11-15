@@ -20,6 +20,8 @@ struct HomeView: View {
             .scrollBounceBehavior(.basedOnSize)
             .scrollIndicators(.hidden)
         }
+        .navigationBarBackButtonHidden()
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             await app.refreshRides(force: false)
             await app.refreshNotifications(force: false)
@@ -223,25 +225,25 @@ struct AvatarChip: View {
 }
 
 struct UpcomingRideCard: View {
+    @Environment(AppState.self) private var app
     let ride: Ride
     var onTap: () -> Void
 
     var body: some View {
+        let cover = RideCoverService.shared.cover(for: ride)
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topLeading) {
-                    if let summary = ride.plan.selected {
-                        RouteSnapshotView(coords: summary.coords, height: 128)
-                            .frame(height: 128).clipped()
-                    } else {
-                        LinearGradient(colors: [Color(hex: 0x2A2A2E), Color(hex: 0x1A1A1D)],
-                                       startPoint: .top, endPoint: .bottom)
-                            .frame(height: 128)
-                    }
+                    // Destination photo (or a sharp satellite view of it); the route map lives in Ride Details.
+                    RideCoverImage(cover: cover, destination: ride.plan.endCoord, height: 160,
+                                   placeName: RideCoverService.destinationName(ride))
                     LinearGradient(stops: [
-                        .init(color: Color(hex: 0x0F0F12, opacity: 0), location: 0),
-                        .init(color: Color(hex: 0x0F0F12, opacity: 0.9), location: 1)
+                        .init(color: Color(hex: 0x0F0F12, opacity: 0.35), location: 0),
+                        .init(color: Color(hex: 0x0F0F12, opacity: 0), location: 0.3),
+                        .init(color: Color(hex: 0x0F0F12, opacity: 0.92), location: 1)
                     ], startPoint: .top, endPoint: .bottom)
+                    CoverCreditChip(cover: cover)
+                        .frame(maxWidth: .infinity, alignment: .trailing).padding(12)
                     Text(ride.tag).cvText(12, .semibold, color: .white, inter: true)
                         .padding(.horizontal, 12).frame(height: 28)
                         .background(CV.bg.opacity(0.55), in: Capsule()).padding(15)
@@ -255,8 +257,8 @@ struct UpcomingRideCard: View {
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .padding(15).padding(.bottom, 8)
-                }.frame(height: 128)
+                    .padding(15).padding(.bottom, 4)
+                }.frame(height: 160)
 
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -285,31 +287,28 @@ struct UpcomingRideCard: View {
                 .padding(.horizontal, 15).padding(.top, 10)
                 Spacer(minLength: 0)
             }
-            .frame(height: 300, alignment: .top)
+            .frame(height: 332, alignment: .top)
             .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
         }.buttonStyle(.plain)
+        .task(id: ride.id) { await RideCoverService.shared.ensureCover(for: ride, app: app) }
     }
 }
 
 struct CompactRideCard: View {
+    @Environment(AppState.self) private var app
     let ride: Ride
     var onTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                if let summary = ride.plan.selected {
-                    RouteSnapshotView(coords: summary.coords, size: CGSize(width: 60, height: 60))
-                        .frame(width: 60, height: 60).clipped()
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                } else {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.white.opacity(0.06)).frame(width: 60, height: 60)
-                        .overlay(Image(systemName: "map").foregroundStyle(CV.cream.opacity(0.5)))
-                }
+                RideCoverImage(cover: RideCoverService.shared.cover(for: ride), destination: ride.plan.endCoord, height: 60,
+                               placeName: RideCoverService.destinationName(ride))
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 VStack(alignment: .leading, spacing: 5) {
                     Text(ride.title).cvText(16, .semibold, tracking: -0.16, inter: true).lineLimit(1)
                     Text("\(ride.displayDate) · \(ride.displayTime)")
@@ -325,6 +324,7 @@ struct CompactRideCard: View {
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
         }.buttonStyle(.plain)
+        .task(id: ride.id) { await RideCoverService.shared.ensureCover(for: ride, app: app) }
     }
 }
 

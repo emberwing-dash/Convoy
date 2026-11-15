@@ -49,11 +49,17 @@ struct CrewFeedSection: View {
     private var suggestions: some View {
         let s = app.social
         VStack(alignment: .leading, spacing: 12) {
-            SectionTitleRow(title: "Suggested for you")
+            SectionTitleRow(title: "Suggested for you", trailing: "See all") {
+                app.push(.allRiders)
+            }
             if s.suggestions.isEmpty {
                 switch s.suggestionsState {
                 case .loading, .idle:
-                    HStack(spacing: 12) { ForEach(0..<3, id: \.self) { _ in Skeleton(corner: 22).frame(width: 148, height: 214) } }
+                    // Same horizontal scroll as the real cards, so placeholders never widen the screen.
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) { ForEach(0..<3, id: \.self) { _ in Skeleton(corner: 22).frame(width: 148, height: 214) } }
+                    }
+                    .scrollDisabled(true)
                 case .failed(let m):
                     Text(m).cvText(13, color: CV.muted, inter: true)
                 case .loaded:
@@ -62,14 +68,21 @@ struct CrewFeedSection: View {
                                    actionTitle: "Invite friends") { app.push(.inviteFriends) }
                 }
             } else {
+                let visible = Array(s.suggestions.prefix(4))
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
-                        ForEach(s.suggestions) { r in SuggestedRiderCard(rider: r) }
+                        ForEach(visible) { r in SuggestedRiderCard(rider: r) }
+                        SeeAllRidersCard {
+                            app.push(.allRiders)
+                        }
                     }
                     .padding(.trailing, 20)
                 }
                 .scrollClipDisabled()
             }
+        }
+        .onAppear {
+            app.social.shuffleSuggestions()
         }
     }
 
@@ -142,6 +155,43 @@ struct SuggestedRiderCard: View {
     }
 }
 
+// MARK: - See All Riders Card
+
+struct SeeAllRidersCard: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 12) {
+                Spacer()
+                ZStack {
+                    Circle()
+                        .fill(CV.red.opacity(0.14))
+                        .frame(width: 58, height: 58)
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.system(size: 32, weight: .semibold))
+                        .foregroundStyle(CV.red)
+                }
+                VStack(spacing: 3) {
+                    Text("See all\nriders")
+                        .cvText(15, .bold, color: CV.cream, inter: true)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(-2)
+                    Text("Explore all")
+                        .cvText(11, .medium, color: CV.muted, inter: true)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 16)
+            .frame(width: 136, height: 214)
+            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - Feed post
 
 struct FeedPostCard: View {
@@ -158,6 +208,7 @@ struct FeedPostCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             authorRow
+            if !mediaPages.isEmpty { FeedMediaCarousel(post: post, pages: mediaPages) }
             if let ride = post.openRide { openRideBody(ride) } else if let recap = post.recap { recapBody(recap) }
         }
         .background(Color(hex: 0x1A1A1D).opacity(0.94), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -175,7 +226,7 @@ struct FeedPostCard: View {
     private var authorRow: some View {
         HStack(spacing: 12) {
             Button { app.push(.riderProfile(post.author.id)) } label: {
-                AvatarChip(data: post.author.avatarData, name: post.author.name, size: 42)
+                AvatarChip(data: post.author.avatarData, name: post.author.name, size: 38)
             }.buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -206,13 +257,22 @@ struct FeedPostCard: View {
                 }
             }
         }
-        .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 12)
+        .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 12)
+    }
+
+    /// Photo of the destination first (when the post is about a ride with a destination), then the route.
+    private var mediaPages: [FeedMediaPage] {
+        var pages: [FeedMediaPage] = []
+        if post.cover != nil || post.destination != nil { pages.append(.photo) }
+        let routeCount = post.openRide?.preview.count ?? post.recap?.path.count ?? 0
+        if routeCount > 1 { pages.append(.route) }
+        return pages
     }
 
     private var metaLine: String {
         let when = RideFormat.relative(post.createdAt)
         switch post.kind {
-        case .openRide: return (post.isMine ? "Your crew ride" : "Posted a crew ride") + " · " + when
+        case .openRide: return (post.isMine ? "Your ride" : "Open ride") + " · " + when
         case .rideLog:
             let place = post.recap?.startName ?? ""
             return place.isEmpty ? when : "\(when) · \(place)"
@@ -223,46 +283,22 @@ struct FeedPostCard: View {
 
     @ViewBuilder
     private func recapBody(_ r: RideRecap) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(r.title).cvText(18, .bold, color: CV.cream, inter: true).fixedSize(horizontal: false, vertical: true)
-            if !post.caption.isEmpty {
-                Text(post.caption).cvText(14, color: CV.muted, lineHeight: 19, inter: true).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 10) {
+            if mediaPages.isEmpty {
+                Text(r.title).cvText(17, .bold, color: CV.cream, inter: true).lineLimit(2)
             }
-        }
-        .padding(.horizontal, 16).padding(.bottom, 12)
-
-        if r.path.count > 1 {
-            RouteSnapshotView(coords: r.path, size: CGSize(width: 353, height: 200), lineColor: Self.green)
-        } else {
-            noTrack
-        }
-
-        StatRow(items: [
-            ("\(RideFormat.km(Double(r.distanceM) / 1000)) km", "Distance"),
-            (RideFormat.duration(r.movingS), "Ride time"),
-            (r.avgSpeedKmh > 0 ? "\(Int(r.avgSpeedKmh.rounded())) km/h" : "—", "Avg speed"),
-        ])
-        .padding(.horizontal, 16).padding(.vertical, 14)
-
-        if r.riderCount > 1 || !r.endName.isEmpty {
             HStack(spacing: 8) {
-                Image(systemName: r.riderCount > 1 ? "person.3.fill" : "flag.checkered")
-                    .font(.system(size: 12)).foregroundStyle(CV.muted)
-                Text(r.riderCount > 1 ? "Group ride · \(r.riderCount) riders" : "Ended at \(r.endName)")
-                    .cvText(13, color: CV.muted, inter: true).lineLimit(1)
+                FactPill(icon: "point.topleft.down.to.point.bottomright.curvepath", text: "\(RideFormat.km(Double(r.distanceM) / 1000)) km")
+                FactPill(icon: "clock", text: RideFormat.duration(r.movingS))
+                if r.avgSpeedKmh > 0 { FactPill(icon: "speedometer", text: "\(Int(r.avgSpeedKmh.rounded())) km/h") }
+                if r.riderCount > 1 { FactPill(icon: "person.2.fill", text: "\(r.riderCount)") }
             }
-            .padding(.horizontal, 16).padding(.bottom, 14)
+            if !post.caption.isEmpty {
+                Text(post.caption).cvText(14, color: CV.cream.opacity(0.85), lineHeight: 19, inter: true).lineLimit(3)
+            }
         }
+        .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 12)
         actionsRow
-    }
-
-    private var noTrack: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "location.slash").foregroundStyle(CV.muted)
-            Text("No GPS track for this ride").cvText(13, color: CV.muted, inter: true)
-        }
-        .frame(maxWidth: .infinity).frame(height: 72)
-        .background(Color.white.opacity(0.03))
     }
 
     private var actionsRow: some View {
@@ -306,60 +342,36 @@ struct FeedPostCard: View {
 
     @ViewBuilder
     private func openRideBody(_ ride: OpenRide) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        VStack(alignment: .leading, spacing: 10) {
+            if mediaPages.isEmpty {
                 statusTag(ride)
-                Spacer()
-                if ride.routeKm > 0 { Text("\(RideFormat.km(ride.routeKm)) km route").cvText(13, color: CV.muted, inter: true) }
+                Text(ride.title).cvText(17, .bold, color: CV.cream, inter: true).lineLimit(2)
             }
-            .padding(.bottom, 2)
-            Text(ride.title).cvText(18, .bold, color: CV.cream, inter: true).fixedSize(horizontal: false, vertical: true)
-            Text(RideFormat.rideDate(ride.departs) + (ride.fromArea.isEmpty ? "" : " · Starts near \(ride.fromArea)"))
-                .cvText(13, color: CV.muted, inter: true).fixedSize(horizontal: false, vertical: true)
-            if !post.caption.isEmpty {
-                Text(post.caption).cvText(14, color: CV.cream.opacity(0.85), lineHeight: 19, inter: true)
-                    .fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+            HStack(spacing: 8) {
+                FactPill(icon: "calendar", text: RideFormat.rideDate(ride.departs))
+                if ride.routeKm > 0 { FactPill(icon: "point.topleft.down.to.point.bottomright.curvepath", text: "\(RideFormat.km(ride.routeKm)) km") }
             }
-        }
-        .padding(.horizontal, 16).padding(.bottom, 12)
-
-        if ride.preview.count > 1 {
-            ZStack(alignment: .topLeading) {
-                RouteSnapshotView(coords: ride.preview, size: CGSize(width: 353, height: 180),
-                                  lineColor: Self.green, showsEndpoints: false)
-                HStack(spacing: 6) {
-                    Image(systemName: "mappin.and.ellipse").font(.system(size: 11))
-                    Text(post.isMine ? "Riders see the area only until you accept them"
-                                     : "Exact meeting point shared after you're accepted")
-                        .cvText(11, .medium, inter: true)
-                }
-                .foregroundStyle(CV.cream)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(CV.bg.opacity(0.82), in: Capsule())
-                .padding(12)
-            }
-        }
-
-        if let max = ride.maxRiders {
-            VStack(spacing: 8) {
-                HStack {
-                    Text("\(ride.members) of \(max) riders").cvText(13, .semibold, color: CV.cream, inter: true)
-                    Spacer()
-                    Text(ride.isFull ? "Full" : "\(ride.spotsLeft ?? 0) spot\(ride.spotsLeft == 1 ? "" : "s") left")
-                        .cvText(13, .semibold, color: ride.isFull ? CV.muted : CV.green, inter: true)
-                }
-                GeometryReader { g in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.12))
-                        Capsule().fill(CV.green).frame(width: g.size.width * min(1, Double(ride.members) / Double(max)))
+            if let max = ride.maxRiders {
+                HStack(spacing: 10) {
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.12))
+                            Capsule().fill(ride.isFull ? CV.muted : CV.green)
+                                .frame(width: g.size.width * min(1, Double(ride.members) / Double(max)))
+                        }
                     }
+                    .frame(height: 5)
+                    Text(ride.isFull ? "Full · \(ride.members)/\(max)" : "\(ride.members)/\(max) · \(ride.spotsLeft ?? 0) left")
+                        .cvText(12, .semibold, color: ride.isFull ? CV.muted : CV.green, inter: true)
+                        .fixedSize()
                 }
-                .frame(height: 6)
             }
-            .padding(.horizontal, 16).padding(.top, 14)
+            if !post.caption.isEmpty {
+                Text(post.caption).cvText(14, color: CV.cream.opacity(0.85), lineHeight: 19, inter: true).lineLimit(2)
+            }
+            openRideFooter(ride).padding(.top, 2)
         }
-
-        openRideFooter(ride).padding(16)
+        .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 14)
     }
 
     private func statusTag(_ ride: OpenRide) -> some View {
@@ -442,16 +454,16 @@ struct FeedPostCard: View {
                 Text(t).cvText(16, .bold, color: .white, inter: true)
             }
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity).frame(height: 50)
+            .frame(maxWidth: .infinity).frame(height: 46)
             .background(CV.red, in: Capsule())
-            .shadow(color: CV.red.opacity(0.35), radius: 12, y: 6)
+            .shadow(color: CV.red.opacity(0.3), radius: 10, y: 5)
         }.buttonStyle(.plain)
     }
 
     private func secondaryButton(_ t: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(t).cvText(16, .bold, color: CV.cream, inter: true)
-                .frame(maxWidth: .infinity).frame(height: 50)
+                .frame(maxWidth: .infinity).frame(height: 46)
                 .background(Color.white.opacity(0.08), in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
         }.buttonStyle(.plain)
@@ -459,8 +471,158 @@ struct FeedPostCard: View {
 
     private func disabledButton(_ t: String) -> some View {
         Text(t).cvText(15, .semibold, color: CV.muted, inter: true)
-            .frame(maxWidth: .infinity).frame(height: 50)
+            .frame(maxWidth: .infinity).frame(height: 46)
             .background(Color.white.opacity(0.05), in: Capsule())
+    }
+}
+
+// MARK: - Feed media (swipe between destination photo and route)
+
+enum FeedMediaPage: Hashable { case photo, route }
+
+/// The image area of a feed card. Only this area swipes; the rest of the card stays put.
+struct FeedMediaCarousel: View {
+    let post: FeedPost
+    let pages: [FeedMediaPage]
+    @State private var pageID: FeedMediaPage?
+    private var page: FeedMediaPage { pageID ?? pages.first ?? .photo }
+    private let height: CGFloat = 230
+    private static let green = UIColor(red: 0.19, green: 0.82, blue: 0.35, alpha: 1)
+
+    var body: some View {
+        // The card decides the width; each page is exactly that wide so the feed never stretches.
+        GeometryReader { geo in
+            media(width: geo.size.width)
+        }
+        .frame(height: height)
+        .onAppear { if pageID == nil { pageID = pages.first } }
+    }
+
+    private func media(width: CGFloat) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            // Horizontal paging: only the image area swipes, vertical scrolling of the feed is untouched.
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    ForEach(pages, id: \.self) { p in
+                        content(p, width: width)
+                            .frame(width: width, height: height)
+                            .clipped()
+                            .id(p)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $pageID)
+            .scrollDisabled(pages.count < 2)
+            .frame(width: width, height: height)
+
+            // Title over the image; the gradient keeps it readable on any photo.
+            LinearGradient(stops: [.init(color: .clear, location: 0.45), .init(color: .black.opacity(0.78), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+                .allowsHitTesting(false)
+            VStack(alignment: .leading, spacing: 4) {
+                if let ride = post.openRide { statusChip(ride) }
+                Text(title).cvText(19, .bold, color: .white, tracking: -0.2, inter: true).lineLimit(2)
+                if let sub = subtitle {
+                    Text(sub).cvText(13, .medium, color: .white.opacity(0.8), inter: true).lineLimit(1)
+                }
+            }
+            .padding(14)
+            .padding(.trailing, 60)
+            .allowsHitTesting(false)
+
+            // Top-right: licence credit on the photo, privacy note on an open ride's map.
+            VStack {
+                HStack {
+                    Spacer()
+                    if page == .photo { CoverCreditChip(cover: post.cover) }
+                    else if post.openRide != nil {
+                        Label("Area only", systemImage: "lock.fill").cvText(10, .semibold, color: .white, inter: true)
+                            .padding(.horizontal, 8).padding(.vertical, 4).background(Color.black.opacity(0.5), in: Capsule())
+                    }
+                }
+                Spacer()
+                if pages.count > 1 {
+                    HStack { Spacer(); pager }
+                }
+            }
+            .padding(12)
+        }
+        .frame(width: width, height: height)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private func content(_ p: FeedMediaPage, width: CGFloat) -> some View {
+        switch p {
+        case .photo:
+            RideCoverImage(cover: post.cover, destination: post.destination, height: height)
+        case .route:
+            if let ride = post.openRide {
+                RouteSnapshotView(coords: ride.preview, size: CGSize(width: width, height: height),
+                                  lineColor: Self.green, showsEndpoints: false)
+            } else if let r = post.recap {
+                RouteSnapshotView(coords: r.path, size: CGSize(width: width, height: height), lineColor: Self.green)
+            }
+        }
+    }
+
+    private var pager: some View {
+        HStack(spacing: 6) {
+            ForEach(pages, id: \.self) { p in
+                Button { withAnimation(.snappy) { pageID = p } } label: {
+                    Image(systemName: p == .photo ? "photo" : "map")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(page == p ? CV.ink : .white)
+                        .frame(width: 28, height: 24)
+                        .background(page == p ? CV.cream : Color.white.opacity(0.15), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(p == .photo ? "Destination photo" : "Route map")
+            }
+        }
+        .padding(3)
+        .background(Color.black.opacity(0.4), in: Capsule())
+    }
+
+    private var title: String { post.openRide?.title ?? post.recap?.title ?? "" }
+
+    private var subtitle: String? {
+        if let ride = post.openRide {
+            let parts = [ride.fromArea, ride.toArea].filter { !$0.isEmpty }
+            return parts.isEmpty ? nil : parts.joined(separator: " → ")
+        }
+        if let r = post.recap {
+            let parts = [r.startName, r.endName].filter { !$0.isEmpty }
+            return parts.isEmpty ? nil : parts.joined(separator: " → ")
+        }
+        return nil
+    }
+
+    private func statusChip(_ ride: OpenRide) -> some View {
+        let (text, color): (String, Color) = ride.isFull ? ("FULL", CV.muted)
+            : !ride.acceptsRequests ? ("CLOSED", CV.muted) : ("OPEN TO JOIN", CV.green)
+        return HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(text).cvText(10, .bold, color: .white, tracking: 0.6, inter: true)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Color.black.opacity(0.5), in: Capsule())
+    }
+}
+
+/// One compact fact under a card image ("58 km", "1h 42m").
+struct FactPill: View {
+    let icon: String
+    let text: String
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.system(size: 11, weight: .semibold)).foregroundStyle(CV.muted)
+            Text(text).cvText(13, .semibold, color: CV.cream, inter: true).lineLimit(1)
+        }
+        .padding(.horizontal, 10).frame(height: 28)
+        .background(Color.white.opacity(0.06), in: Capsule())
     }
 }
 

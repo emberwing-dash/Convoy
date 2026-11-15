@@ -105,6 +105,8 @@ struct Ride: Identifiable, Hashable {
     var code: String
     var media: [RideMediaItem] = []
     var isCompleted: Bool = false
+    /// Destination cover photo (set by the admin; see RideCoverService).
+    var cover: RideCover? = nil
 
     static func generateUniqueCode() -> String {
         // 32 unambiguous characters (no 0/O or 1/I confusion)
