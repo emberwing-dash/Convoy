@@ -52,20 +52,55 @@ struct ProfileView: View {
 
                     sectionTitle("GARAGE").padding(.top, 24)
                     Button { app.push(.garage) } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Add your motorcycle")
-                                    .cvText(15, .semibold, inter: true)
-                                Text("Track mileage, service and more")
-                                    .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                        HStack(spacing: 14) {
+                            if let bike = GarageStore.shared.bikes.first {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(Color(hex: 0x241416))
+                                        .frame(width: 72, height: 54)
+                                    SmallBikeThumb(make: bike.make, model: bike.model, year: bike.year)
+                                        .frame(width: 64, height: 38)
+                                }
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 6) {
+                                        Text(bike.displayName)
+                                            .cvText(15, .bold, color: CV.cream, inter: true)
+                                        Text("Active")
+                                            .cvText(9, .bold, color: Color(hex: 0x34C759), inter: true)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color(hex: 0x34C759).opacity(0.12), in: Capsule())
+                                    }
+                                    Text("\(bike.category ?? "Motorcycle") · \(bike.engineCC ?? 149)cc · \(Int(bike.powerBHP ?? 0)) bhp")
+                                        .cvText(12, color: CV.cream.opacity(0.6), inter: true)
+                                }
+                            } else {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(Color(hex: 0x241416))
+                                        .frame(width: 50, height: 50)
+                                    Image(systemName: "motorcycle.fill")
+                                        .font(.system(size: 22))
+                                        .foregroundStyle(CV.red)
+                                }
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Add your motorcycle")
+                                        .cvText(15, .semibold, inter: true)
+                                    Text("Track mileage, service, specs & docs")
+                                        .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                                }
                             }
                             Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(CV.cream.opacity(0.5))
+                            HStack(spacing: 4) {
+                                Text(GarageStore.shared.bikes.isEmpty ? "Add" : "Manage")
+                                    .cvText(12, .semibold, color: CV.red, inter: true)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(CV.red)
+                            }
                         }
                         .padding(.horizontal, 16)
-                        .frame(height: 72)
+                        .frame(height: 76)
                         .background(Color(hex: 0x1A1A1D),
                                     in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)

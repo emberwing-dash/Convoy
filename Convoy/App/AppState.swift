@@ -91,8 +91,8 @@ final class AppState {
     var activeRideMedia: [RideMediaItem] = []
 
     // Profile
-    var displayName = "Rider"
-    var handle = "rider"
+    var displayName = "CodeBreakerYT"
+    var handle = "CodeBreakerYT"
     var avatarImageData: Data? = nil
     var backendUserId: UUID? = nil {
         didSet {
@@ -165,9 +165,12 @@ final class AppState {
     init() {
         if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
             self.phase = .main
-            self.displayName = profile.displayName.isEmpty ? "Rider" : profile.displayName
-            self.handle = profile.handle.isEmpty ? "@rider" : profile.handle
+            self.displayName = profile.displayName.isEmpty ? "CodeBreakerYT" : profile.displayName
+            self.handle = (profile.handle.isEmpty || profile.handle == "@rider" || profile.handle == "rider") ? "CodeBreakerYT" : profile.handle
             self.avatarImageData = profile.avatarImageData
+        } else {
+            self.displayName = "CodeBreakerYT"
+            self.handle = "CodeBreakerYT"
         }
 
         if let storedId = UserDefaults.standard.string(forKey: "backendUserId"),
@@ -205,6 +208,7 @@ final class AppState {
             case "discoverSaved": self.path.append(.discoverSaved)
             case "scenic": self.path.append(.scenic)
             case "surprise": self.path.append(.surprise)
+            case "garage": self.path.append(.garage)
             default: break
             }
         }
