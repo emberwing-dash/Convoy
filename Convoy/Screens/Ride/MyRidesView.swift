@@ -75,14 +75,10 @@ struct MyRidesView: View {
         }()
         return Button { app.push(.rideDetails(r.id)) } label: {
             HStack(spacing: 0) {
-                if let s = r.plan.selected {
-                    RouteSnapshotView(coords: s.coords, size: CGSize(width: 110, height: invited ? 204 : 162))
-                        .frame(width: 110).clipped()
-                } else {
-                    LinearGradient(colors: [CV.red.opacity(0.35), Color(hex: 0x1A1A1D)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing)
-                        .frame(width: 110)
-                }
+                // Same destination photo as Home and Ride Details (satellite view if none was found).
+                RideCoverImage(cover: RideCoverService.shared.cover(for: r), destination: r.plan.endCoord,
+                               height: invited ? 204 : 162, placeName: RideCoverService.destinationName(r))
+                    .frame(width: 110)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(tag.0).cvText(12, .semibold, color: tag.1, inter: true)
                         .padding(.horizontal, 10).frame(height: 24)

@@ -229,71 +229,225 @@ struct UpcomingRideCard: View {
     let ride: Ride
     var onTap: () -> Void
 
+    private let photoHeight: CGFloat = 236
+
     var body: some View {
         let cover = RideCoverService.shared.cover(for: ride)
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 0) {
-                ZStack(alignment: .topLeading) {
-                    // Destination photo (or a sharp satellite view of it); the route map lives in Ride Details.
-                    RideCoverImage(cover: cover, destination: ride.plan.endCoord, height: 160,
-                                   placeName: RideCoverService.destinationName(ride))
-                    LinearGradient(stops: [
-                        .init(color: Color(hex: 0x0F0F12, opacity: 0.35), location: 0),
-                        .init(color: Color(hex: 0x0F0F12, opacity: 0), location: 0.3),
-                        .init(color: Color(hex: 0x0F0F12, opacity: 0.92), location: 1)
-                    ], startPoint: .top, endPoint: .bottom)
-                    CoverCreditChip(cover: cover)
-                        .frame(maxWidth: .infinity, alignment: .trailing).padding(12)
-                    Text(ride.tag).cvText(12, .semibold, color: .white, inter: true)
-                        .padding(.horizontal, 12).frame(height: 28)
-                        .background(CV.bg.opacity(0.55), in: Capsule()).padding(15)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(ride.title).cvText(22, .bold, color: .white, tracking: -0.33, inter: true)
-                        HStack(spacing: 6) {
-                            Image(systemName: "mappin.circle.fill").font(.system(size: 12)).foregroundStyle(.red)
-                            Text(ride.subtitle.components(separatedBy: " · ")[0])
-                                .cvText(14, .medium, color: CV.cream.opacity(0.75), inter: true)
-                                .lineLimit(1)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .padding(15).padding(.bottom, 4)
-                }.frame(height: 160)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Departs in").cvText(13, .medium, color: CV.cream.opacity(0.55), inter: true)
-                        Spacer()
-                        Text("\(ride.displayDate) · \(ride.displayTime)")
-                            .cvText(13, .medium, color: CV.cream.opacity(0.55), inter: true)
-                    }
-                    Countdown(to: ride.departs)
+            VStack(spacing: 0) {
+                hero(cover)
+                TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                    RideCountdownPanel(ride: ride, now: ctx.date)
                 }
-                .padding(.horizontal, 15).padding(.top, 17)
-
-                Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)
-                    .padding(.horizontal, 15).padding(.top, 16)
-                HStack {
-                    if let r = ride.riders.first {
-                        AvatarChip(data: r.avatarData, name: r.name, size: 28)
-                    }
-                    Text(ride.isSolo ? "Just you · invite riders anytime" : "\(ride.riders.count) riders going")
-                        .cvText(14, .medium, color: CV.cream.opacity(0.85), inter: true)
-                        .padding(.leading, 10)
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(CV.cream.opacity(0.5))
-                }
-                .padding(.horizontal, 15).padding(.top, 10)
-                Spacer(minLength: 0)
+                .padding(.horizontal, 14).padding(.top, 14)
+                footer.padding(.horizontal, 16).padding(.vertical, 14)
             }
-            .frame(height: 332, alignment: .top)
-            .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-        }.buttonStyle(.plain)
+            .background(Color(hex: 0x161619), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+        .buttonStyle(PressScaleStyle())
         .task(id: ride.id) { await RideCoverService.shared.ensureCover(for: ride, app: app) }
+    }
+
+    // Destination photo with the trip's name on it.
+    private func hero(_ cover: RideCover?) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            RideCoverImage(cover: cover, destination: ride.plan.endCoord, height: photoHeight,
+                           placeName: RideCoverService.destinationName(ride))
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.45), location: 0),
+                .init(color: .black.opacity(0), location: 0.28),
+                .init(color: .black.opacity(0.15), location: 0.55),
+                .init(color: Color(hex: 0x161619), location: 1)
+            ], startPoint: .top, endPoint: .bottom)
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top) {
+                    Text(ride.tag).cvText(12, .semibold, color: .white, inter: true).lineLimit(1)
+                        .padding(.horizontal, 11).frame(height: 26)
+                        .background(.ultraThinMaterial.opacity(0.9), in: Capsule())
+                        .environment(\.colorScheme, .dark)
+                    Spacer(minLength: 8)
+                    CoverCreditChip(cover: cover)
+                }
+                Spacer(minLength: 0)
+                Text(ride.title).cvText(28, .bold, color: .white, tracking: -0.6, inter: true)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
+                HStack(spacing: 5) {
+                    Image(systemName: "mappin.and.ellipse").font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(CV.red)
+                    Text(ride.subtitle.components(separatedBy: " · ")[0])
+                        .cvText(14, .medium, color: CV.cream.opacity(0.8), inter: true).lineLimit(1)
+                }
+                .padding(.top, 4)
+            }
+            .padding(14).padding(.bottom, 2)
+        }
+        .frame(height: photoHeight)
+        .clipped()
+    }
+
+    private var footer: some View {
+        let going = ride.acceptedRiders.isEmpty ? Array(ride.riders.prefix(1)) : ride.acceptedRiders
+        return HStack(spacing: 10) {
+            HStack(spacing: -9) {
+                ForEach(Array(going.prefix(4))) { r in
+                    AvatarChip(data: r.avatarData, name: r.name, size: 30)
+                        .background(Circle().fill(Color(hex: 0x161619)))
+                }
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(ride.isSolo ? "Just you so far" : "\(ride.acceptedRiders.count) riders going")
+                    .cvText(14, .semibold, color: CV.cream, inter: true)
+                Text(ride.isSolo ? "Invite your crew anytime" : "Organised by \(ride.organiser)")
+                    .cvText(12, color: CV.cream.opacity(0.5), inter: true).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 4) {
+                Text("Details").cvText(13, .semibold, color: CV.cream.opacity(0.8), inter: true)
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(CV.cream.opacity(0.6))
+            }
+            .padding(.horizontal, 12).frame(height: 32)
+            .background(Color.white.opacity(0.07), in: Capsule())
+        }
+    }
+}
+
+/// The live part of the Home hero card: a ticking countdown before departure,
+/// a "ride day" state once the start time has passed, and a calm note for older rides.
+struct RideCountdownPanel: View {
+    let ride: Ride
+    let now: Date
+
+    var body: some View {
+        let s = Int(ride.departs.timeIntervalSince(now))
+        Group {
+            if s > 0 { countdown(s) }
+            else if now.timeIntervalSince(ride.departs) < 24 * 3600 || Calendar.current.isDateInToday(ride.departs) { rideDay(-s) }
+            else { overdue }
+        }
+    }
+
+    private func countdown(_ s: Int) -> some View {
+        let days = s / 86400
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                HStack(spacing: 6) {
+                    Image(systemName: "timer").font(.system(size: 12, weight: .semibold)).foregroundStyle(CV.red)
+                    Text(days == 0 ? "Departs today" : "Departs in")
+                        .cvText(13, .semibold, color: CV.cream.opacity(0.75), inter: true)
+                }
+                Spacer()
+                Text("\(ride.displayDate) · \(ride.displayTime)")
+                    .cvText(13, .medium, color: CV.cream.opacity(0.5), inter: true)
+            }
+            HStack(spacing: 0) {
+                unit(days, "days", dim: days == 0)
+                divider
+                unit(s % 86400 / 3600, "hrs", dim: days == 0 && s < 3600)
+                divider
+                unit(s % 3600 / 60, "min")
+                divider
+                unit(s % 60, "sec", accent: true)
+            }
+            .frame(height: 66)
+            .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+        }
+    }
+
+    private var divider: some View {
+        Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1, height: 30)
+    }
+
+    private func unit(_ v: Int, _ label: String, accent: Bool = false, dim: Bool = false) -> some View {
+        VStack(spacing: 2) {
+            Text(String(format: "%02d", v))
+                .cvText(26, .bold, color: accent ? CV.red : CV.cream.opacity(dim ? 0.35 : 1), tracking: -0.6, inter: true)
+                .monospacedDigit()
+                .contentTransition(.numericText(countsDown: true))
+            Text(label.uppercased()).cvText(10, .semibold, color: CV.cream.opacity(0.4), tracking: 0.8, inter: true)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func rideDay(_ since: Int) -> some View {
+        HStack(spacing: 12) {
+            PulseDot()
+            VStack(alignment: .leading, spacing: 2) {
+                Text("It's ride day").cvText(17, .bold, color: CV.cream, tracking: -0.2, inter: true)
+                Text("\(ride.displayTime) · \(Self.ago(since))")
+                    .cvText(12, .medium, color: CV.cream.opacity(0.55), inter: true).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 6) {
+                Image(systemName: "play.fill").font(.system(size: 11, weight: .bold))
+                Text("Let's ride").cvText(14, .bold, color: CV.ink, inter: true)
+            }
+            .foregroundStyle(CV.ink)
+            .padding(.horizontal, 16).frame(height: 40)
+            .background(CV.cream, in: Capsule())
+        }
+        .padding(.horizontal, 14).frame(height: 66)
+        .background(
+            LinearGradient(colors: [CV.red.opacity(0.22), CV.red.opacity(0.06)], startPoint: .leading, endPoint: .trailing),
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .strokeBorder(CV.red.opacity(0.35), lineWidth: 1))
+    }
+
+    private var overdue: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "calendar.badge.clock").font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color(hex: 0xFFB020))
+                .frame(width: 40, height: 40)
+                .background(Color(hex: 0xFFB020).opacity(0.14), in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Was planned for \(ride.displayDate)").cvText(15, .semibold, color: CV.cream, inter: true)
+                Text("Open it to start, reschedule or wrap it up")
+                    .cvText(12, color: CV.cream.opacity(0.5), inter: true).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14).frame(height: 66)
+        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+    }
+
+    static func ago(_ seconds: Int) -> String {
+        let m = max(0, seconds) / 60
+        if m < 1 { return "just now" }
+        if m < 60 { return "\(m) min ago" }
+        let h = m / 60
+        return h == 1 ? "1 hr ago" : "\(h) hrs ago"
+    }
+}
+
+private struct PulseDot: View {
+    @State private var on = false
+    var body: some View {
+        ZStack {
+            Circle().fill(CV.red.opacity(0.3)).frame(width: 26, height: 26)
+                .scaleEffect(on ? 1.25 : 0.7).opacity(on ? 0 : 1)
+            Circle().fill(CV.red).frame(width: 12, height: 12)
+        }
+        .frame(width: 28, height: 28)
+        .onAppear { withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { on = true } }
+    }
+}
+
+private struct PressScaleStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -325,42 +479,5 @@ struct CompactRideCard: View {
                 .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
         }.buttonStyle(.plain)
         .task(id: ride.id) { await RideCoverService.shared.ensureCover(for: ride, app: app) }
-    }
-}
-
-struct Countdown: View {
-    let to: Date
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { ctx in
-            let s = max(0, Int(to.timeIntervalSince(ctx.date)))
-            if s == 0 {
-                Text("Time to ride!")
-                    .cvText(24, .bold, color: CV.red, inter: true)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 64)
-                    .background(CV.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(CV.red.opacity(0.3), lineWidth: 1))
-            } else {
-                HStack(spacing: 7) {
-                    cell(s / 86400, "days")
-                    cell(s % 86400 / 3600, "hrs")
-                    cell(s % 3600 / 60, "min")
-                    cell(s % 60, "sec", accent: true)
-                }
-            }
-        }
-    }
-    private func cell(_ v: Int, _ unit: String, accent: Bool = false) -> some View {
-        VStack(spacing: 2) {
-            Text(String(format: "%02d", v))
-                .cvText(24, .bold, color: accent ? CV.red : CV.cream, tracking: -0.48, inter: true)
-                .monospacedDigit()
-            Text(unit).cvText(11, .medium, color: CV.cream.opacity(0.5), inter: true)
-        }
-        .frame(maxWidth: .infinity).frame(height: 64)
-        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
     }
 }

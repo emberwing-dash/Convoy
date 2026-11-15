@@ -20,6 +20,7 @@ struct RideCoverImage: View {
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height).clipped()
+                        .allowsHitTesting(false)
                         .transition(.opacity)
                 } else if !failed {
                     Skeleton(corner: 0)
@@ -32,6 +33,9 @@ struct RideCoverImage: View {
         }
         .frame(height: height)
         .clipped()
+        // A scaled-to-fill photo still takes taps outside its clipped frame, which made it
+        // swallow nearby buttons (Home's "See all"). Limit hit-testing to the visible area.
+        .contentShape(Rectangle())
         .animation(.easeOut(duration: 0.25), value: image != nil)
     }
 
