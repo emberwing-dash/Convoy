@@ -211,7 +211,10 @@ final class AppState {
 
     // MARK: - Computed
     var upcomingRide: Ride? { rides.first }
-    var sortedRides: [Ride] { rides.sorted { $0.departs < $1.departs } }
+    var sortedRides: [Ride] {
+        // Tie-break on id so rides at the same time keep a stable order between refreshes.
+        rides.sorted { $0.departs != $1.departs ? $0.departs < $1.departs : $0.id.uuidString < $1.id.uuidString }
+    }
     var hasUnreadNotifications: Bool { unreadNotificationCount > 0 }
 
     init() {

@@ -10,10 +10,16 @@ struct RouteSnapshotView: View {
     var lineColor: UIColor
     /// Open-ride previews hide the exact start and finish, so no pins are drawn.
     var showsEndpoints: Bool
+    /// How much room to leave around the route (1 = edge to edge).
+    var fitPadding: Double
+    var lineWidth: CGFloat
     @State private var image: UIImage?
 
     init(coords: [Coord], size: CGSize? = nil, height: CGFloat = 120, corner: CGFloat = 0,
-         lineColor: UIColor = UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1), showsEndpoints: Bool = true) {
+         lineColor: UIColor = UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1), showsEndpoints: Bool = true,
+         fitPadding: Double = 1.5, lineWidth: CGFloat = 4) {
+        self.fitPadding = fitPadding
+        self.lineWidth = lineWidth
         self.coords = coords
         self.size = size
         self.height = size?.height ?? height
@@ -62,9 +68,19 @@ struct RouteSnapshotView: View {
     private func render(size: CGSize) async {
         let pts = coords.map(\.cl)
         guard pts.count > 1,
-              var region = RoutePlanner.region(for: pts, padding: 1.5) else { return }
-        region.span.latitudeDelta = max(region.span.latitudeDelta, 0.03)
-        region.span.longitudeDelta = max(region.span.longitudeDelta, 0.03)
+              var region = RoutePlanner.region(for: pts, padding: fitPadding) else { return }
+        region.span.latitudeDelta = max(region.span.latitudeDelta, 0.02)
+        region.span.longitudeDelta = max(region.span.longitudeDelta, 0.02)
+        // The snapshot keeps the box's aspect ratio, so widen whichever side is short
+        // rather than letting MapKit zoom the whole map out further than it needs to.
+        let aspect = size.width / max(size.height, 1)
+        let midLat = region.center.latitude * .pi / 180
+        let lonPerLat = aspect / max(cos(midLat), 0.2)
+        if region.span.longitudeDelta < region.span.latitudeDelta * lonPerLat {
+            region.span.longitudeDelta = region.span.latitudeDelta * lonPerLat
+        } else {
+            region.span.latitudeDelta = region.span.longitudeDelta / lonPerLat
+        }
 
         let opts = MKMapSnapshotter.Options()
         opts.region = region
@@ -93,10 +109,10 @@ struct RouteSnapshotView: View {
             path.lineJoinStyle = .round
             path.lineCapStyle = .round
             UIColor.black.withAlphaComponent(0.35).setStroke()
-            path.lineWidth = 7
+            path.lineWidth = lineWidth + 3
             path.stroke()
             lineColor.setStroke()
-            path.lineWidth = 4
+            path.lineWidth = lineWidth
             path.stroke()
             if showsEndpoints, let a = pts.first, let b = pts.last {
                 dot(at: snap.point(for: a), fill: .white, r: 6)

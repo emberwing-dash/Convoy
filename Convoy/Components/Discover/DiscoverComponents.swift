@@ -302,7 +302,8 @@ struct DiscoverButton: View {
         }
         .buttonStyle(.plain)
     }
-    private var fg: Color { style == .primary ? CV.onAccent : CV.text }
+    // Primary is a light pill, so it needs dark text.
+    private var fg: Color { style == .primary ? CV.bg : CV.text }
     private var bg: Color { switch style { case .primary: CV.text; case .secondary: CV.surface; case .accent: CV.accent } }
 }
 
@@ -363,7 +364,7 @@ struct PlaceCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(place.name).cvText(15, .semibold, inter: true).lineLimit(2)
                         Text(place.region.components(separatedBy: ",")[0]).cvText(11, color: CV.text.opacity(0.65), inter: true).lineLimit(1)
-                        Text(rideLine).cvText(11, .semibold, inter: true).lineLimit(1)
+                        if !rideLine.isEmpty { Text(rideLine).cvText(11, .semibold, inter: true).lineLimit(1) }
                     }
                     .multilineTextAlignment(.leading)
                     .padding(10)

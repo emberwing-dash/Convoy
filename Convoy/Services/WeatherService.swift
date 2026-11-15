@@ -1,0 +1,129 @@
+// WeatherService.swift
+// Live "right now" weather for the Home header, from Open-Meteo (free, no API key).
+import Foundation
+import CoreLocation
+
+struct LiveWeather: Equatable {
+    let temperature: Double
+    let code: Int
+    let isDay: Bool
+
+    enum Kind { case clear, partly, cloudy, fog, drizzle, rain, snow, storm }
+
+    var kind: Kind {
+        switch code {
+        case 0: return .clear
+        case 1, 2: return .partly
+        case 3: return .cloudy
+        case 45, 48: return .fog
+        case 51...57: return .drizzle
+        case 61...67, 80...82: return .rain
+        case 71...77, 85, 86: return .snow
+        case 95...99: return .storm
+        default: return .cloudy
+        }
+    }
+
+    var symbol: String {
+        switch kind {
+        case .clear: return isDay ? "sun.max.fill" : "moon.stars.fill"
+        case .partly: return isDay ? "cloud.sun.fill" : "cloud.moon.fill"
+        case .cloudy: return "cloud.fill"
+        case .fog: return "cloud.fog.fill"
+        case .drizzle: return "cloud.drizzle.fill"
+        case .rain: return "cloud.rain.fill"
+        case .snow: return "cloud.snow.fill"
+        case .storm: return "cloud.bolt.rain.fill"
+        }
+    }
+
+    var condition: String {
+        switch kind {
+        case .clear: return isDay ? "Sunny" : "Clear night"
+        case .partly: return "Partly cloudy"
+        case .cloudy: return "Cloudy"
+        case .fog: return "Foggy"
+        case .drizzle: return "Drizzle"
+        case .rain: return "Rain"
+        case .snow: return "Snow"
+        case .storm: return "Thunderstorms"
+        }
+    }
+
+    /// A short, honest riding hint derived only from the reading above.
+    var ridingNote: String {
+        switch kind {
+        case .storm: return "Storms around, maybe wait"
+        case .snow: return "Icy roads, take it slow"
+        case .rain, .drizzle: return "Pack your rain gear"
+        case .fog: return "Low visibility, lights on"
+        default:
+            if temperature >= 36 { return "Hot out, stay hydrated" }
+            if temperature <= 5 { return "Cold out, layer up" }
+            return isDay ? "Great riding weather" : "Calm night for a ride"
+        }
+    }
+}
+
+@MainActor @Observable
+final class WeatherService {
+    static let shared = WeatherService()
+
+    private(set) var current: LiveWeather?
+    private(set) var place: String?
+
+    private var lastFetch: Date?
+    private var lastCoord: CLLocationCoordinate2D?
+    private let manager = CLLocationManager()
+
+    /// The best place to read the weather for without prompting: the phone's last known
+    /// position if location is already allowed, otherwise the given fallback (e.g. a ride's start).
+    func bestCoordinate(fallback: CLLocationCoordinate2D?) -> CLLocationCoordinate2D? {
+        let status = manager.authorizationStatus
+        if status == .authorizedWhenInUse || status == .authorizedAlways,
+           let loc = LocationService.shared.currentLocation ?? manager.location {
+            return loc.coordinate
+        }
+        return fallback
+    }
+
+    func refresh(near coord: CLLocationCoordinate2D, force: Bool = false) async {
+        if !force, let lastFetch, Date().timeIntervalSince(lastFetch) < 15 * 60,
+           let lc = lastCoord, abs(lc.latitude - coord.latitude) < 0.05, abs(lc.longitude - coord.longitude) < 0.05 {
+            return
+        }
+        // Rounded to ~1 km: enough for weather, and doesn't send a precise position.
+        let lat = (coord.latitude * 100).rounded() / 100
+        let lon = (coord.longitude * 100).rounded() / 100
+        var comps = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
+        comps.queryItems = [
+            .init(name: "latitude", value: String(lat)),
+            .init(name: "longitude", value: String(lon)),
+            .init(name: "current", value: "temperature_2m,weather_code,is_day"),
+            .init(name: "timezone", value: "auto"),
+        ]
+        guard let url = comps.url,
+              let (data, resp) = try? await URLSession.shared.data(from: url),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(Response.self, from: data) else { return }
+        current = LiveWeather(temperature: decoded.current.temperature_2m,
+                              code: decoded.current.weather_code,
+                              isDay: decoded.current.is_day == 1)
+        lastFetch = .now
+        lastCoord = coord
+
+        if let mark = try? await CLGeocoder().reverseGeocodeLocation(
+            CLLocation(latitude: coord.latitude, longitude: coord.longitude)).first {
+            place = mark.locality ?? mark.subAdministrativeArea ?? mark.administrativeArea
+        }
+    }
+
+    private struct Response: Decodable {
+        struct Current: Decodable {
+            let temperature_2m: Double
+            let weather_code: Int
+            let is_day: Int
+        }
+        let current: Current
+    }
+}

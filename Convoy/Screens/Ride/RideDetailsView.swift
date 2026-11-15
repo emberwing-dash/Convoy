@@ -522,15 +522,29 @@ struct RideDetailsView: View {
                         riders(ride: ride, solo: solo, isRideDay: isRideDay,
                                organisedByYou: organisedByYou)
                         if !solo { RideRosterCard(ride: ride) }
-                        cta(ride: ride, isRideDay: isRideDay, invited: invited,
-                            organisedByYou: organisedByYou)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 10)
-                    .padding(.bottom, 48)
+                    .padding(.bottom, 24)
                 }
             }
             .scrollIndicators(.hidden)
+            // The main action stays pinned to the bottom so it's reachable without scrolling.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                cta(ride: ride, isRideDay: isRideDay, invited: invited, organisedByYou: organisedByYou)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+                    .padding(.bottom, 6)
+                    .background {
+                        LinearGradient(stops: [
+                            .init(color: CV.bg.opacity(0), location: 0),
+                            .init(color: CV.bg.opacity(0.92), location: 0.35),
+                            .init(color: CV.bg, location: 1)
+                        ], startPoint: .top, endPoint: .bottom)
+                        .padding(.top, -24)
+                        .ignoresSafeArea(edges: .bottom)
+                    }
+            }
             .coordinateSpace(name: "rideDetailsScroll")
             .ignoresSafeArea(edges: .top)
 
@@ -805,7 +819,7 @@ struct RideDetailsView: View {
 
             Group {
                 if let r = ride.plan.selected {
-                    RouteSnapshotView(coords: r.coords, height: 120)
+                    RouteMapCard(coords: r.coords, height: 220)
                 } else {
                     // Older rides were saved without a route line.
                     VStack(spacing: 6) {
@@ -819,7 +833,7 @@ struct RideDetailsView: View {
                     .background(CV.bg2)
                 }
             }
-            .frame(height: 120)
+            .frame(height: 220)
             .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)

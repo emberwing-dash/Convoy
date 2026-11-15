@@ -10,6 +10,8 @@ struct RideCoverImage: View {
     var height: CGFloat
     /// Used to find the destination when no coordinates were saved with the ride.
     var placeName: String? = nil
+    /// Called with the photo once it has loaded (Home uses it to tint its background).
+    var onImage: ((UIImage) -> Void)? = nil
     @State private var image: UIImage?
     @State private var failed = false
 
@@ -47,12 +49,12 @@ struct RideCoverImage: View {
         guard size.width > 0 else { return }
         failed = false
         if let url = cover?.url, cover?.source != .satellite {
-            if let img = await CoverImageLoader.shared.image(url) { image = img; return }
+            if let img = await CoverImageLoader.shared.image(url) { image = img; onImage?(img); return }
         }
         var dest = destination
         if dest == nil, let name = placeName { dest = await RideCoverService.shared.coordinate(named: name) }
         if let d = dest, let img = await CoverImageLoader.shared.satelliteImage(d, size: size) {
-            image = img; return
+            image = img; onImage?(img); return
         }
         image = nil
         failed = true
