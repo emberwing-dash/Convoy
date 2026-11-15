@@ -72,7 +72,15 @@ struct RouteSnapshotView: View {
         opts.scale = UIScreen.main.scale
         opts.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
         opts.pointOfInterestFilter = .excludingAll
-        guard let snap = try? await MKMapSnapshotter(options: opts).start() else { return }
+        // Snapshots occasionally fail (throttled when several render at once); retry briefly
+        // instead of leaving an empty box.
+        var shot: MKMapSnapshotter.Snapshot?
+        for attempt in 0..<3 {
+            if let s = try? await MKMapSnapshotter(options: opts).start() { shot = s; break }
+            if Task.isCancelled { return }
+            try? await Task.sleep(for: .milliseconds(400 * (attempt + 1)))
+        }
+        guard let snap = shot else { return }
 
         let r = UIGraphicsImageRenderer(size: size)
         image = r.image { _ in

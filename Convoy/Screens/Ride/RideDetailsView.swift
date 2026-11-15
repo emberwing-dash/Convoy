@@ -481,6 +481,8 @@ struct RideDetailsView: View {
     @State private var rideToDelete: Ride? = nil
     @State private var openingToCrew = false
     @State private var changingCover = false
+    /// Hero's offset inside the scroll view; drives the top bar's backdrop.
+    @State private var heroMinY: CGFloat = 0
 
     var body: some View {
         if let ride = app.rides.first(where: { $0.id == rideID }) {
@@ -529,7 +531,23 @@ struct RideDetailsView: View {
                 }
             }
             .scrollIndicators(.hidden)
+            .coordinateSpace(name: "rideDetailsScroll")
             .ignoresSafeArea(edges: .top)
+
+            // Once the photo scrolls away, give the floating buttons a solid bar so they
+            // never sit on top of the title or cards.
+            VStack(spacing: 0) {
+                // 54 pt below the status bar (the button row), with the fill running up under it.
+                Color.clear.frame(height: 54)
+                    .background(
+                        CV.bg.opacity(0.94).background(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                            .ignoresSafeArea(edges: .top))
+                    .overlay(alignment: .bottom) { Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1) }
+                Spacer(minLength: 0)
+            }
+            .opacity(heroMinY < -60 ? 1 : 0)
+            .animation(.easeOut(duration: 0.2), value: heroMinY < -60)
+            .allowsHitTesting(false)
 
             // Top Buttons: Back + Edit (if organiser) + Share
             topButtons(ride: ride, canEdit: organisedByYou)
@@ -650,7 +668,12 @@ struct RideDetailsView: View {
             .allowsHitTesting(false)
 
             VStack(alignment: .leading, spacing: 8) {
-                tag(ride: ride, isRideDay: isRideDay)
+                HStack(spacing: 8) {
+                    tag(ride: ride, isRideDay: isRideDay)
+                    Spacer(minLength: 8)
+                    // Licence credit for the photo (opens the source page).
+                    CoverCreditChip(cover: RideCoverService.shared.cover(for: ride))
+                }
                 Text(ride.title)
                     .cvText(28, .bold, tracking: -0.52, inter: true)
                     .lineLimit(2)
@@ -666,27 +689,13 @@ struct RideDetailsView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
 
-            // Licence credit, and for the admin a way to change the photo.
-            HStack(spacing: 8) {
-                Spacer()
-                CoverCreditChip(cover: RideCoverService.shared.cover(for: ride))
-                if RideCoverService.shared.isAdmin(ride, app: app) {
-                    Button { changingCover = true } label: {
-                        Label("Cover", systemImage: "camera.fill")
-                            .cvText(12, .semibold, color: .white, inter: true)
-                            .padding(.horizontal, 10).frame(height: 28)
-                            .background(Color.black.opacity(0.5), in: Capsule())
-                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.2), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Change cover photo")
-                }
-            }
-            .padding(.horizontal, 20)
-            .frame(maxHeight: .infinity, alignment: .top)
-            .padding(.top, 168)   // below the back / menu / share buttons
         }
         .frame(width: screenW, height: 310)
+        .background(GeometryReader { g in
+            Color.clear.onChange(of: g.frame(in: .named("rideDetailsScroll")).minY, initial: true) { _, y in
+                heroMinY = y
+            }
+        })
         .task(id: ride.id) { await RideCoverService.shared.ensureCover(for: ride, app: app) }
         .sheet(isPresented: $changingCover) { CoverPickerSheet(ride: ride) }
     }
@@ -695,18 +704,18 @@ struct RideDetailsView: View {
 
     private func topButtons(ride: Ride, canEdit: Bool) -> some View {
         HStack(spacing: 10) {
-            Button { app.pop() } label: {
-                Circle().fill(Color.black.opacity(0.35))
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(CV.cream)
-                    )
-            }
+            Button { app.pop() } label: { topCircle("chevron.left", weight: .semibold) }
             .buttonStyle(.plain)
 
             Spacer()
+
+            if RideCoverService.shared.isAdmin(ride, app: app) {
+                Button { changingCover = true } label: {
+                    topCircle("camera.fill", size: 15)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Change cover photo")
+            }
 
             if canEdit {
                 Menu {
@@ -716,30 +725,29 @@ struct RideDetailsView: View {
                         }
                     } label: { Label("Edit ride", systemImage: "pencil") }
                     Button(role: .destructive) { rideToDelete = ride } label: { Label("Delete ride", systemImage: "trash") }
-                } label: {
-                    Circle().fill(Color.black.opacity(0.35))
-                        .frame(width: 44, height: 44)
-                        .overlay(
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(CV.cream)
-                        )
-                }
+                } label: { topCircle("ellipsis", weight: .semibold) }
                 .accessibilityLabel("Ride options")
             }
 
             ShareLink(item: "Join my ride on Convoy: convoy://ride/\(ride.code)") {
-                Circle().fill(Color.black.opacity(0.35))
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(CV.cream)
-                    )
+                topCircle("square.and.arrow.up")
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 56)
+        .padding(.horizontal, 16)
+        // This bar already sits inside the safe area, just below the status bar.
+        .padding(.top, 4)
+    }
+
+    /// Frosted round button used in the floating top bar so it reads on any photo.
+    private func topCircle(_ symbol: String, size: CGFloat = 16, weight: Font.Weight = .medium) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: size, weight: weight))
+            .foregroundStyle(.white)
+            .frame(width: 42, height: 42)
+            .background(.ultraThinMaterial, in: Circle())
+            .environment(\.colorScheme, .dark)
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
     }
 
     private func tag(ride: Ride, isRideDay: Bool) -> some View {
@@ -799,7 +807,16 @@ struct RideDetailsView: View {
                 if let r = ride.plan.selected {
                     RouteSnapshotView(coords: r.coords, height: 120)
                 } else {
-                    Rectangle().fill(Color(hex: 0x101013))
+                    // Older rides were saved without a route line.
+                    VStack(spacing: 6) {
+                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(CV.cream.opacity(0.35))
+                        Text("No route saved for this ride")
+                            .cvText(13, .medium, color: CV.cream.opacity(0.45), inter: true)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(hex: 0x101013))
                 }
             }
             .frame(height: 120)
