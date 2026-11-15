@@ -45,6 +45,7 @@ final class PersistedRideEntity {
     var displayTime: String = ""
     var organiser: String = "you"
     var isCompleted: Bool = false
+    var isActive: Bool = false
     var code: String = ""
 
     var fromLocation: String = ""
@@ -327,12 +328,29 @@ final class StorageService {
         try? context.save()
     }
 
+    func markRideActive(id: UUID) {
+        guard let context else { return }
+        let d = FetchDescriptor<PersistedRideEntity>()
+        if let all = try? context.fetch(d) {
+            for r in all {
+                if r.id == id {
+                    r.isActive = true
+                    r.tag = "Ongoing"
+                } else if r.isActive {
+                    r.isActive = false
+                }
+            }
+            try? context.save()
+        }
+    }
+
     func markRideCompleted(id: UUID) {
         guard let context else { return }
         let d = FetchDescriptor<PersistedRideEntity>()
         if let all = try? context.fetch(d) {
             for r in all where r.id == id {
                 r.isCompleted = true
+                r.isActive = false
                 r.completedAt = Date()
             }
             try? context.save()

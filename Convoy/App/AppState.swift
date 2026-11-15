@@ -129,6 +129,7 @@ final class AppState {
 
     // Rides
     var rides: [Ride] = []
+    var activeRideID: UUID? = nil
     var completedRides: [PersistedRideEntity] = []
     var lastCompletedRideID: UUID? = nil
     var lastCreatedRideID: UUID? = nil
@@ -158,7 +159,13 @@ final class AppState {
     let planner = RoutePlanner()
 
     // MARK: - Computed
-    var upcomingRide: Ride? { rides.first }
+    var activeRide: Ride? {
+        if let id = activeRideID {
+            return rides.first(where: { $0.id == id })
+        }
+        return nil
+    }
+    var upcomingRide: Ride? { activeRide ?? rides.first }
     var sortedRides: [Ride] { rides.sorted { $0.departs < $1.departs } }
     var hasUnreadNotifications: Bool { notifications.contains { $0.status == .pending } }
 
@@ -168,6 +175,11 @@ final class AppState {
             self.displayName = profile.displayName.isEmpty ? "Rider" : profile.displayName
             self.handle = profile.handle.isEmpty ? "@rider" : profile.handle
             self.avatarImageData = profile.avatarImageData
+        }
+
+        if let storedActive = UserDefaults.standard.string(forKey: "activeRideID"),
+           let activeUUID = UUID(uuidString: storedActive) {
+            self.activeRideID = activeUUID
         }
 
         if let storedId = UserDefaults.standard.string(forKey: "backendUserId"),
@@ -674,7 +686,31 @@ final class AppState {
         return ride.id
     }
 
+    func startRide(id: UUID) {
+        activeRideID = id
+        UserDefaults.standard.set(id.uuidString, forKey: "activeRideID")
+        StorageService.shared.markRideActive(id: id)
+        if let idx = rides.firstIndex(where: { $0.id == id }) {
+            rides[idx].tag = "Ongoing"
+        }
+        if let userId = backendUserId, let ride = rides.first(where: { $0.id == id }), ride.organiserId == userId {
+            Task {
+                try? await SupabaseManager.shared.updateRideTag(id: id, tag: "Ongoing", userId: userId)
+            }
+        }
+    }
+
     func completeRide(id: UUID) {
+        if activeRideID == id {
+            activeRideID = nil
+            UserDefaults.standard.removeObject(forKey: "activeRideID")
+        }
+        Task {
+            await RideLiveLocationManager.shared.stopSharing()
+            if let userId = backendUserId {
+                try? await SupabaseManager.shared.markRideCompleted(id: id, userId: userId)
+            }
+        }
         if let idx = rides.firstIndex(where: { $0.id == id }) {
             rides[idx].media.append(contentsOf: activeRideMedia)
         }

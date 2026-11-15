@@ -15,11 +15,12 @@ struct RideDetailsView: View {
     }
 
     private func content(ride: Ride) -> some View {
-        let isRideDay = ride.daysAway == 0 || app.rideDay
+        let isOngoing = app.activeRideID == ride.id || ride.tag == "Ongoing"
+        let isRideDay = ride.daysAway == 0 || app.rideDay || isOngoing
         let solo = ride.isSolo
         let invited: Bool = { if case .invited = ride.rsvp { return true } else { return false } }()
         let organisedByYou = ride.organiserId == app.backendUserId || ride.organiser == "you"
-        let canEdit = organisedByYou && !isRideDay
+        let canEdit = organisedByYou && !isRideDay && !isOngoing
 
         return ZStack(alignment: .top) {
             CV.bg.ignoresSafeArea()
@@ -152,13 +153,28 @@ struct RideDetailsView: View {
     }
 
     private func tag(ride: Ride, isRideDay: Bool) -> some View {
+        let isOngoing = app.activeRideID == ride.id || ride.tag == "Ongoing"
+        if isOngoing {
+            return AnyView(
+                HStack(spacing: 5) {
+                    Circle().fill(CV.green).frame(width: 6, height: 6)
+                    Text("Ongoing Ride").cvText(13, .semibold, color: .white, inter: true)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 26)
+                .background(CV.green.opacity(0.35), in: Capsule())
+                .overlay(Capsule().strokeBorder(CV.green, lineWidth: 1))
+            )
+        }
         let fallback = "In \(ride.daysAway) day\(ride.daysAway == 1 ? "" : "s")"
         let text = isRideDay ? "Today · \(ride.displayTime)" : (ride.whenTag ?? fallback)
-        return Text(text)
-            .cvText(13, .semibold, color: .white, inter: true)
-            .padding(.horizontal, 10)
-            .frame(height: 26)
-            .background(isRideDay ? CV.red : Color.white.opacity(0.18), in: Capsule())
+        return AnyView(
+            Text(text)
+                .cvText(13, .semibold, color: .white, inter: true)
+                .padding(.horizontal, 10)
+                .frame(height: 26)
+                .background(isRideDay ? CV.red : Color.white.opacity(0.18), in: Capsule())
+        )
     }
 
     private func stats(ride: Ride) -> some View {
@@ -258,8 +274,29 @@ struct RideDetailsView: View {
 
     @ViewBuilder
     private func cta(ride: Ride, isRideDay: Bool, invited: Bool) -> some View {
-        if isRideDay {
-            Button { app.push(.rideStart) } label: {
+        let isOngoing = app.activeRideID == ride.id || ride.tag == "Ongoing"
+        if isOngoing {
+            Button {
+                app.startRide(id: ride.id)
+                app.push(.rideNav)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "location.fill").font(.system(size: 17, weight: .semibold))
+                    Text("Resume Ride")
+                        .cvText(17, .semibold, color: CV.ink, tracking: -0.17, inter: true)
+                }
+                .foregroundStyle(CV.ink)
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(CV.green, in: Capsule())
+                .shadow(color: CV.green.opacity(0.3), radius: 8, y: 2)
+            }
+            .buttonStyle(.plain)
+        } else if isRideDay {
+            Button {
+                app.startRide(id: ride.id)
+                app.push(.rideStart)
+            } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "play").font(.system(size: 17, weight: .medium))
                     Text("Start ride")

@@ -3,9 +3,17 @@ import SwiftUI
 import CoreLocation
 
 struct Rider: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
+    var userId: UUID?
     var name: String
     var avatarData: Data?
+
+    init(id: UUID = UUID(), userId: UUID? = nil, name: String, avatarData: Data? = nil) {
+        self.id = id
+        self.userId = userId ?? id
+        self.name = name
+        self.avatarData = avatarData
+    }
 }
 
 enum RSVP: Hashable { case organizing, invited(by: String), going }
@@ -31,6 +39,7 @@ struct Ride: Identifiable, Hashable {
     var ridersGoing: Int
     var listMeta: String
     var media: [RideMediaItem] = []
+    var isCompleted: Bool = false
     
     // ✅ Stored unique 6-character code
     var code: String
@@ -41,6 +50,7 @@ struct Ride: Identifiable, Hashable {
          organiser: String = "you", organiserId: UUID? = nil, rsvp: RSVP = .organizing,
          whenTag: String? = nil,
          lockText: String = "Start ride", ridersGoing: Int = 1, listMeta: String = "",
+         isCompleted: Bool = false,
          code: String? = nil) {
         self.id = id
         self.title = title
@@ -61,6 +71,7 @@ struct Ride: Identifiable, Hashable {
         self.lockText = lockText
         self.ridersGoing = ridersGoing
         self.listMeta = listMeta
+        self.isCompleted = isCompleted
         
         if let code = code {
             self.code = code

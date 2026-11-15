@@ -473,8 +473,9 @@ final class SupabaseManager {
         guard !rideIds.isEmpty else { return [] }
         let rows: [RideRow] = try await client.from("rides")
             .select().in("id", values: rideIds).execute().value
+        let activeRows = rows.filter { $0.is_completed != true }
         var out: [Ride] = []
-        for row in rows {
+        for row in activeRows {
             do {
                 let members = try await fetchRideMembers(rideId: row.id)
                 out.append(row.toRide(members: members))
@@ -484,6 +485,29 @@ final class SupabaseManager {
             }
         }
         return out
+    }
+
+    /// Update ride tag (e.g. "Ongoing" when starting). Organiser-only on Supabase.
+    func updateRideTag(id: UUID, tag: String, userId: UUID) async throws {
+        try await client.from("rides")
+            .update(["tag": tag])
+            .eq("id", value: id)
+            .eq("organiser_id", value: userId)
+            .execute()
+    }
+
+    /// Mark ride completed in Supabase. Organiser-only on Supabase.
+    func markRideCompleted(id: UUID, userId: UUID) async throws {
+        struct Update: Encodable {
+            let is_completed: Bool
+            let completed_at: String
+        }
+        let iso = ISO8601DateFormatter().string(from: Date())
+        try await client.from("rides")
+            .update(Update(is_completed: true, completed_at: iso))
+            .eq("id", value: id)
+            .eq("organiser_id", value: userId)
+            .execute()
     }
 
     /// Rides the user has a pending join request on (organiser hasn't accepted yet).
@@ -693,6 +717,8 @@ struct RideRow: Codable, Sendable {
     let route_coords_json: String?
     let route_km: Double?
     let route_minutes: Int?
+    let is_completed: Bool?
+    let completed_at: String?
 }
 
 // Kept for backward compat; not used by the RPC path.
@@ -834,7 +860,8 @@ extension RideRow {
             }
         }
         let riders: [Rider] = members.map { m in
-            Rider(name: m.profiles?.display_name ?? "Rider",
+            Rider(userId: m.user_id,
+                  name: m.profiles?.display_name ?? "Rider",
                   avatarData: m.profiles?.avatar_data.flatMap { Data(base64Encoded: $0) })
         }
         let date = ISO8601DateFormatter().date(from: departs) ?? Date()
@@ -848,6 +875,7 @@ extension RideRow {
             rsvp: .going, lockText: "Start ride",
             ridersGoing: max(1, riders.count),
             listMeta: "\(distance ?? "") · \(from_location ?? "") → \(to_location ?? "")",
+            isCompleted: is_completed ?? false,
             code: code
         )
     }

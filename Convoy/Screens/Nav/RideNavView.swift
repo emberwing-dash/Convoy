@@ -25,6 +25,7 @@ final class POIResults {
 struct RideNavView: View {
     @Environment(AppState.self) private var app
     private let locationService = LocationService.shared
+    @State private var liveLocationManager = RideLiveLocationManager.shared
 
     enum Alert: Equatable {
         case none
@@ -47,6 +48,7 @@ struct RideNavView: View {
 
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var isTrackingUser = true
+    @State private var hasAutoCenteredOnConvoy = false
     @State private var navSteps: [NavStep] = []
     @State private var currentStepIndex = 0
     @State private var announcedThresholds: Set<String> = []
@@ -56,18 +58,22 @@ struct RideNavView: View {
 
     // MARK: Computed data
 
+    private var currentRide: Ride? {
+        app.activeRide ?? app.upcomingRide
+    }
+
     private var destinationName: String {
-        if let ride = app.upcomingRide, !ride.place.isEmpty { return ride.place }
+        if let ride = currentRide, !ride.place.isEmpty { return ride.place }
         if !app.draft.to.isEmpty { return app.draft.to.components(separatedBy: ",")[0] }
         return "Destination"
     }
 
     private var destinationCoordinate: CLLocationCoordinate2D? {
-        app.upcomingRide?.plan.endCoord?.cl ?? app.draft.endCoord?.cl
+        currentRide?.plan.endCoord?.cl ?? app.draft.endCoord?.cl
     }
 
     private var startCoordinate: CLLocationCoordinate2D? {
-        app.upcomingRide?.plan.startCoord?.cl ?? app.draft.startCoord?.cl
+        currentRide?.plan.startCoord?.cl ?? app.draft.startCoord?.cl
     }
 
     private var currentSpeedKmh: Int {
@@ -79,7 +85,7 @@ struct RideNavView: View {
         if locationService.remainingDistance > 0 { return locationService.remainingDistance }
         guard let loc = locationService.currentLocation,
               let dest = destinationCoordinate else {
-            return app.upcomingRide?.plan.selected?.rawDistance
+            return currentRide?.plan.selected?.rawDistance
                 ?? app.draft.selected?.rawDistance ?? 0
         }
         return loc.distance(from: CLLocation(latitude: dest.latitude, longitude: dest.longitude))
@@ -92,13 +98,34 @@ struct RideNavView: View {
             VStack(spacing: 0) {
                 topTurnBanner.padding(.top, 54).padding(.horizontal, 16)
 
+                if !liveLocationManager.otherRidersLocations.isEmpty && phase != .arrived {
+                    Button { focusOnConvoy() } label: {
+                        HStack(spacing: 6) {
+                            Circle().fill(CV.green).frame(width: 8, height: 8)
+                            Text("\(liveLocationManager.otherRidersLocations.count) rider\(liveLocationManager.otherRidersLocations.count == 1 ? "" : "s") live in Convoy")
+                                .cvText(12, .semibold, color: .white, inter: true)
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(hex: 0x00D2FF))
+                        }
+                        .padding(.horizontal, 14).frame(height: 32)
+                        .background(Color(hex: 0x1A1A1D).opacity(0.92), in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color(hex: 0x00D2FF).opacity(0.4), lineWidth: 1))
+                        .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 6)
+                }
+
                 if phase != .arrived {
                     HStack(alignment: .top) {
                         Spacer()
                         AppleMapsRightControls(
                             isTrackingUser: isTrackingUser,
                             isVoiceMuted: isVoiceMuted,
+                            hasConvoyRiders: !liveLocationManager.otherRidersLocations.isEmpty,
                             onRecentre: { recentreOnUser() },
+                            onFocusConvoy: { focusOnConvoy() },
                             onToggleVoice: {
                                 isVoiceMuted.toggle()
                                 NavigationVoice.shared.isMuted = isVoiceMuted
@@ -182,6 +209,26 @@ struct RideNavView: View {
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
         .onAppear {
+            if let r = currentRide {
+                app.startRide(id: r.id)
+                Task {
+                    if let userId = await app.resolvedUserId() {
+                        await liveLocationManager.startSharing(
+                            rideId: r.id,
+                            userId: userId,
+                            displayName: app.displayName
+                        )
+                        if let loc = locationService.currentLocation {
+                            liveLocationManager.sendLocationUpdate(
+                                loc: loc,
+                                heading: locationService.currentHeading,
+                                userId: userId,
+                                displayName: app.displayName
+                            )
+                        }
+                    }
+                }
+            }
             setupConfirmedRoute()
             locationService.startNavigationTracking()
         }
@@ -190,11 +237,39 @@ struct RideNavView: View {
             NavigationVoice.shared.stop()
         }
         .onChange(of: locationService.currentLocation) { _, newLocation in
-            if let loc = newLocation { processRealLocationUpdate(loc) }
+            if let loc = newLocation {
+                processRealLocationUpdate(loc)
+                if let userId = app.backendUserId {
+                    liveLocationManager.sendLocationUpdate(
+                        loc: loc,
+                        heading: locationService.currentHeading,
+                        userId: userId,
+                        displayName: app.displayName
+                    )
+                }
+            }
         }
         .onChange(of: locationService.currentHeading) { _, newHeading in
             if isTrackingUser, let loc = locationService.currentLocation {
                 updateCamera(location: loc, heading: newHeading)
+            }
+            if let loc = locationService.currentLocation, let userId = app.backendUserId {
+                liveLocationManager.sendHeadingUpdate(
+                    loc: loc,
+                    heading: newHeading,
+                    userId: userId,
+                    displayName: app.displayName
+                )
+            }
+        }
+        .onChange(of: liveLocationManager.otherRidersLocations) { _, newMap in
+            guard !newMap.isEmpty else { return }
+            let ownLoc = locationService.currentLocation
+            let isSimulatorOrFar = ownLoc == nil ||
+                (newMap.values.first.map { ownLoc!.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude)) > 50_000 } ?? false)
+            if isSimulatorOrFar && !hasAutoCenteredOnConvoy {
+                hasAutoCenteredOnConvoy = true
+                focusOnConvoy()
             }
         }
         .onChange(of: locationService.isOffRoute) { _, off in
@@ -214,7 +289,7 @@ struct RideNavView: View {
     // MARK: - Route setup
 
     private func setupConfirmedRoute() {
-        let selectedRoute = app.upcomingRide?.plan.selected ?? app.draft.selected
+        let selectedRoute = currentRide?.plan.selected ?? app.draft.selected
         if let route = selectedRoute {
             locationService.setRoute(route.coords.map(\.cl))
             navSteps = route.steps
@@ -315,6 +390,62 @@ struct RideNavView: View {
         }
     }
 
+    private func focusOnRider(_ rider: RiderLiveLocation) {
+        isTrackingUser = false
+        withAnimation(.easeInOut(duration: 0.5)) {
+            cameraPosition = .region(MKCoordinateRegion(
+                center: rider.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
+            ))
+        }
+    }
+
+    private func focusOnConvoy() {
+        isTrackingUser = false
+        var coords: [CLLocationCoordinate2D] = []
+        if let loc = locationService.currentLocation?.coordinate {
+            let isNearConvoyOrDest = destinationCoordinate.map {
+                CLLocation(latitude: loc.latitude, longitude: loc.longitude).distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude)) < 150_000
+            } ?? true
+            if isNearConvoyOrDest {
+                coords.append(loc)
+            }
+        }
+        coords.append(contentsOf: liveLocationManager.otherRiders.map(\.coordinate))
+        if let dest = destinationCoordinate {
+            coords.append(dest)
+        }
+        guard !coords.isEmpty else { return }
+
+        if coords.count == 1, let c = coords.first {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                cameraPosition = .region(MKCoordinateRegion(center: c, span: .init(latitudeDelta: 0.02, longitudeDelta: 0.02)))
+            }
+            return
+        }
+
+        var minLat = coords[0].latitude
+        var maxLat = coords[0].latitude
+        var minLon = coords[0].longitude
+        var maxLon = coords[0].longitude
+
+        for c in coords {
+            minLat = min(minLat, c.latitude)
+            maxLat = max(maxLat, c.latitude)
+            minLon = min(minLon, c.longitude)
+            maxLon = max(maxLon, c.longitude)
+        }
+
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        let span = MKCoordinateSpan(
+            latitudeDelta: max(0.015, (maxLat - minLat) * 1.4),
+            longitudeDelta: max(0.015, (maxLon - minLon) * 1.4)
+        )
+        withAnimation(.easeInOut(duration: 0.5)) {
+            cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
+        }
+    }
+
     // MARK: - Reroute
 
     private func reroute() async {
@@ -372,6 +503,18 @@ struct RideNavView: View {
                                 .foregroundStyle(.white)
                                 .rotationEffect(.degrees(h.trueHeading))
                         }
+                    }
+                }
+            }
+
+            ForEach(liveLocationManager.otherRiders) { rider in
+                Annotation(rider.name, coordinate: rider.coordinate) {
+                    ConvoyRiderMapMarker(
+                        rider: rider,
+                        avatarData: currentRide?.riders.first(where: { $0.userId == rider.userId || $0.name == rider.name })?.avatarData
+                    )
+                    .onTapGesture {
+                        focusOnRider(rider)
                     }
                 }
             }
@@ -540,7 +683,7 @@ struct RideNavView: View {
             distanceUnit: distanceStat.unit,
             destinationName: destinationName,
             quickStop: stop?.0,
-            riderCount: app.upcomingRide?.riders.count ?? 1,
+            riderCount: max(currentRide?.riders.count ?? 1, liveLocationManager.otherRiders.count + 1),
             isExpanded: $isSheetExpanded,
             isVoiceMuted: isVoiceMuted,
             onAddStop: { panel = .addStop },
@@ -830,7 +973,7 @@ struct RideNavView: View {
     }
 
     private var ridersSheet: some View {
-        let rideRiders = app.upcomingRide?.riders ?? []
+        let rideRiders = currentRide?.riders ?? []
         return VStack(spacing: 16) {
             Capsule()
                 .fill(Color.white.opacity(0.3))
@@ -854,7 +997,7 @@ struct RideNavView: View {
             }
             .padding(.horizontal, 20)
 
-            if rideRiders.isEmpty {
+            if rideRiders.isEmpty && liveLocationManager.otherRiders.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "person.crop.circle.badge.plus")
                         .font(.system(size: 30))
@@ -869,10 +1012,31 @@ struct RideNavView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(rideRiders.enumerated()), id: \.offset) { i, r in
+                        let live = liveLocationManager.otherRidersLocations[r.userId ?? UUID()]
+                            ?? liveLocationManager.otherRiders.first(where: { $0.name == r.name })
                         HStack(spacing: 16) {
                             AvatarChip(data: r.avatarData, name: r.name, size: 44)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(r.name).cvText(17, .bold, inter: true)
+                                if let live {
+                                    HStack(spacing: 4) {
+                                        Circle().fill(CV.green).frame(width: 6, height: 6)
+                                        Text("Live · \(live.speedKmh) km/h")
+                                            .cvText(12, .semibold, color: CV.green, inter: true)
+                                        if let myLoc = locationService.currentLocation {
+                                            let d = myLoc.distance(from: CLLocation(latitude: live.latitude, longitude: live.longitude))
+                                            let dStr = d < 1000 ? "\(Int(d)) m away" : String(format: "%.1f km away", d / 1000)
+                                            Text("· \(dStr)")
+                                                .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                                        }
+                                    }
+                                } else if r.name == app.displayName {
+                                    Text("Sharing your location")
+                                        .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                                } else {
+                                    Text("In convoy")
+                                        .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                                }
                             }
                             Spacer()
                             if r.name == app.displayName {
@@ -881,6 +1045,20 @@ struct RideNavView: View {
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 3)
                                     .background(CV.green.opacity(0.15), in: Capsule())
+                            } else if let live {
+                                Button {
+                                    panel = .none
+                                    focusOnRider(live)
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "location.fill").font(.system(size: 11))
+                                        Text("View").cvText(12, .semibold, inter: true)
+                                    }
+                                    .foregroundStyle(Color(hex: 0x00D2FF))
+                                    .padding(.horizontal, 10).frame(height: 28)
+                                    .background(Color(hex: 0x00D2FF).opacity(0.15), in: Capsule())
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, 20).frame(height: 60)
@@ -949,7 +1127,7 @@ struct RideNavView: View {
 
     private func finish() {
         panel = .none
-        if let rideId = app.upcomingRide?.id {
+        if let rideId = currentRide?.id {
             app.completeRide(id: rideId)
         } else {
             app.pop()
@@ -1101,6 +1279,9 @@ struct RideStartingView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .task {
+            if let ride = app.activeRide ?? app.upcomingRide {
+                app.startRide(id: ride.id)
+            }
             for n in [2, 1] {
                 try? await Task.sleep(for: .seconds(1))
                 withAnimation { count = n }

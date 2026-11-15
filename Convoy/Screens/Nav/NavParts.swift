@@ -189,12 +189,25 @@ struct AppleMapsTopBanner: View {
 struct AppleMapsRightControls: View {
     var isTrackingUser: Bool
     var isVoiceMuted: Bool
+    var hasConvoyRiders: Bool = false
     var onRecentre: () -> Void
+    var onFocusConvoy: (() -> Void)? = nil
     var onToggleVoice: () -> Void
     var onSOS: () -> Void
 
     var body: some View {
         VStack(spacing: 12) {
+            if hasConvoyRiders, let onFocusConvoy {
+                Button(action: onFocusConvoy) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0x00D2FF))
+                        .frame(width: 48, height: 48)
+                        .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Circle())
+                        .overlay(Circle().strokeBorder(Color(hex: 0x00D2FF).opacity(0.5), lineWidth: 1.5))
+                }.buttonStyle(.plain)
+            }
+
             Button(action: onRecentre) {
                 Image(systemName: isTrackingUser ? "location.fill" : "location")
                     .font(.system(size: 18, weight: .semibold))
@@ -410,5 +423,66 @@ struct AppleMapsBottomSheet: View {
             }
             .padding(.horizontal, 14).frame(height: 50).contentShape(Rectangle())
         }.buttonStyle(.plain)
+    }
+}
+
+// MARK: - Convoy Map Marker
+
+struct ConvoyRiderMapMarker: View {
+    let rider: RiderLiveLocation
+    let avatarData: Data?
+
+    var body: some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 4) {
+                Circle().fill(CV.green).frame(width: 6, height: 6)
+                Text(rider.name)
+                    .cvText(11, .bold, color: .white, inter: true)
+                if rider.speedKmh > 0 {
+                    Text("· \(rider.speedKmh) km/h")
+                        .cvText(10, .medium, color: Color(hex: 0x00D2FF), inter: true)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color(hex: 0x1A1A1D).opacity(0.94), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color(hex: 0x00D2FF).opacity(0.4), lineWidth: 1))
+            .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
+
+            ZStack {
+                Circle()
+                    .fill(Color(hex: 0x00D2FF).opacity(0.25))
+                    .frame(width: 44, height: 44)
+
+                Circle()
+                    .fill(.white)
+                    .frame(width: 30, height: 30)
+                    .shadow(color: .black.opacity(0.4), radius: 4, y: 1)
+
+                Circle()
+                    .fill(Color(hex: 0x0090D0))
+                    .frame(width: 24, height: 24)
+
+                if let avatarData, let uiImage = UIImage(data: avatarData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 24, height: 24)
+                        .clipShape(Circle())
+                } else {
+                    Image(systemName: "figure.outdoor.cycle")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+
+                if rider.heading > 0 {
+                    Image(systemName: "location.north.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .offset(y: -19)
+                        .rotationEffect(.degrees(rider.heading))
+                }
+            }
+        }
     }
 }

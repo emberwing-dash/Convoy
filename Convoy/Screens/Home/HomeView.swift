@@ -139,6 +139,14 @@ struct HomeView: View {
                 .padding(.top, 4)
             actions.padding(.top, 28)
 
+            // Active / Ongoing ride banner
+            if let active = app.activeRide {
+                ActiveRideBanner(ride: active) {
+                    app.push(.rideNav)
+                }
+                .padding(.top, 20)
+            }
+
             // Pending joins (organiser hasn't accepted yet)
             if !app.pendingRideJoinsByMe.isEmpty {
                 HStack {
@@ -201,6 +209,79 @@ struct HomeView: View {
     }
 }
 
+struct ActiveRideBanner: View {
+    let ride: Ride
+    var onResume: () -> Void
+
+    var body: some View {
+        Button(action: onResume) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Circle().fill(CV.green).frame(width: 8, height: 8)
+                    Text("RIDE IN PROGRESS")
+                        .cvText(11, .bold, color: CV.green, tracking: 0.6, inter: true)
+                    Spacer()
+                    Text("Ready to continue")
+                        .cvText(11, .medium, color: CV.cream.opacity(0.6), inter: true)
+                }
+
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(CV.green.opacity(0.18))
+                            .frame(width: 48, height: 48)
+                        Image(systemName: "location.north.fill")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(CV.green)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(ride.title)
+                            .cvText(18, .bold, color: .white, tracking: -0.2, inter: true)
+                            .lineLimit(1)
+                        Text(ride.place.isEmpty ? ride.subtitle : ride.place)
+                            .cvText(13, color: CV.cream.opacity(0.75), inter: true)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                }
+
+                HStack {
+                    HStack(spacing: -6) {
+                        ForEach(ride.riders.prefix(3)) { r in
+                            AvatarChip(data: r.avatarData, name: r.name, size: 24)
+                        }
+                    }
+                    Text(ride.isSolo ? "Solo ride active" : "\(ride.riders.count) riders in convoy")
+                        .cvText(12, color: CV.cream.opacity(0.7), inter: true)
+                        .padding(.leading, 6)
+
+                    Spacer()
+
+                    HStack(spacing: 6) {
+                        Text("Resume Ride")
+                            .cvText(13, .bold, color: CV.ink, inter: true)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(CV.ink)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .background(CV.green, in: Capsule())
+                }
+            }
+            .padding(16)
+            .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(CV.green.opacity(0.4), lineWidth: 1.5)
+            )
+            .shadow(color: CV.green.opacity(0.15), radius: 12)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct AvatarChip: View {
     let data: Data?
     let name: String
@@ -223,6 +304,7 @@ struct AvatarChip: View {
 }
 
 struct UpcomingRideCard: View {
+    @Environment(AppState.self) private var app
     let ride: Ride
     var onTap: () -> Void
 
@@ -242,9 +324,20 @@ struct UpcomingRideCard: View {
                         .init(color: Color(hex: 0x0F0F12, opacity: 0), location: 0),
                         .init(color: Color(hex: 0x0F0F12, opacity: 0.9), location: 1)
                     ], startPoint: .top, endPoint: .bottom)
-                    Text(ride.tag).cvText(12, .semibold, color: .white, inter: true)
-                        .padding(.horizontal, 12).frame(height: 28)
-                        .background(CV.bg.opacity(0.55), in: Capsule()).padding(15)
+                    if app.activeRideID == ride.id || ride.tag == "Ongoing" {
+                        HStack(spacing: 5) {
+                            Circle().fill(CV.green).frame(width: 6, height: 6)
+                            Text("ONGOING").cvText(11, .bold, color: CV.green, inter: true)
+                        }
+                        .padding(.horizontal, 10).frame(height: 28)
+                        .background(Color.black.opacity(0.65), in: Capsule())
+                        .overlay(Capsule().strokeBorder(CV.green.opacity(0.4), lineWidth: 1))
+                        .padding(15)
+                    } else {
+                        Text(ride.tag).cvText(12, .semibold, color: .white, inter: true)
+                            .padding(.horizontal, 12).frame(height: 28)
+                            .background(CV.bg.opacity(0.55), in: Capsule()).padding(15)
+                    }
                     VStack(alignment: .leading, spacing: 8) {
                         Text(ride.title).cvText(22, .bold, color: .white, tracking: -0.33, inter: true)
                         HStack(spacing: 6) {
