@@ -13,7 +13,7 @@ struct RiderProfileView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            ContourBackdrop()
+            ScreenBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Color.clear.frame(height: 44)
@@ -72,7 +72,7 @@ struct RiderProfileView: View {
 
     private func count(_ n: Int, _ label: String) -> some View {
         VStack(spacing: 2) {
-            Text("\(max(0, n))").cvText(18, .bold, color: CV.cream, inter: true)
+            Text("\(max(0, n))").cvText(18, .bold, color: CV.text, inter: true)
             Text(label).cvText(12, color: CV.muted, inter: true)
         }
     }

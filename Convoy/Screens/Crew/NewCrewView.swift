@@ -32,10 +32,10 @@ struct NewCrewView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("New crew").cvText(30, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                    Text("New crew").cvText(30, .bold, color: CV.text, inter: true)
                         .padding(.top, 62)
                     Text("A crew is a group you ride with often. Plan rides for the whole crew in one tap.")
                         .cvText(14, color: CV.muted, lineHeight: 18, inter: true).padding(.top, 8).padding(.bottom, 24)
@@ -51,34 +51,34 @@ struct NewCrewView: View {
                                         .frame(width: 64, height: 64).clipShape(Circle())
                                 } else {
                                     ZStack {
-                                        Color(hex: 0x2A2A2D)
+                                        CV.elevated
                                         Image(systemName: "person.3.fill")
                                             .font(.system(size: 24))
-                                            .foregroundStyle(CV.cream.opacity(0.7))
+                                            .foregroundStyle(CV.text.opacity(0.7))
                                     }
                                     .frame(width: 64, height: 64).clipShape(Circle())
                                 }
                                 Image(systemName: "camera.fill")
                                     .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(CV.ink)
+                                    .foregroundStyle(CV.onAccent)
                                     .frame(width: 22, height: 22)
-                                    .background(CV.cream, in: Circle())
+                                    .background(CV.accent, in: Circle())
                                     .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
                             }
                         }.buttonStyle(.plain)
 
-                        TextField("", text: $name, prompt: Text("Crew Name").foregroundColor(CV.cream.opacity(0.4)))
-                            .focused($focused).tint(CV.red)
-                            .cvText(17, .medium, color: Color(hex: 0xF5EDDE), inter: true)
+                        TextField("", text: $name, prompt: Text("Crew Name").foregroundColor(CV.text.opacity(0.4)))
+                            .focused($focused).tint(CV.accent)
+                            .cvText(17, .medium, color: CV.text, inter: true)
                             .padding(.horizontal, 16).frame(height: 52)
-                            .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .background(CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                     .padding(14)
-                    .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
 
                     if let error = errorMessage {
-                        Text(error).cvText(13, color: CV.red, inter: true).padding(.top, 12)
+                        Text(error).cvText(13, color: CV.accent, inter: true).padding(.top, 12)
                     }
 
                     Text("You'll be the admin. Invite riders next.")
@@ -93,13 +93,13 @@ struct NewCrewView: View {
         .safeAreaInset(edge: .bottom) {
             Button { create() } label: {
                 if isCreating {
-                    ProgressView().tint(CV.ink).frame(maxWidth: .infinity).frame(height: 52)
+                    ProgressView().tint(CV.onAccent).frame(maxWidth: .infinity).frame(height: 52)
                 } else {
-                    Text("Create crew").cvText(15, .semibold, color: CV.ink, inter: true)
+                    Text("Create crew").cvText(15, .semibold, color: CV.onAccent, inter: true)
                         .frame(maxWidth: .infinity).frame(height: 52)
                 }
             }
-            .background(Color(hex: 0xF5EDDE), in: Capsule())
+            .background(CV.accent, in: Capsule())
             .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating ? 0.4 : 1)
             .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
             .buttonStyle(.plain).padding(.horizontal, 20).padding(.bottom, 8)

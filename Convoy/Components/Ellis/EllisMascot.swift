@@ -42,7 +42,7 @@ public struct EllisMascot: View {
             // Subtle ambient aura when celebrating or excited
             if controller.expression == .celebrating || controller.expression == .excited {
                 Circle()
-                    .fill(Color(hex: 0xFF6B00).opacity(0.35))
+                    .fill(CV.accent.opacity(0.35))
                     .frame(width: size * 1.15, height: size * 1.15)
                     .blur(radius: 16)
             }

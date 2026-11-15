@@ -12,7 +12,7 @@ struct PlanDetailsView: View {
         let canContinue = app.draft.routeSet && !app.draft.name.trimmingCharacters(in: .whitespaces).isEmpty
 
         ZStack(alignment: .top) {
-            ContourBackdrop().ignoresSafeArea()
+            ScreenBackground().ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Top Navigation Bar
@@ -31,16 +31,16 @@ struct PlanDetailsView: View {
                             Text("What’s the plan?")
                                 .cvText(32, .bold, tracking: -0.64, inter: true)
                             Text("Name your ride and set the route.")
-                                .cvText(16, color: CV.cream.opacity(0.65), inter: true)
+                                .cvText(16, color: CV.text.opacity(0.65), inter: true)
                         }
 
                         // Ride name input
                         VStack(alignment: .leading, spacing: 10) {
                             FieldLabel(text: "Ride name")
                             TextField("", text: $app.draft.name,
-                                      prompt: Text("e.g. Morning ride to Coorg").foregroundColor(CV.cream.opacity(0.4)))
+                                      prompt: Text("e.g. Morning ride to Coorg").foregroundColor(CV.text.opacity(0.4)))
                                 .focused($focused)
-                                .tint(CV.red)
+                                .tint(CV.accent)
                                 .cvText(17, .regular, tracking: -0.102, inter: true)
                                 .padding(.horizontal, 20)
                                 .frame(height: 56)
@@ -126,13 +126,13 @@ struct PlanDetailsView: View {
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(CV.cream.opacity(0.5))
+                                .foregroundStyle(CV.text.opacity(0.5))
                         }
-                        .foregroundStyle(CV.cream)
+                        .foregroundStyle(CV.text)
                         .padding(.horizontal, 20)
                         .frame(height: 52)
                         .frame(maxWidth: .infinity)
-                        .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Capsule())
+                        .background(CV.surface.opacity(0.92), in: Capsule())
                         .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                         .padding(16)
                     }
@@ -154,7 +154,7 @@ struct PlanDetailsView: View {
                     .cvText(15, .semibold, inter: true)
                     .lineLimit(1)
                 Text(subtext)
-                    .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                    .cvText(12, color: CV.text.opacity(0.55), inter: true)
             }
             Spacer()
             Text("Change")
@@ -167,7 +167,7 @@ struct PlanDetailsView: View {
         .padding(.horizontal, 16)
         .frame(height: 64)
         .frame(maxWidth: .infinity)
-        .background(Color(hex: 0x1A1A1D, opacity: 0.92),
+        .background(CV.surface.opacity(0.92),
                     in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))

@@ -8,7 +8,7 @@ struct MyRidesView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     tabs.padding(.top, 64)
@@ -40,11 +40,11 @@ struct MyRidesView: View {
         let on = tab == v
         return Button { withAnimation(.snappy(duration: 0.2)) { tab = v } } label: {
             HStack(spacing: 6) {
-                Text(t).cvText(15, .semibold, color: on ? CV.ink : CV.cream.opacity(0.55), inter: true)
-                Text(count).cvText(13, .medium, color: on ? CV.ink.opacity(0.55) : CV.cream.opacity(0.4), inter: true)
+                Text(t).cvText(15, .semibold, color: on ? CV.onAccent : CV.text.opacity(0.55), inter: true)
+                Text(count).cvText(13, .medium, color: on ? CV.onAccent.opacity(0.55) : CV.text.opacity(0.4), inter: true)
             }
             .frame(maxWidth: .infinity).frame(height: 36)
-            .background(on ? CV.cream : .clear, in: Capsule())
+            .background(on ? CV.accent : .clear, in: Capsule())
         }.buttonStyle(.plain)
     }
 
@@ -68,8 +68,8 @@ struct MyRidesView: View {
         let invited: Bool = { if case .invited = r.rsvp { return true } else { return false } }()
         let tag: (String, Color) = {
             switch r.rsvp {
-            case .organizing: return ("You’re organizing", CV.red)
-            case .invited(let by): return ("Invite from \(by)", Color(hex: 0xFFB020))
+            case .organizing: return ("You’re organizing", CV.accent)
+            case .invited(let by): return ("Invite from \(by)", CV.warning)
             case .going: return ("Going", CV.green)
             }
         }()
@@ -88,9 +88,9 @@ struct MyRidesView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "calendar").font(.system(size: 13))
                         Text("\(r.displayDate) · \(r.displayTime)")
-                            .cvText(13, .medium, color: CV.cream.opacity(0.8), inter: true)
+                            .cvText(13, .medium, color: CV.text.opacity(0.8), inter: true)
                     }
-                    Text(r.listMeta).cvText(12, color: CV.cream.opacity(0.5), inter: true).padding(.top, 4)
+                    Text(r.listMeta).cvText(12, color: CV.text.opacity(0.5), inter: true).padding(.top, 4)
                     HStack(spacing: 6) {
                         ForEach(r.riders.prefix(3)) { rd in
                             AvatarChip(data: rd.avatarData, name: rd.name, size: 24)
@@ -98,8 +98,8 @@ struct MyRidesView: View {
                     }.padding(.top, 8)
                     if invited {
                         HStack(spacing: 8) {
-                            Text("I’m in").cvText(13, .semibold, color: CV.ink, inter: true)
-                                .frame(width: 100, height: 32).background(CV.cream, in: Capsule())
+                            Text("I’m in").cvText(13, .semibold, color: CV.onAccent, inter: true)
+                                .frame(width: 100, height: 32).background(CV.accent, in: Capsule())
                             Text("Maybe").cvText(13, .semibold, inter: true)
                                 .frame(width: 105, height: 32).background(Color.white.opacity(0.1), in: Capsule())
                         }.padding(.top, 10)
@@ -108,7 +108,7 @@ struct MyRidesView: View {
                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(height: invited ? 204 : 162)
-            .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .background(CV.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
@@ -140,18 +140,18 @@ struct MyRidesView: View {
                     .background(CV.green.opacity(0.15), in: Circle())
                 VStack(alignment: .leading, spacing: 4) {
                     Text(p.title).cvText(15, .semibold, inter: true)
-                    Text(p.displayDate).cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                    Text(p.displayDate).cvText(12, color: CV.text.opacity(0.5), inter: true)
                     Text("\(p.distance) · \(p.duration)")
-                        .cvText(12, .semibold, color: CV.cream.opacity(0.7), inter: true)
+                        .cvText(12, .semibold, color: CV.text.opacity(0.7), inter: true)
                 }
                 Spacer()
                 Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(CV.cream.opacity(0.4))
+                    .foregroundStyle(CV.text.opacity(0.4))
             }
             .padding(12)
             .frame(maxWidth: .infinity)
             .frame(height: 76)
-            .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
         }.buttonStyle(.plain)
@@ -160,15 +160,15 @@ struct MyRidesView: View {
     private func emptyState(icon: String, title: String, subtitle: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: icon).font(.system(size: 22))
-                .foregroundStyle(CV.cream.opacity(0.5))
+                .foregroundStyle(CV.text.opacity(0.5))
                 .frame(width: 52, height: 52)
                 .background(Color.white.opacity(0.06), in: Circle())
             Text(title).cvText(16, .semibold, inter: true)
-            Text(subtitle).cvText(13, color: CV.cream.opacity(0.5), inter: true)
+            Text(subtitle).cvText(13, color: CV.text.opacity(0.5), inter: true)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity).padding(28)
-        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }

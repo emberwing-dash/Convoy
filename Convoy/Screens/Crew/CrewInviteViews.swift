@@ -45,7 +45,7 @@ struct CrewInviteView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -54,7 +54,7 @@ struct CrewInviteView: View {
 
                     if let searchError {
                         Text(searchError)
-                            .cvText(13, color: CV.red, inter: true)
+                            .cvText(13, color: CV.accent, inter: true)
                             .padding(.leading, 4).padding(.top, 8)
                     }
 
@@ -84,7 +84,7 @@ struct CrewInviteView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Invite to \(crew?.name ?? "crew")")
-                .cvText(28, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                .cvText(28, .bold, color: CV.text, inter: true)
                 .padding(.top, 64)
 
             Text("Select riders to invite — they'll get a notification.")
@@ -104,10 +104,10 @@ struct CrewInviteView: View {
                 app.pop()
             } label: {
                 Text(invitesSent > 0 ? "Done (\(invitesSent))" : "Done")
-                    .cvText(15, .semibold, color: CV.ink, inter: true)
+                    .cvText(15, .semibold, color: CV.onAccent, inter: true)
                     .padding(.horizontal, 20)
                     .frame(height: 44)
-                    .background(CV.cream, in: Capsule())
+                    .background(CV.accent, in: Capsule())
             }
             .buttonStyle(.plain)
         }
@@ -122,15 +122,15 @@ struct CrewInviteView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(CV.cream.opacity(0.45))
+                .foregroundStyle(CV.text.opacity(0.45))
 
             TextField("", text: $searchText,
                       prompt: Text("Search by @handle or name")
-                        .foregroundColor(CV.cream.opacity(0.4)))
+                        .foregroundColor(CV.text.opacity(0.4)))
                 .focused($searchFocused)
                 .autocapitalization(.none)
                 .autocorrectionDisabled()
-                .tint(CV.red)
+                .tint(CV.accent)
                 .cvText(15, .medium, inter: true)
                 .onSubmit { Task { await performSearch() } }
                 .onChange(of: searchText) { _, _ in
@@ -148,14 +148,14 @@ struct CrewInviteView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 16))
-                        .foregroundStyle(CV.cream.opacity(0.4))
+                        .foregroundStyle(CV.text.opacity(0.4))
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 14)
         .frame(height: 48)
-        .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
@@ -166,7 +166,7 @@ struct CrewInviteView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("SELECT RIDERS · \(visibleUsers.count)")
-                    .cvText(12, .semibold, color: CV.cream.opacity(0.5),
+                    .cvText(12, .semibold, color: CV.text.opacity(0.5),
                             tracking: 0.6, inter: true)
 
                 Spacer()
@@ -190,7 +190,7 @@ struct CrewInviteView: View {
                         }
                     } label: {
                         Text(allSelected ? "Deselect all" : "Select all")
-                            .cvText(12, .medium, color: CV.cream.opacity(0.7), inter: true)
+                            .cvText(12, .medium, color: CV.text.opacity(0.7), inter: true)
                     }
                     .buttonStyle(.plain)
                 }
@@ -209,7 +209,7 @@ struct CrewInviteView: View {
                         }
                     }
                 }
-                .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
             }
@@ -238,10 +238,10 @@ struct CrewInviteView: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .strokeBorder(isSelected ? CV.red : Color.white.opacity(0.25), lineWidth: 1.5)
+                        .strokeBorder(isSelected ? CV.accent : Color.white.opacity(0.25), lineWidth: 1.5)
                         .frame(width: 26, height: 26)
                     if isSelected {
-                        Circle().fill(CV.red).frame(width: 26, height: 26)
+                        Circle().fill(CV.accent).frame(width: 26, height: 26)
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)
@@ -258,7 +258,7 @@ struct CrewInviteView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(user.display_name)
-                            .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                            .cvText(15, .semibold, color: CV.text, inter: true)
                             .lineLimit(1)
                         if isFriend {
                             Image(systemName: "person.2.fill")
@@ -276,9 +276,9 @@ struct CrewInviteView: View {
                 if isMember {
                     badge("In crew", color: CV.green)
                 } else if isPending {
-                    badge("Invited", color: Color(hex: 0xFFB020))
+                    badge("Invited", color: CV.warning)
                 } else if isSelected {
-                    badge("Selected", color: CV.red)
+                    badge("Selected", color: CV.accent)
                 }
             }
             .padding(.horizontal, 14)
@@ -302,7 +302,7 @@ struct CrewInviteView: View {
         VStack(spacing: 10) {
             Image(systemName: "person.2")
                 .font(.system(size: 22))
-                .foregroundStyle(CV.cream.opacity(0.45))
+                .foregroundStyle(CV.text.opacity(0.45))
             Text(searchText.isEmpty ? "No friends yet" : "No matches")
                 .cvText(15, .semibold, inter: true)
             Text(searchText.isEmpty
@@ -313,7 +313,7 @@ struct CrewInviteView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
-        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
             .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
     }
@@ -323,7 +323,7 @@ struct CrewInviteView: View {
     private var shareCodeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("OR SHARE THE CODE")
-                .cvText(12, .semibold, color: CV.cream.opacity(0.5),
+                .cvText(12, .semibold, color: CV.text.opacity(0.5),
                         tracking: 0.6, inter: true)
                 .padding(.leading, 4)
 
@@ -331,7 +331,7 @@ struct CrewInviteView: View {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(crew.code)
-                            .cvText(24, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.2, inter: true)
+                            .cvText(24, .bold, color: CV.text, tracking: -0.2, inter: true)
                         Text("convoy://crew/\(crew.code.lowercased())")
                             .cvText(12, color: CV.muted, inter: true)
                     }
@@ -339,13 +339,13 @@ struct CrewInviteView: View {
                     ShareLink(item: "Join \(crew.name) on Convoy: convoy://crew/\(crew.code.lowercased())") {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(CV.ink)
+                            .foregroundStyle(CV.onAccent)
                             .frame(width: 44, height: 44)
-                            .background(Color(hex: 0xF5EDDE), in: Circle())
+                            .background(CV.accent, in: Circle())
                     }
                 }
                 .padding(16)
-                .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
             }
@@ -374,7 +374,7 @@ struct CrewInviteView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(selectedIds.count) rider\(selectedIds.count == 1 ? "" : "s") selected")
-                        .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                        .cvText(15, .semibold, color: CV.text, inter: true)
                     Text("They'll get a crew invite notification")
                         .cvText(12, color: CV.muted, inter: true)
                 }
@@ -385,31 +385,31 @@ struct CrewInviteView: View {
                     Task { await sendInvites() }
                 } label: {
                     if isSending {
-                        ProgressView().tint(CV.ink).frame(width: 120, height: 44)
+                        ProgressView().tint(CV.onAccent).frame(width: 120, height: 44)
                     } else {
                         HStack(spacing: 6) {
                             Text("Send \(selectedIds.count)")
-                                .cvText(14, .bold, color: CV.ink, inter: true)
+                                .cvText(14, .bold, color: CV.onAccent, inter: true)
                             Image(systemName: "paperplane.fill")
                                 .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(CV.ink)
+                                .foregroundStyle(CV.onAccent)
                         }
                         .frame(height: 44)
                         .padding(.horizontal, 16)
                     }
                 }
-                .background(CV.cream, in: Capsule())
+                .background(CV.accent, in: Capsule())
                 .disabled(isSending)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(
-                Color(hex: 0x19191D).opacity(0.97)
+                CV.surface.opacity(0.97)
                     .background(.ultraThinMaterial)
             )
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(CV.red.opacity(0.4), lineWidth: 1.5))
+                .strokeBorder(CV.accent.opacity(0.4), lineWidth: 1.5))
             .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
             .padding(.horizontal, 20)
             .padding(.bottom, 24)
@@ -426,11 +426,11 @@ struct CrewInviteView: View {
                     .foregroundStyle(CV.green)
                     .font(.system(size: 14))
                 Text(text)
-                    .cvText(13, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                    .cvText(13, .semibold, color: CV.text, inter: true)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
-            .background(Color(hex: 0x1E1E22), in: Capsule())
+            .background(CV.surface, in: Capsule())
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
             .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
             .padding(.top, 56)

@@ -20,11 +20,11 @@ struct SlideToRide: View {
                     .padding(.trailing, slid ? knob : 0)
 
                 Circle()
-                    .fill(CV.cream)
+                    .fill(CV.accent)
                     .frame(width: knob, height: knob)
                     .overlay(Image(systemName: "arrow.right")
                         .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(CV.ink))
+                        .foregroundStyle(CV.onAccent))
                     .offset(x: pad + (slid ? travel : offset))
                     .gesture(
                         DragGesture()
@@ -45,8 +45,8 @@ struct SlideToRide: View {
             }
             .frame(maxHeight: .infinity)
             .background {
-                Capsule().fill(slid ? Color(red: 230/255, green: 56/255, blue: 51/255, opacity: 0.9) : CV.glassFill)
-                    .overlay(Capsule().strokeBorder(slid ? Color(red: 1, green: 115/255, blue: 102/255, opacity: 0.5) : CV.glassStroke, lineWidth: 1))
+                Capsule().fill(slid ? CV.accent.opacity(0.9) : CV.glassFill)
+                    .overlay(Capsule().strokeBorder(slid ? CV.accentLight.opacity(0.5) : CV.glassStroke, lineWidth: 1))
             }
         }
         .frame(height: 64)

@@ -32,7 +32,7 @@ struct InviteFriendsView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -41,7 +41,7 @@ struct InviteFriendsView: View {
 
                     if let searchError {
                         Text(searchError)
-                            .cvText(13, color: CV.red, inter: true)
+                            .cvText(13, color: CV.accent, inter: true)
                             .padding(.leading, 4).padding(.top, 8)
                     }
 
@@ -75,10 +75,10 @@ struct InviteFriendsView: View {
             Spacer()
             Button { app.pop() } label: {
                 Text("Done")
-                    .cvText(15, .semibold, color: CV.ink, inter: true)
+                    .cvText(15, .semibold, color: CV.onAccent, inter: true)
                     .padding(.horizontal, 20)
                     .frame(height: 44)
-                    .background(CV.cream, in: Capsule())
+                    .background(CV.accent, in: Capsule())
             }
             .buttonStyle(.plain)
         }
@@ -89,7 +89,7 @@ struct InviteFriendsView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Invite Friends")
-                .cvText(28, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                .cvText(28, .bold, color: CV.text, inter: true)
                 .padding(.top, 64)
             Text("Search by @handle to add riders or share your invite link.")
                 .cvText(14, color: CV.muted, lineHeight: 19, inter: true)
@@ -100,13 +100,13 @@ struct InviteFriendsView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(CV.cream.opacity(0.45))
+                .foregroundStyle(CV.text.opacity(0.45))
             TextField("", text: $searchText,
-                      prompt: Text("Search by @handle or name").foregroundColor(CV.cream.opacity(0.4)))
+                      prompt: Text("Search by @handle or name").foregroundColor(CV.text.opacity(0.4)))
                 .focused($searchFocused)
                 .autocapitalization(.none)
                 .autocorrectionDisabled()
-                .tint(CV.red)
+                .tint(CV.accent)
                 .cvText(15, .medium, inter: true)
                 .onSubmit { Task { await performSearch() } }
                 .onChange(of: searchText) { _, _ in
@@ -118,7 +118,7 @@ struct InviteFriendsView: View {
                     }
                 }
             if isSearching {
-                ProgressView().tint(CV.cream.opacity(0.6)).scaleEffect(0.8)
+                ProgressView().tint(CV.text.opacity(0.6)).scaleEffect(0.8)
             } else if !searchText.isEmpty {
                 Button {
                     searchText = ""
@@ -127,14 +127,14 @@ struct InviteFriendsView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 16))
-                        .foregroundStyle(CV.cream.opacity(0.45))
+                        .foregroundStyle(CV.text.opacity(0.45))
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 14)
         .frame(height: 50)
-        .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
@@ -142,7 +142,7 @@ struct InviteFriendsView: View {
     private var searchResultsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("SEARCH RESULTS")
-                .cvText(12, .semibold, color: CV.cream.opacity(0.5), tracking: 0.6, inter: true)
+                .cvText(12, .semibold, color: CV.text.opacity(0.5), tracking: 0.6, inter: true)
                 .padding(.leading, 4)
             if searchResults.isEmpty && !isSearching {
                 noResultsCard
@@ -156,7 +156,7 @@ struct InviteFriendsView: View {
                         }
                     }
                 }
-                .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
             }
@@ -166,7 +166,7 @@ struct InviteFriendsView: View {
     private var friendsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("YOUR FRIENDS · \(app.friends.count)")
-                .cvText(12, .semibold, color: CV.cream.opacity(0.5), tracking: 0.6, inter: true)
+                .cvText(12, .semibold, color: CV.text.opacity(0.5), tracking: 0.6, inter: true)
                 .padding(.leading, 4)
             if app.friends.isEmpty {
                 emptyFriendsCard
@@ -180,7 +180,7 @@ struct InviteFriendsView: View {
                         }
                     }
                 }
-                .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
             }
@@ -197,7 +197,7 @@ struct InviteFriendsView: View {
                        name: user.display_name, size: 42)
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.display_name.isEmpty ? "@\(user.username)" : user.display_name)
-                    .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                    .cvText(15, .semibold, color: CV.text, inter: true)
                     .lineLimit(1)
                 Text("@\(user.username)").cvText(12, color: CV.muted, inter: true).lineLimit(1)
             }
@@ -205,24 +205,24 @@ struct InviteFriendsView: View {
             if isFriend {
                 badge("Friends", icon: "checkmark", color: CV.green)
             } else if isPending {
-                badge("Requested", icon: "clock.fill", color: Color(hex: 0xFFB020))
+                badge("Requested", icon: "clock.fill", color: CV.warning)
             } else {
                 Button {
                     Task { await sendFriendRequest(to: user) }
                 } label: {
                     if isSending {
-                        ProgressView().tint(CV.ink)
+                        ProgressView().tint(CV.onAccent)
                             .frame(width: 86, height: 34)
-                            .background(CV.cream, in: Capsule())
+                            .background(CV.accent, in: Capsule())
                     } else {
                         HStack(spacing: 5) {
                             Image(systemName: "person.badge.plus")
                                 .font(.system(size: 12, weight: .semibold))
                             Text("Add").cvText(13, .semibold, inter: true)
                         }
-                        .foregroundStyle(CV.ink)
+                        .foregroundStyle(CV.onAccent)
                         .padding(.horizontal, 16).frame(height: 34)
-                        .background(CV.cream, in: Capsule())
+                        .background(CV.accent, in: Capsule())
                     }
                 }
                 .buttonStyle(.plain).disabled(isSending)
@@ -247,7 +247,7 @@ struct InviteFriendsView: View {
     private var noResultsCard: some View {
         VStack(spacing: 8) {
             Image(systemName: "person.slash")
-                .font(.system(size: 22)).foregroundStyle(CV.cream.opacity(0.45))
+                .font(.system(size: 22)).foregroundStyle(CV.text.opacity(0.45))
                 .padding(.top, 4)
             Text("No rider found").cvText(15, .semibold, inter: true)
             Text("Check the handle spelling or share your invite link below.")
@@ -256,7 +256,7 @@ struct InviteFriendsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24).padding(.horizontal, 16)
-        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
             .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
     }
@@ -264,7 +264,7 @@ struct InviteFriendsView: View {
     private var emptyFriendsCard: some View {
         VStack(spacing: 10) {
             Image(systemName: "person.2")
-                .font(.system(size: 24)).foregroundStyle(CV.cream.opacity(0.45))
+                .font(.system(size: 24)).foregroundStyle(CV.text.opacity(0.45))
                 .padding(.top, 4)
             Text("No friends yet").cvText(15, .semibold, inter: true)
             Text("Search riders by @handle above or share your invite link below.")
@@ -273,7 +273,7 @@ struct InviteFriendsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28).padding(.horizontal, 20)
-        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
             .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
     }
@@ -281,12 +281,12 @@ struct InviteFriendsView: View {
     private var shareLinkSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("OR SHARE INVITE LINK")
-                .cvText(12, .semibold, color: CV.cream.opacity(0.5), tracking: 0.6, inter: true)
+                .cvText(12, .semibold, color: CV.text.opacity(0.5), tracking: 0.6, inter: true)
                 .padding(.leading, 4)
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(inviteLink)
-                        .cvText(18, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                        .cvText(18, .bold, color: CV.text, inter: true)
                         .lineLimit(1)
                     Text("Share this link with someone who isn't on Convoy yet.")
                         .cvText(12, color: CV.muted, inter: true)
@@ -294,13 +294,13 @@ struct InviteFriendsView: View {
                 Spacer()
                 ShareLink(item: "Ride with me on Convoy: \(inviteLink)") {
                     Text("Share")
-                        .cvText(14, .semibold, color: CV.ink, inter: true)
+                        .cvText(14, .semibold, color: CV.onAccent, inter: true)
                         .padding(.horizontal, 20).frame(height: 38)
-                        .background(Color(hex: 0xF5EDDE), in: Capsule())
+                        .background(CV.accent, in: Capsule())
                 }
             }
             .padding(16)
-            .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
         }
@@ -312,10 +312,10 @@ struct InviteFriendsView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(CV.green).font(.system(size: 14))
                 Text(text)
-                    .cvText(13, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                    .cvText(13, .semibold, color: CV.text, inter: true)
             }
             .padding(.horizontal, 18).padding(.vertical, 10)
-            .background(Color(hex: 0x1E1E22), in: Capsule())
+            .background(CV.surface, in: Capsule())
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
             .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
             .padding(.top, 56)

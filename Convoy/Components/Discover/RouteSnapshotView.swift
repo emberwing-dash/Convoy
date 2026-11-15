@@ -13,7 +13,7 @@ struct RouteSnapshotView: View {
     @State private var image: UIImage?
 
     init(coords: [Coord], size: CGSize? = nil, height: CGFloat = 120, corner: CGFloat = 0,
-         lineColor: UIColor = UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1), showsEndpoints: Bool = true) {
+         lineColor: UIColor = UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1), showsEndpoints: Bool = true) {
         self.coords = coords
         self.size = size
         self.height = size?.height ?? height
@@ -43,7 +43,7 @@ struct RouteSnapshotView: View {
     var body: some View {
         let resolvedSize = targetSize
         ZStack {
-            Color(hex: 0x141417)
+            CV.bg2
             if let image {
                 Image(uiImage: image)
                     .resizable()
@@ -100,7 +100,7 @@ struct RouteSnapshotView: View {
             path.stroke()
             if showsEndpoints, let a = pts.first, let b = pts.last {
                 dot(at: snap.point(for: a), fill: .white, r: 6)
-                dot(at: snap.point(for: b), fill: UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1), r: 8, ring: true)
+                dot(at: snap.point(for: b), fill: UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1), r: 8, ring: true)
             }
         }
     }

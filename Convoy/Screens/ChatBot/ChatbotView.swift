@@ -158,7 +158,7 @@ struct ChatbotView: View {
                     .scaledToFit()
                     .frame(width: 28, height: 28)
                     .clipShape(Circle())
-                    .overlay(Circle().strokeBorder(Color(hex: 0xFF6B00).opacity(0.4), lineWidth: 1))
+                    .overlay(Circle().strokeBorder(CV.accent.opacity(0.4), lineWidth: 1))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Ellis").cvText(16, .semibold, inter: true)
@@ -176,7 +176,7 @@ struct ChatbotView: View {
                 } label: {
                     Image(systemName: "arrow.counterclockwise.circle.fill")
                         .font(.system(size: 20))
-                        .foregroundStyle(Color(hex: 0xFF6B00).opacity(0.85))
+                        .foregroundStyle(CV.accent.opacity(0.85))
                 }
                 .buttonStyle(.plain)
                 .frame(width: 44, height: 44)
@@ -199,9 +199,9 @@ struct ChatbotView: View {
         return "\(engine.promptsRemaining)/9999 prompts left today"
     }
     private var rateColor: Color {
-        if engine.promptsRemaining <= 0 { return Color(hex: 0xFF5C00) }
-        if engine.promptsRemaining <= 10 { return Color(hex: 0xFFB020) }
-        return CV.cream.opacity(0.5)
+        if engine.promptsRemaining <= 0 { return CV.accent }
+        if engine.promptsRemaining <= 10 { return CV.warning }
+        return CV.text.opacity(0.5)
     }
 
     private var progressBanner: some View {
@@ -211,18 +211,18 @@ struct ChatbotView: View {
         return HStack(spacing: 8) {
             Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color(hex: 0xFF5C00))
+                .foregroundStyle(CV.accent)
             Text("Ride to \(draft.destination ?? "…")")
                 .cvText(12, .semibold, inter: true)
             Text("· \(collected) of 3 details")
-                .cvText(11, color: CV.cream.opacity(0.55), inter: true)
+                .cvText(11, color: CV.text.opacity(0.55), inter: true)
             Spacer()
             Text(next)
-                .cvText(11, .medium, color: Color(hex: 0xFF5C00), inter: true)
+                .cvText(11, .medium, color: CV.accent, inter: true)
         }
         .padding(.horizontal, 14).frame(height: 36)
-        .background(Color(hex: 0xFF5C00).opacity(0.12), in: Capsule())
-        .overlay(Capsule().strokeBorder(Color(hex: 0xFF5C00).opacity(0.3), lineWidth: 1))
+        .background(CV.accent.opacity(0.12), in: Capsule())
+        .overlay(Capsule().strokeBorder(CV.accent.opacity(0.3), lineWidth: 1))
         .padding(.horizontal, 20).padding(.bottom, 8)
     }
 
@@ -314,7 +314,7 @@ struct ChatbotView: View {
             // ── "Try one of these" + starters — immediately below bubble ──
             VStack(alignment: .leading, spacing: 8) {
                 Text("Try one of these")
-                    .cvText(12, .semibold, color: CV.cream.opacity(0.5), tracking: 0.6, inter: true)
+                    .cvText(12, .semibold, color: CV.text.opacity(0.5), tracking: 0.6, inter: true)
                     .padding(.top, 16)
 
                 VStack(spacing: 8) {
@@ -323,14 +323,14 @@ struct ChatbotView: View {
                             HStack(spacing: 10) {
                                 Image(systemName: item.1)
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(Color(hex: 0xFF5C00))
+                                    .foregroundStyle(CV.accent)
                                     .frame(width: 32, height: 32)
-                                    .background(Color(hex: 0xFF5C00).opacity(0.12), in: Circle())
+                                    .background(CV.accent.opacity(0.12), in: Circle())
                                 Text(item.0).cvText(14, .medium, inter: true).lineLimit(1)
                                 Spacer()
                                 Image(systemName: "arrow.up.right")
                                     .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(CV.cream.opacity(0.35))
+                                    .foregroundStyle(CV.text.opacity(0.35))
                             }
                             .padding(.horizontal, 12).frame(height: 52)
                             .background(CV.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -357,9 +357,9 @@ struct ChatbotView: View {
                 HStack {
                     Spacer(minLength: 60)
                     Text(msg.text)
-                        .cvText(15, color: CV.ink, lineHeight: 21, inter: true)
+                        .cvText(15, color: CV.onAccent, lineHeight: 21, inter: true)
                         .padding(14)
-                        .background(CV.cream, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .background(CV.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
             case .assistant, .system:
                 HStack(alignment: .top, spacing: 12) {
@@ -386,10 +386,10 @@ struct ChatbotView: View {
                 }
             case .error:
                 HStack {
-                    Text(msg.text).cvText(13, color: Color(hex: 0xFF5C00), inter: true)
+                    Text(msg.text).cvText(13, color: CV.accent, inter: true)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(hex: 0xFF5C00).opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(CV.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
             }
         }
@@ -402,30 +402,30 @@ struct ChatbotView: View {
                 HStack(spacing: 8) {
                     Image(systemName: p.isNavigating ? "arrow.up.forward.app" : "questionmark.circle.fill")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0xFFB020))
+                        .foregroundStyle(CV.warning)
                     Text(p.displayTitle).cvText(15, .semibold, inter: true)
                 }
                 Text(p.displayDetail)
-                    .cvText(13, color: CV.cream.opacity(0.7), lineHeight: 18, inter: true)
+                    .cvText(13, color: CV.text.opacity(0.7), lineHeight: 18, inter: true)
                     .lineLimit(4)
                 HStack(spacing: 8) {
                     Button { Task { await engine.cancelPending(app: app) } } label: {
-                        Text("Cancel").cvText(13, .semibold, color: CV.cream.opacity(0.75), inter: true)
+                        Text("Cancel").cvText(13, .semibold, color: CV.text.opacity(0.75), inter: true)
                             .frame(maxWidth: .infinity).frame(height: 40)
                             .background(Color.white.opacity(0.08), in: Capsule())
                     }.buttonStyle(.plain)
                     Button { Task { await engine.confirmPending(app: app) } } label: {
-                        Text(p.buttonLabel).cvText(13, .semibold, color: CV.ink, inter: true)
+                        Text(p.buttonLabel).cvText(13, .semibold, color: CV.onAccent, inter: true)
                             .frame(maxWidth: .infinity).frame(height: 40)
-                            .background(CV.cream, in: Capsule())
+                            .background(CV.accent, in: Capsule())
                     }.buttonStyle(.plain)
                 }
             }
             .padding(14)
-            .background(Color(hex: 0xFFB020).opacity(0.08),
+            .background(CV.warning.opacity(0.08),
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color(hex: 0xFFB020).opacity(0.3), lineWidth: 1))
+                .strokeBorder(CV.warning.opacity(0.3), lineWidth: 1))
         }
     }
 
@@ -433,9 +433,9 @@ struct ChatbotView: View {
         HStack(alignment: .top, spacing: 12) {
             assistantAvatar
             HStack(spacing: 8) {
-                ProgressView().tint(CV.cream).scaleEffect(0.8)
+                ProgressView().tint(CV.accent).scaleEffect(0.8)
                 Text(engine.thinkingStatus ?? "Thinking…")
-                    .cvText(13, color: CV.cream.opacity(0.6), inter: true)
+                    .cvText(13, color: CV.text.opacity(0.6), inter: true)
             }
             .padding(.horizontal, 14).padding(.vertical, 12)
             .background(CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -447,16 +447,16 @@ struct ChatbotView: View {
         HStack(alignment: .top, spacing: 12) {
             assistantAvatar
             VStack(alignment: .leading, spacing: 8) {
-                Text(text).cvText(13, color: CV.cream, lineHeight: 18, inter: true)
+                Text(text).cvText(13, color: CV.text, lineHeight: 18, inter: true)
                 Button { engine.clearError() } label: {
-                    Text("Dismiss").cvText(12, .semibold, color: Color(hex: 0xFF5C00), inter: true)
+                    Text("Dismiss").cvText(12, .semibold, color: CV.accent, inter: true)
                 }.buttonStyle(.plain)
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(hex: 0xFF5C00).opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(CV.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color(hex: 0xFF5C00).opacity(0.3), lineWidth: 1))
+                .strokeBorder(CV.accent.opacity(0.3), lineWidth: 1))
         }
     }
 
@@ -466,7 +466,7 @@ struct ChatbotView: View {
             .scaledToFit()
             .frame(width: 36, height: 36)
             .clipShape(Circle())
-            .overlay(Circle().strokeBorder(Color(hex: 0xFF6B00).opacity(0.35), lineWidth: 1))
+            .overlay(Circle().strokeBorder(CV.accent.opacity(0.35), lineWidth: 1))
     }
 
     // MARK: - Input Composer
@@ -478,10 +478,10 @@ struct ChatbotView: View {
                           prompt: Text(engine.promptsRemaining > 0
                                        ? "Ask anything about rides, places, crews…"
                                        : "Daily limit reached")
-                                    .foregroundColor(CV.cream.opacity(0.35)),
+                                    .foregroundColor(CV.text.opacity(0.35)),
                           axis: .vertical)
                     .focused($focused)
-                    .tint(Color(hex: 0xFF5C00))
+                    .tint(CV.accent)
                     .cvText(15, inter: true)
                     .lineLimit(1...4)
                     .disabled(engine.promptsRemaining == 0)
@@ -490,7 +490,7 @@ struct ChatbotView: View {
                     Button { input = "" } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 15))
-                            .foregroundStyle(CV.cream.opacity(0.4))
+                            .foregroundStyle(CV.text.opacity(0.4))
                     }.buttonStyle(.plain)
                 }
             }
@@ -502,9 +502,9 @@ struct ChatbotView: View {
             Button { send() } label: {
                 Image(systemName: engine.isThinking ? "hourglass" : "arrow.up")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(canSend ? CV.ink : CV.cream.opacity(0.35))
+                    .foregroundStyle(canSend ? CV.onAccent : CV.text.opacity(0.35))
                     .frame(width: 44, height: 44)
-                    .background(canSend ? CV.cream : Color.white.opacity(0.08), in: Circle())
+                    .background(canSend ? CV.accent : Color.white.opacity(0.08), in: Circle())
             }
             .buttonStyle(.plain)
             .disabled(!canSend)

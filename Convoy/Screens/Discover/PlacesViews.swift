@@ -166,7 +166,7 @@ struct PlaceDetailView: View {
                     Text(p.name).cvText(30, .bold, tracking: -0.5, inter: true).padding(.top, 12)
                     Text(p.region).cvText(15, color: CV.muted, inter: true).padding(.top, 2)
                     rideCard(p).padding(.top, 16)
-                    Text(p.summary).cvText(15, color: CV.cream.opacity(0.9), lineHeight: 22, inter: true).padding(.top, 16)
+                    Text(p.summary).cvText(15, color: CV.text.opacity(0.9), lineHeight: 22, inter: true).padding(.top, 16)
 
                     HStack(spacing: 10) {
                         DiscoverButton(title: store.inTrip(p) ? "In trip" : "Add to trip", symbol: store.inTrip(p) ? "checkmark" : nil,
@@ -233,7 +233,7 @@ struct PlaceDetailView: View {
 
     @ViewBuilder private func rideCard(_ p: DiscoverPlace) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "motorcycle").font(.system(size: 18)).foregroundStyle(CV.cream)
+            Image(systemName: "motorcycle").font(.system(size: 18)).foregroundStyle(CV.text)
             VStack(alignment: .leading, spacing: 2) {
                 if let d = store.rideDetail(p) {
                     Text(d.title).cvText(18, .semibold, inter: true)
@@ -246,7 +246,7 @@ struct PlaceDetailView: View {
             }
             Spacer()
             Button(store.origin == nil ? "Set" : "Change") { pickingOrigin = true }
-                .cvText(14, .semibold, color: CV.red, inter: true).buttonStyle(.plain)
+                .cvText(14, .semibold, color: CV.accent, inter: true).buttonStyle(.plain)
         }
         .padding(14)
         .glassRounded(16)

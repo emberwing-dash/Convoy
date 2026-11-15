@@ -131,16 +131,16 @@ struct SuggestedRiderCard: View {
             Button { app.push(.riderProfile(rider.id)) } label: {
                 VStack(spacing: 6) {
                     AvatarChip(data: rider.rider.avatarData, name: rider.rider.name, size: 64).padding(.bottom, 4)
-                    Text(rider.rider.name).cvText(16, .bold, color: CV.cream, inter: true).lineLimit(1)
+                    Text(rider.rider.name).cvText(16, .bold, color: CV.text, inter: true).lineLimit(1)
                     Text(statsLine).cvText(12, color: CV.muted, inter: true).lineLimit(1)
                 }
             }
             .buttonStyle(.plain)
             Text(rider.reason)
-                .cvText(11, .semibold, color: CV.red, inter: true)
+                .cvText(11, .medium, color: CV.muted, inter: true)
                 .lineLimit(2).multilineTextAlignment(.center)
                 .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(CV.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(CV.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .frame(minHeight: 34)
             FollowButton(riderId: rider.id).padding(.top, 2)
         }
@@ -166,15 +166,15 @@ struct SeeAllRidersCard: View {
                 Spacer()
                 ZStack {
                     Circle()
-                        .fill(CV.red.opacity(0.14))
+                        .fill(CV.accent.opacity(0.14))
                         .frame(width: 58, height: 58)
                     Image(systemName: "arrow.right.circle.fill")
                         .font(.system(size: 32, weight: .semibold))
-                        .foregroundStyle(CV.red)
+                        .foregroundStyle(CV.accent)
                 }
                 VStack(spacing: 3) {
                     Text("See all\nriders")
-                        .cvText(15, .bold, color: CV.cream, inter: true)
+                        .cvText(15, .bold, color: CV.text, inter: true)
                         .multilineTextAlignment(.center)
                         .lineSpacing(-2)
                     Text("Explore all")
@@ -211,7 +211,7 @@ struct FeedPostCard: View {
             if !mediaPages.isEmpty { FeedMediaCarousel(post: post, pages: mediaPages) }
             if let ride = post.openRide { openRideBody(ride) } else if let recap = post.recap { recapBody(recap) }
         }
-        .background(Color(hex: 0x1A1A1D).opacity(0.94), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(CV.surface.opacity(0.94), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .confirmationDialog("Delete this post?", isPresented: $confirmDelete, titleVisibility: .visible) {
@@ -230,7 +230,7 @@ struct FeedPostCard: View {
             }.buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(post.isMine ? "You" : post.author.name).cvText(16, .bold, color: CV.cream, inter: true).lineLimit(1)
+                    Text(post.isMine ? "You" : post.author.name).cvText(16, .bold, color: CV.text, inter: true).lineLimit(1)
                     if post.kind == .openRide {
                         Text("ADMIN").cvText(10, .bold, color: CVSocial.amber, tracking: 0.8, inter: true)
                             .padding(.horizontal, 7).padding(.vertical, 2)
@@ -285,7 +285,7 @@ struct FeedPostCard: View {
     private func recapBody(_ r: RideRecap) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             if mediaPages.isEmpty {
-                Text(r.title).cvText(17, .bold, color: CV.cream, inter: true).lineLimit(2)
+                Text(r.title).cvText(17, .bold, color: CV.text, inter: true).lineLimit(2)
             }
             HStack(spacing: 8) {
                 FactPill(icon: "point.topleft.down.to.point.bottomright.curvepath", text: "\(RideFormat.km(Double(r.distanceM) / 1000)) km")
@@ -294,7 +294,7 @@ struct FeedPostCard: View {
                 if r.riderCount > 1 { FactPill(icon: "person.2.fill", text: "\(r.riderCount)") }
             }
             if !post.caption.isEmpty {
-                Text(post.caption).cvText(14, color: CV.cream.opacity(0.85), lineHeight: 19, inter: true).lineLimit(3)
+                Text(post.caption).cvText(14, color: CV.text.opacity(0.85), lineHeight: 19, inter: true).lineLimit(3)
             }
         }
         .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 12)
@@ -308,23 +308,23 @@ struct FeedPostCard: View {
                 Button { Task { await app.social.toggleLike(post) } } label: {
                     HStack(spacing: 6) {
                         Image(systemName: post.likedByMe ? "heart.fill" : "heart").font(.system(size: 20))
-                            .foregroundStyle(post.likedByMe ? CV.red : CV.cream)
+                            .foregroundStyle(post.likedByMe ? CV.accent : CV.text)
                         if post.likeCount > 0 {
-                            Text("\(post.likeCount)").cvText(14, .semibold, color: post.likedByMe ? CV.red : CV.cream, inter: true)
+                            Text("\(post.likeCount)").cvText(14, .semibold, color: post.likedByMe ? CV.accent : CV.text, inter: true)
                         }
                     }
                 }.buttonStyle(.plain)
                 .accessibilityLabel(post.likedByMe ? "Unlike" : "Like")
                 Button(action: onComments) {
                     HStack(spacing: 6) {
-                        Image(systemName: "bubble.left").font(.system(size: 19)).foregroundStyle(CV.cream)
+                        Image(systemName: "bubble.left").font(.system(size: 19)).foregroundStyle(CV.text)
                         if post.commentCount > 0 { Text("\(post.commentCount)").cvText(14, .semibold, inter: true) }
                     }
                 }.buttonStyle(.plain)
                 .accessibilityLabel("Comments")
                 Spacer()
                 ShareLink(item: shareText) {
-                    Image(systemName: "square.and.arrow.up").font(.system(size: 18)).foregroundStyle(CV.cream)
+                    Image(systemName: "square.and.arrow.up").font(.system(size: 18)).foregroundStyle(CV.text)
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
@@ -345,7 +345,7 @@ struct FeedPostCard: View {
         VStack(alignment: .leading, spacing: 10) {
             if mediaPages.isEmpty {
                 statusTag(ride)
-                Text(ride.title).cvText(17, .bold, color: CV.cream, inter: true).lineLimit(2)
+                Text(ride.title).cvText(17, .bold, color: CV.text, inter: true).lineLimit(2)
             }
             HStack(spacing: 8) {
                 FactPill(icon: "calendar", text: RideFormat.rideDate(ride.departs))
@@ -367,7 +367,7 @@ struct FeedPostCard: View {
                 }
             }
             if !post.caption.isEmpty {
-                Text(post.caption).cvText(14, color: CV.cream.opacity(0.85), lineHeight: 19, inter: true).lineLimit(2)
+                Text(post.caption).cvText(14, color: CV.text.opacity(0.85), lineHeight: 19, inter: true).lineLimit(2)
             }
             openRideFooter(ride).padding(.top, 2)
         }
@@ -390,7 +390,7 @@ struct FeedPostCard: View {
                         AvatarStack(riders: pending.map(\.rider), size: 28)
                         VStack(alignment: .leading, spacing: 1) {
                             Text("\(ride.pendingRequests) rider\(ride.pendingRequests == 1 ? "" : "s") asked to join")
-                                .cvText(14, .bold, color: CV.cream, inter: true)
+                                .cvText(14, .bold, color: CV.text, inter: true)
                             if !pending.isEmpty {
                                 Text(ListFormatter.localizedString(byJoining: pending.prefix(3).map(\.rider.name)))
                                     .cvText(12, color: CV.muted, inter: true).lineLimit(1)
@@ -398,11 +398,11 @@ struct FeedPostCard: View {
                         }
                         Spacer()
                         Text("\(ride.pendingRequests) new").cvText(11, .bold, color: .white, inter: true)
-                            .padding(.horizontal, 8).padding(.vertical, 3).background(CV.red, in: Capsule())
+                            .padding(.horizontal, 8).padding(.vertical, 3).background(CV.accent, in: Capsule())
                     }
                     .padding(12)
-                    .background(CV.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CV.red.opacity(0.3), lineWidth: 1))
+                    .background(CV.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CV.accent.opacity(0.3), lineWidth: 1))
                 }
                 HStack(spacing: 10) {
                     secondaryButton("Manage") { app.push(.rideDetails(ride.rideId)) }.frame(width: 110)
@@ -425,7 +425,7 @@ struct FeedPostCard: View {
         } else if ride.myRequest == .pending {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Request sent").cvText(15, .bold, color: CV.cream, inter: true)
+                    Text("Request sent").cvText(15, .bold, color: CV.text, inter: true)
                     Text("Waiting for \(post.author.name) to reply").cvText(12, color: CV.muted, inter: true)
                 }
                 Spacer()
@@ -455,14 +455,14 @@ struct FeedPostCard: View {
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity).frame(height: 46)
-            .background(CV.red, in: Capsule())
-            .shadow(color: CV.red.opacity(0.3), radius: 10, y: 5)
+            .background(CV.accent, in: Capsule())
+            .shadow(color: .black.opacity(0.25), radius: 10, y: 5)
         }.buttonStyle(.plain)
     }
 
     private func secondaryButton(_ t: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(t).cvText(16, .bold, color: CV.cream, inter: true)
+            Text(t).cvText(16, .bold, color: CV.text, inter: true)
                 .frame(maxWidth: .infinity).frame(height: 46)
                 .background(Color.white.opacity(0.08), in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
@@ -574,9 +574,9 @@ struct FeedMediaCarousel: View {
                 Button { withAnimation(.snappy) { pageID = p } } label: {
                     Image(systemName: p == .photo ? "photo" : "map")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(page == p ? CV.ink : .white)
+                        .foregroundStyle(page == p ? CV.onAccent : .white)
                         .frame(width: 28, height: 24)
-                        .background(page == p ? CV.cream : Color.white.opacity(0.15), in: Capsule())
+                        .background(page == p ? CV.accent : Color.white.opacity(0.15), in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(p == .photo ? "Destination photo" : "Route map")
@@ -619,7 +619,7 @@ struct FactPill: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: icon).font(.system(size: 11, weight: .semibold)).foregroundStyle(CV.muted)
-            Text(text).cvText(13, .semibold, color: CV.cream, inter: true).lineLimit(1)
+            Text(text).cvText(13, .semibold, color: CV.text, inter: true).lineLimit(1)
         }
         .padding(.horizontal, 10).frame(height: 28)
         .background(Color.white.opacity(0.06), in: Capsule())
@@ -650,7 +650,7 @@ struct JoinRequestSheet: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("SENDING TO").cvText(10, .bold, color: CV.muted, tracking: 1, inter: true)
                         HStack(spacing: 6) {
-                            Text(admin.name).cvText(16, .bold, color: CV.cream, inter: true)
+                            Text(admin.name).cvText(16, .bold, color: CV.text, inter: true)
                             Text("ADMIN").cvText(10, .bold, color: CVSocial.amber, tracking: 0.8, inter: true)
                                 .padding(.horizontal, 7).padding(.vertical, 2)
                                 .background(CVSocial.amber.opacity(0.18), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -666,7 +666,7 @@ struct JoinRequestSheet: View {
                     HStack(spacing: 12) {
                         AvatarChip(data: app.avatarImageData, name: app.displayName, size: 40)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(app.displayName).cvText(16, .bold, color: CV.cream, inter: true)
+                            Text(app.displayName).cvText(16, .bold, color: CV.text, inter: true)
                             Text(meLine).cvText(13, color: CV.muted, inter: true)
                         }
                         Spacer()
@@ -684,7 +684,7 @@ struct JoinRequestSheet: View {
                     NoteField(placeholder: "Say hello, mention your bike or where you'll join from", text: $note, limit: 200)
                 }
 
-                if let error { Text(error).cvText(13, .semibold, color: CV.red, inter: true) }
+                if let error { Text(error).cvText(13, .semibold, color: CV.accent, inter: true) }
 
                 Button(action: send) {
                     HStack(spacing: 8) {
@@ -693,7 +693,7 @@ struct JoinRequestSheet: View {
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity).frame(height: 54)
-                    .background(CV.red, in: Capsule())
+                    .background(CV.accent, in: Capsule())
                 }
                 .buttonStyle(.plain).disabled(sending)
 
@@ -703,7 +703,7 @@ struct JoinRequestSheet: View {
             }
             .padding(20)
         }
-        .background(Color(hex: 0x141416).ignoresSafeArea())
+        .background(CV.bg2.ignoresSafeArea())
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .task {
@@ -763,10 +763,10 @@ struct CommentsSheet: View {
                                 AvatarChip(data: c.author.avatarData, name: c.author.name, size: 34)
                                 VStack(alignment: .leading, spacing: 3) {
                                     HStack(spacing: 6) {
-                                        Text(c.isMine ? "You" : c.author.name).cvText(14, .bold, color: CV.cream, inter: true)
+                                        Text(c.isMine ? "You" : c.author.name).cvText(14, .bold, color: CV.text, inter: true)
                                         Text(RideFormat.relative(c.createdAt)).cvText(12, color: CV.dim, inter: true)
                                     }
-                                    Text(c.body).cvText(14, color: CV.cream.opacity(0.9), lineHeight: 19, inter: true)
+                                    Text(c.body).cvText(14, color: CV.text.opacity(0.9), lineHeight: 19, inter: true)
                                 }
                                 Spacer()
                             }
@@ -775,22 +775,22 @@ struct CommentsSheet: View {
                 }
                 .padding(20)
             }
-            if let error { Text(error).cvText(12, .semibold, color: CV.red, inter: true).padding(.bottom, 6) }
+            if let error { Text(error).cvText(12, .semibold, color: CV.accent, inter: true).padding(.bottom, 6) }
             HStack(spacing: 10) {
-                TextField("", text: $draft, prompt: Text("Add a comment").foregroundColor(CV.cream.opacity(0.35)), axis: .vertical)
-                    .font(.system(size: 15)).foregroundStyle(CV.cream).tint(CV.red).lineLimit(1...4)
+                TextField("", text: $draft, prompt: Text("Add a comment").foregroundColor(CV.text.opacity(0.35)), axis: .vertical)
+                    .font(.system(size: 15)).foregroundStyle(CV.text).tint(CV.accent).lineLimit(1...4)
                     .onChange(of: draft) { _, v in if v.count > 500 { draft = String(v.prefix(500)) } }
                 Button(action: send) {
                     Image(systemName: sending ? "ellipsis" : "arrow.up")
                         .font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
-                        .frame(width: 36, height: 36).background(canSend ? CV.red : Color.white.opacity(0.1), in: Circle())
+                        .frame(width: 36, height: 36).background(canSend ? CV.accent : Color.white.opacity(0.1), in: Circle())
                 }
                 .buttonStyle(.plain).disabled(!canSend)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .background(Color.white.opacity(0.05))
         }
-        .background(Color(hex: 0x141416).ignoresSafeArea())
+        .background(CV.bg2.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .task { await load() }

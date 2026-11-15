@@ -18,7 +18,7 @@ struct PlanReviewView: View {
     var body: some View {
         @Bindable var app = app
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     // Top Bar (Balanced, no awkward cutoffs)
@@ -26,7 +26,7 @@ struct PlanReviewView: View {
                         RoundIconButton(symbol: "chevron.left") { app.pop() }
                         Spacer()
                         Text("Trip Summary")
-                            .cvText(16, .semibold, color: CV.cream.opacity(0.9), tracking: -0.2, inter: true)
+                            .cvText(16, .semibold, color: CV.text.opacity(0.9), tracking: -0.2, inter: true)
                         Spacer()
                         Color.clear.frame(width: 40, height: 40)
                     }
@@ -37,7 +37,7 @@ struct PlanReviewView: View {
                         Text("Ride Confirmation")
                             .cvText(28, .bold, tracking: -0.6, inter: true)
                         Text("Review your details before initiating the ride.")
-                            .cvText(15, color: CV.cream.opacity(0.65), inter: true)
+                            .cvText(15, color: CV.text.opacity(0.65), inter: true)
                     }
                     .padding(.top, 4)
 
@@ -48,16 +48,16 @@ struct PlanReviewView: View {
                                   prompt: Text(app.draft.to.isEmpty
                                                ? "e.g. Morning ride"
                                                : "e.g. Ride to \(shortPlace(app.draft.to))")
-                                                .foregroundColor(CV.cream.opacity(0.40)))
+                                                .foregroundColor(CV.text.opacity(0.40)))
                             .focused($focused)
-                            .tint(Color(hex: 0xFF5C00))
+                            .tint(CV.accent)
                             .cvText(17, .semibold, tracking: -0.102, inter: true)
                             .padding(.horizontal, 16)
                             .frame(height: 54)
                             .glassRounded(18)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .strokeBorder(showNameError ? CV.red : Color.white.opacity(0.08), lineWidth: 1.5)
+                                    .strokeBorder(showNameError ? CV.accent : Color.white.opacity(0.08), lineWidth: 1.5)
                             )
                             .onChange(of: app.draft.name) { _, _ in
                                 if showNameError && !app.draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -66,7 +66,7 @@ struct PlanReviewView: View {
                             }
                         if showNameError {
                             Text("Please enter a name for your ride")
-                                .cvText(13, color: CV.red, inter: true)
+                                .cvText(13, color: CV.accent, inter: true)
                                 .padding(.leading, 16)
                                 .transition(.move(edge: .top).combined(with: .opacity))
                         }
@@ -136,7 +136,7 @@ struct PlanReviewView: View {
                     let waypoints = [sc] + app.draft.stopCoords + [ec]
                     RouteSnapshotView(coords: waypoints, size: CGSize(width: mapWidth, height: mapHeight))
                 } else {
-                    Rectangle().fill(Color(hex: 0x141416))
+                    Rectangle().fill(CV.bg2)
                 }
 
                 // Top shadow gradient for pill legibility
@@ -158,7 +158,7 @@ struct PlanReviewView: View {
                     }
                     .padding(.horizontal, 12)
                     .frame(height: 32)
-                    .background(Color(hex: 0xFF5C00), in: Capsule())
+                    .background(CV.accent, in: Capsule())
                     .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 2)
 
                     Spacer(minLength: 8)
@@ -172,7 +172,7 @@ struct PlanReviewView: View {
                         }
                         .padding(.horizontal, 12)
                         .frame(height: 32)
-                        .background(Color(hex: 0x141416).opacity(0.9), in: Capsule())
+                        .background(CV.bg2.opacity(0.9), in: Capsule())
                         .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
                         .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 2)
                     }
@@ -227,7 +227,7 @@ struct PlanReviewView: View {
         }
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
-        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
@@ -240,15 +240,15 @@ struct PlanReviewView: View {
                 switch icon {
                 case .start:
                     Circle()
-                        .strokeBorder(CV.cream, lineWidth: 3)
+                        .strokeBorder(CV.text, lineWidth: 3)
                         .frame(width: 14, height: 14)
                 case .stop:
                     RoundedRectangle(cornerRadius: 3)
-                        .strokeBorder(CV.cream, lineWidth: 2)
+                        .strokeBorder(CV.text, lineWidth: 2)
                         .frame(width: 14, height: 14)
                 case .end:
                     ZStack {
-                        Circle().fill(Color(hex: 0xFF5C00)).frame(width: 14, height: 14)
+                        Circle().fill(CV.accent).frame(width: 14, height: 14)
                         Circle().fill(.white).frame(width: 4, height: 4)
                     }
                 }
@@ -259,7 +259,7 @@ struct PlanReviewView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(tag)
-                    .cvText(13, color: CV.cream.opacity(0.45), inter: true)
+                    .cvText(13, color: CV.text.opacity(0.45), inter: true)
             }
             .padding(.horizontal, 16)
             .frame(height: 48)
@@ -267,8 +267,8 @@ struct PlanReviewView: View {
             if showDivider {
                 HStack(spacing: 0) {
                     VStack(spacing: 3) {
-                        Circle().fill(CV.cream.opacity(0.35)).frame(width: 2.5, height: 2.5)
-                        Circle().fill(CV.cream.opacity(0.35)).frame(width: 2.5, height: 2.5)
+                        Circle().fill(CV.text.opacity(0.35)).frame(width: 2.5, height: 2.5)
+                        Circle().fill(CV.text.opacity(0.35)).frame(width: 2.5, height: 2.5)
                     }
                     .frame(width: 14)
                     .padding(.leading, 16)
@@ -343,14 +343,14 @@ struct PlanReviewView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "calendar")
                             .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(Color(hex: 0xFF6B00))
+                            .foregroundStyle(CV.accent)
                         Text(app.draft.starts.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
                             .cvText(15, .semibold, inter: true)
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
-                    .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
@@ -364,14 +364,14 @@ struct PlanReviewView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "clock")
                             .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(Color(hex: 0xFF6B00))
+                            .foregroundStyle(CV.accent)
                         Text(app.draft.starts.formatted(.dateTime.hour().minute()))
                             .cvText(15, .semibold, inter: true)
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
-                    .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
@@ -388,15 +388,15 @@ struct PlanReviewView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(isNow ? CV.ink : Color(hex: 0xFF6B00))
+                        .foregroundStyle(isNow ? CV.onAccent : CV.accent)
                     Text("Start now")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(isNow ? CV.ink : Color.white)
+                        .foregroundStyle(isNow ? CV.onAccent : Color.white)
                     Spacer()
                     if isNow {
                         Text("Active")
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(CV.ink)
+                            .foregroundStyle(CV.onAccent)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .background(Color.white.opacity(0.35), in: Capsule())
@@ -405,10 +405,10 @@ struct PlanReviewView: View {
                 .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity)
                 .frame(height: 48)
-                .background(isNow ? Color(hex: 0xFF6B00) : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(isNow ? CV.accent : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(isNow ? Color(hex: 0xFF6B00) : Color.white.opacity(0.08), lineWidth: 1)
+                        .strokeBorder(isNow ? CV.accent : Color.white.opacity(0.08), lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -419,7 +419,7 @@ struct PlanReviewView: View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color(hex: 0xFF6B00))
+                .foregroundStyle(CV.accent)
             Text(text).cvText(14, .semibold, inter: true)
         }
         .padding(.horizontal, 12)
@@ -436,7 +436,7 @@ struct PlanReviewView: View {
                            in: Calendar.current.startOfDay(for: .now)...,
                            displayedComponents: .date)
                     .datePickerStyle(.graphical)
-                    .tint(Color(hex: 0xFF6B00))
+                    .tint(CV.accent)
                     .padding()
                 Spacer()
             }
@@ -446,7 +446,7 @@ struct PlanReviewView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { apply(date: tempDate); showingDatePicker = false }
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0xFF6B00))
+                        .foregroundStyle(CV.accent)
                 }
             }
             .preferredColorScheme(.dark)
@@ -469,7 +469,7 @@ struct PlanReviewView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { apply(time: tempTime); showingTimePicker = false }
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0xFF6B00))
+                        .foregroundStyle(CV.accent)
                 }
             }
             .preferredColorScheme(.dark)

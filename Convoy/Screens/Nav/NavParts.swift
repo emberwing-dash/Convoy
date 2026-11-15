@@ -3,8 +3,8 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
-let navPanel = Color(hex: 0x1A1A1D)
-let amberC = Color(hex: 0xFFB020)
+let navPanel = CV.surface
+let amberC = CV.warning
 
 enum StopKind: String, CaseIterable, Identifiable {
     case fuel = "Fuel"
@@ -25,9 +25,9 @@ enum StopKind: String, CaseIterable, Identifiable {
     }
     var tint: Color {
         switch self {
-        case .fuel: Color(hex: 0xFFB020)
-        case .food: Color(hex: 0xFF3B30)
-        case .rest: Color(hex: 0x30D158)
+        case .fuel: Color(hex: 0xFFD60A)
+        case .food: CV.warning
+        case .rest: CV.success
         case .viewpoint: Color(hex: 0x4C8DFF)
         case .mechanic: Color(hex: 0xA77BFF)
         }
@@ -100,15 +100,15 @@ struct MapCallout: View {
     var body: some View {
         Text(text).cvText(13, .semibold, color: .white, inter: true)
             .padding(.horizontal, 10).frame(height: 28)
-            .background(selected ? CV.red : Color(hex: 0x1A1A1D, opacity: 0.92), in: Capsule())
+            .background(selected ? CV.accent : CV.surface.opacity(0.92), in: Capsule())
     }
 }
 
 struct YouMarker: View {
     var body: some View {
         ZStack {
-            Circle().fill(Color(hex: 0x0A84FF, opacity: 0.25)).frame(width: 44, height: 44)
-            Circle().fill(Color(hex: 0x0A84FF)).frame(width: 18, height: 18)
+            Circle().fill(CV.accent.opacity(0.25)).frame(width: 44, height: 44)
+            Circle().fill(CV.accent).frame(width: 18, height: 18)
                 .overlay(Circle().strokeBorder(.white, lineWidth: 3))
                 .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
         }
@@ -116,7 +116,7 @@ struct YouMarker: View {
 }
 
 extension View {
-    func navCard(_ radius: CGFloat = 26, fill: Color = Color(hex: 0x1A1A1D).opacity(0.96)) -> some View {
+    func navCard(_ radius: CGFloat = 26, fill: Color = CV.surface.opacity(0.96)) -> some View {
         self
             .background(fill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
@@ -152,7 +152,7 @@ struct AppleMapsTopBanner: View {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(CV.cream)
+                        .foregroundStyle(CV.text)
                         .frame(width: 36, height: 36)
                         .background(Color.white.opacity(0.12), in: Circle())
                 }.buttonStyle(.plain)
@@ -164,13 +164,13 @@ struct AppleMapsTopBanner: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 if !distance.isEmpty {
-                    Text(distance).font(.system(size: 24, weight: .bold)).foregroundStyle(CV.cream)
+                    Text(distance).font(.system(size: 24, weight: .bold)).foregroundStyle(CV.text)
                 }
                 Text(instruction).font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(CV.cream).lineLimit(1)
+                    .foregroundStyle(CV.text).lineLimit(1)
                 if let sub = subInstruction, !sub.isEmpty {
                     Text(sub).font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(CV.cream.opacity(0.6)).lineLimit(1)
+                        .foregroundStyle(CV.text.opacity(0.6)).lineLimit(1)
                 }
             }
             Spacer()
@@ -178,7 +178,7 @@ struct AppleMapsTopBanner: View {
         .padding(.horizontal, 16).padding(.vertical, 14)
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Color(hex: 0x1A1A1D).opacity(0.96))
+                .fill(CV.surface.opacity(0.96))
                 .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                 .shadow(color: Color.black.opacity(0.4), radius: 18, y: 4)
@@ -198,28 +198,28 @@ struct AppleMapsRightControls: View {
             Button(action: onRecentre) {
                 Image(systemName: isTrackingUser ? "location.fill" : "location")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(isTrackingUser ? CV.red : CV.cream)
+                    .foregroundStyle(isTrackingUser ? CV.accent : CV.text)
                     .frame(width: 48, height: 48)
-                    .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Circle())
+                    .background(CV.surface.opacity(0.92), in: Circle())
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
             }.buttonStyle(.plain)
 
             Button(action: onToggleVoice) {
                 Image(systemName: isVoiceMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(isVoiceMuted ? CV.cream.opacity(0.5) : CV.cream)
+                    .foregroundStyle(isVoiceMuted ? CV.text.opacity(0.5) : CV.text)
                     .frame(width: 48, height: 48)
-                    .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Circle())
+                    .background(CV.surface.opacity(0.92), in: Circle())
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
             }.buttonStyle(.plain)
 
             Button(action: onSOS) {
                 Image(systemName: "exclamationmark.bubble.fill")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(CV.red)
+                    .foregroundStyle(CV.danger)
                     .frame(width: 48, height: 48)
-                    .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Circle())
-                    .overlay(Circle().strokeBorder(CV.red.opacity(0.4), lineWidth: 1.5))
+                    .background(CV.surface.opacity(0.92), in: Circle())
+                    .overlay(Circle().strokeBorder(CV.danger.opacity(0.4), lineWidth: 1.5))
             }.buttonStyle(.plain)
         }
     }
@@ -231,19 +231,19 @@ struct AppleMapsSpeedometer: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             ZStack {
-                Circle().fill(Color(hex: 0x1A1A1D, opacity: 0.95))
+                Circle().fill(CV.surface.opacity(0.95))
                     .frame(width: 64, height: 64)
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                 VStack(spacing: 0) {
                     Text("\(speed)").cvText(22, .bold, inter: true)
-                    Text("km/h").cvText(9, color: CV.cream.opacity(0.6), inter: true)
+                    Text("km/h").cvText(9, color: CV.text.opacity(0.6), inter: true)
                 }
             }
             if let limit = speedLimit {
                 Text("\(limit)").cvText(13, .bold, color: .black, inter: true)
                     .frame(width: 28, height: 28)
                     .background(.white, in: Circle())
-                    .overlay(Circle().strokeBorder(CV.red, lineWidth: 2.5))
+                    .overlay(Circle().strokeBorder(CV.danger, lineWidth: 2.5))
             }
         }
     }
@@ -280,20 +280,20 @@ struct AppleMapsBottomSheet: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 VStack(spacing: 2) {
-                    Text(arrivalTime).font(.system(size: 26, weight: .bold)).foregroundStyle(CV.cream)
+                    Text(arrivalTime).font(.system(size: 26, weight: .bold)).foregroundStyle(CV.text)
                     Text("arrival").font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(CV.cream.opacity(0.55))
+                        .foregroundStyle(CV.text.opacity(0.55))
                 }.frame(maxWidth: .infinity)
                 VStack(spacing: 2) {
                     Text(durationValue).font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(isExpanded ? Color(hex: 0x3897F0) : CV.cream)
+                        .foregroundStyle(isExpanded ? CV.accent : CV.text)
                     Text(durationUnit).font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(isExpanded ? Color(hex: 0x3897F0) : CV.cream.opacity(0.55))
+                        .foregroundStyle(isExpanded ? CV.accent : CV.text.opacity(0.55))
                 }.frame(maxWidth: .infinity)
                 VStack(spacing: 2) {
-                    Text(distanceValue).font(.system(size: 26, weight: .bold)).foregroundStyle(CV.cream)
+                    Text(distanceValue).font(.system(size: 26, weight: .bold)).foregroundStyle(CV.text)
                     Text(distanceUnit).font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(CV.cream.opacity(0.55))
+                        .foregroundStyle(CV.text.opacity(0.55))
                 }.frame(maxWidth: .infinity)
             }
             .contentShape(Rectangle())
@@ -307,16 +307,16 @@ struct AppleMapsBottomSheet: View {
                     if let stop = quickStop {
                         HStack(spacing: 12) {
                             ZStack {
-                                Circle().fill(Color(hex: 0xFF9500)).frame(width: 40, height: 40)
+                                Circle().fill(CV.warning).frame(width: 40, height: 40)
                                 Image(systemName: "cup.and.saucer.fill")
                                     .font(.system(size: 17, weight: .medium)).foregroundStyle(.white)
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(stop.name).font(.system(size: 16, weight: .bold))
-                                    .foregroundStyle(CV.cream).lineLimit(1)
+                                    .foregroundStyle(CV.text).lineLimit(1)
                                 if !stop.address.isEmpty {
                                     Text(stop.address).font(.system(size: 12))
-                                        .foregroundStyle(CV.cream.opacity(0.6)).lineLimit(1)
+                                        .foregroundStyle(CV.text.opacity(0.6)).lineLimit(1)
                                 }
                             }
                             Spacer()
@@ -338,7 +338,7 @@ struct AppleMapsBottomSheet: View {
                         actionRow(icon: "person.crop.circle.badge.plus", iconColor: Color(hex: 0x34C759),
                                   title: "Share ETA", action: onShareETA)
                         divider
-                        actionRow(icon: "exclamationmark.bubble.fill", iconColor: Color(hex: 0xFF3B30),
+                        actionRow(icon: "exclamationmark.bubble.fill", iconColor: CV.danger,
                                   title: "Report an Incident",
                                   subtitle: "Emergency Call & Coordinates", action: onSOS)
                         divider
@@ -354,7 +354,7 @@ struct AppleMapsBottomSheet: View {
                         Text("End Route")
                             .font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
                             .frame(maxWidth: .infinity).frame(height: 52)
-                            .background(Color(hex: 0xFF3B30),
+                            .background(CV.danger,
                                         in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     }.buttonStyle(.plain).padding(.top, 4)
                 }
@@ -365,7 +365,7 @@ struct AppleMapsBottomSheet: View {
         .padding(.bottom, isExpanded ? 36 : 22)
         .background(
             UnevenRoundedRectangle(topLeadingRadius: 32, topTrailingRadius: 32)
-                .fill(Color(hex: 0x1A1A1D).opacity(0.96))
+                .fill(CV.surface.opacity(0.96))
                 .overlay(UnevenRoundedRectangle(topLeadingRadius: 32, topTrailingRadius: 32)
                     .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                 .shadow(color: Color.black.opacity(0.45), radius: 22, y: -4)
@@ -395,18 +395,18 @@ struct AppleMapsBottomSheet: View {
                     .foregroundStyle(.white).frame(width: 34, height: 34)
                     .background(iconColor, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 16, weight: .medium)).foregroundStyle(CV.cream)
+                    Text(title).font(.system(size: 16, weight: .medium)).foregroundStyle(CV.text)
                     if let sub = subtitle {
-                        Text(sub).font(.system(size: 11)).foregroundStyle(CV.cream.opacity(0.5))
+                        Text(sub).font(.system(size: 11)).foregroundStyle(CV.text.opacity(0.5))
                     }
                 }
                 Spacer()
                 if let badge = badge {
                     Text(badge).font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(CV.cream.opacity(0.55))
+                        .foregroundStyle(CV.text.opacity(0.55))
                 }
                 Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(CV.cream.opacity(0.3))
+                    .foregroundStyle(CV.text.opacity(0.3))
             }
             .padding(.horizontal, 14).frame(height: 50).contentShape(Rectangle())
         }.buttonStyle(.plain)

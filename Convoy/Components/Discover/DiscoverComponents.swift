@@ -3,9 +3,7 @@ import SwiftUI
 import MapKit
 
 extension CV {
-    /// Raised card surface used across Discover.
-    static let surface = Color(hex: 0x1A1A1D)
-    static let hairline = Color.white.opacity(0.08)
+    static let hairline = CV.separator
 }
 
 // MARK: - Photos & map fallbacks
@@ -43,25 +41,24 @@ struct DiscoverImage: View {
 }
 
 /// Shipping art for Discover surfaces that have no licensed photo yet:
-/// Convoy contour lines over a dark gradient with a coloured glow. Never pretends to be a place.
+/// Dark gradient with a soft coloured glow and an SF Symbol. Never pretends to be a place.
 struct BrandedArt: View {
     enum Style { case hero, routes, scenic, places, surprise }
     var style: Style
 
     var body: some View {
         let (top, glow, symbol): (UInt32, UInt32, String?) = switch style {
-        case .hero: (0x2B0F09, 0xFF5A1F, nil)
-        case .routes: (0x241312, 0xFF3B30, "point.topleft.down.to.point.bottomright.curvepath")
+        case .hero: (0x16243A, 0x0A84FF, nil)
+        case .routes: (0x14202F, 0x3D8BFF, "point.topleft.down.to.point.bottomright.curvepath")
         case .scenic: (0x0F2119, 0x2FB86A, "mountain.2")
         case .places: (0x161B26, 0x5E7CE2, "mappin.and.ellipse")
         case .surprise: (0x231229, 0xB45CE0, "sparkles")
         }
         ZStack {
             LinearGradient(colors: [Color(hex: top), CV.bg], startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [Color(hex: glow).opacity(style == .hero ? 0.55 : 0.4), .clear],
+            RadialGradient(colors: [Color(hex: glow).opacity(style == .hero ? 0.32 : 0.24), .clear],
                            center: style == .hero ? UnitPoint(x: 0.72, y: 0.3) : UnitPoint(x: 0.85, y: 0.1),
                            startRadius: 0, endRadius: style == .hero ? 340 : 170)
-            Image("contour").resizable().scaledToFill().opacity(0.5).blendMode(.screen)
             if let symbol {
                 Image(systemName: symbol).font(.system(size: 92, weight: .ultraLight))
                     .foregroundStyle(.white.opacity(0.09))
@@ -136,7 +133,7 @@ struct MapThumb: View {
         guard let snap = try? await MKMapSnapshotter(options: opts).start() else { return }
         let out = UIGraphicsImageRenderer(size: size).image { ctx in
             snap.image.draw(at: .zero)
-            let red = UIColor(CV.red)
+            let red = UIColor(CV.accent)
             if pts.count > 1 {
                 let line = UIBezierPath()
                 for (i, c) in pts.enumerated() { i == 0 ? line.move(to: snap.point(for: c)) : line.addLine(to: snap.point(for: c)) }
@@ -191,7 +188,7 @@ struct BookmarkButton: View {
         Button(action: action) {
             Image(systemName: saved ? "bookmark.fill" : "bookmark")
                 .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(CV.cream)
+                .foregroundStyle(CV.text)
                 .frame(width: 32, height: 32)
                 .contentShape(Rectangle())
         }
@@ -208,9 +205,9 @@ struct Chip: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .cvText(13, .medium, color: selected ? CV.ink : CV.cream, inter: true)
+                .cvText(13, .medium, color: selected ? CV.onAccent : CV.text, inter: true)
                 .padding(.horizontal, 14).frame(height: 34)
-                .background(selected ? CV.cream : CV.glassFill, in: Capsule())
+                .background(selected ? CV.accent : CV.glassFill, in: Capsule())
                 .overlay(Capsule().strokeBorder(selected ? .clear : CV.glassStroke, lineWidth: 1))
         }
         .buttonStyle(.plain)
@@ -249,7 +246,7 @@ struct OriginPill: View {
                 Text(title).cvText(13, .medium, inter: true).lineLimit(1)
                 Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
             }
-            .foregroundStyle(CV.cream)
+            .foregroundStyle(CV.text)
             .padding(.horizontal, 12).frame(height: 34)
             .background(.black.opacity(0.35), in: Capsule())
             .overlay(Capsule().strokeBorder(CV.glassStroke, lineWidth: 1))
@@ -279,8 +276,8 @@ struct SectionHeader: View {
 /// Small grey mono label ("STOPS ON THE WAY").
 struct Eyebrow: View {
     let text: String
-    var color: Color = CV.dim
-    var body: some View { Text(text.uppercased()).cvText(11, .medium, color: color, tracking: 1.2, inter: true) }
+    var color: Color = CV.muted
+    var body: some View { Text(text.uppercased()).cvText(12, .semibold, color: color, tracking: 0.6, inter: true) }
 }
 
 /// Pill button in the three Discover styles.
@@ -305,8 +302,8 @@ struct DiscoverButton: View {
         }
         .buttonStyle(.plain)
     }
-    private var fg: Color { style == .primary ? CV.ink : CV.cream }
-    private var bg: Color { switch style { case .primary: CV.cream; case .secondary: CV.surface; case .accent: CV.red } }
+    private var fg: Color { style == .primary ? CV.onAccent : CV.text }
+    private var bg: Color { switch style { case .primary: CV.text; case .secondary: CV.surface; case .accent: CV.accent } }
 }
 
 // MARK: - Cards & rows
@@ -327,14 +324,14 @@ struct CategoryTile: View {
                 .overlay(LinearGradient(colors: [.clear, .black.opacity(0.8)], startPoint: .center, endPoint: .bottom))
                 .overlay(alignment: .topLeading) {
                     if let symbol {
-                        Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(CV.cream)
+                        Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(CV.text)
                             .frame(width: 30, height: 30).background(.black.opacity(0.5), in: Circle()).padding(10)
                     }
                 }
                 .overlay(alignment: .bottomLeading) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title).cvText(18, .bold, inter: true)
-                        Text(subtitle).cvText(12, color: CV.cream.opacity(0.8), inter: true).lineLimit(2)
+                        Text(subtitle).cvText(12, color: CV.text.opacity(0.8), inter: true).lineLimit(2)
                     }
                     .multilineTextAlignment(.leading)
                     .padding(12)
@@ -365,7 +362,7 @@ struct PlaceCard: View {
                 .overlay(alignment: .bottomLeading) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(place.name).cvText(15, .semibold, inter: true).lineLimit(2)
-                        Text(place.region.components(separatedBy: ",")[0]).cvText(11, color: CV.cream.opacity(0.65), inter: true).lineLimit(1)
+                        Text(place.region.components(separatedBy: ",")[0]).cvText(11, color: CV.text.opacity(0.65), inter: true).lineLimit(1)
                         Text(rideLine).cvText(11, .semibold, inter: true).lineLimit(1)
                     }
                     .multilineTextAlignment(.leading)
@@ -431,7 +428,7 @@ struct RouteStats: View {
     }
     private func stat(_ s: String, _ t: String) -> some View {
         HStack(spacing: 4) { Image(systemName: s).font(.system(size: 11)); Text(t).cvText(12, .semibold, inter: true) }
-            .foregroundStyle(CV.cream)
+            .foregroundStyle(CV.text)
     }
 }
 
@@ -483,7 +480,7 @@ struct ListRow<Trailing: View>: View {
 
     var body: some View {
         let row = HStack(spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(CV.cream)
+            Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(CV.text)
                 .frame(width: 36, height: 36).background(CV.glassFill, in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).cvText(15, .semibold, inter: true).lineLimit(1)
@@ -514,7 +511,7 @@ struct TypeTile: View {
                 Image(systemName: category.symbol).font(.system(size: 18, weight: .medium))
                 Text(category.plural).cvText(12, .medium, inter: true).lineLimit(1).minimumScaleFactor(0.8)
             }
-            .foregroundStyle(CV.cream)
+            .foregroundStyle(CV.text)
             .frame(maxWidth: .infinity).frame(height: 80)
             .glassRounded(16)
             .contentShape(RoundedRectangle(cornerRadius: 16))
@@ -547,7 +544,7 @@ struct StopTimeline: View {
                 let last = i == all.count - 1
                 HStack(alignment: .top, spacing: 12) {
                     VStack(spacing: 0) {
-                        Circle().fill(i == 0 ? CV.cream : last ? CV.red : CV.dim).frame(width: 10, height: 10).padding(.top, 4)
+                        Circle().fill(i == 0 ? CV.accent : last ? CV.accent : CV.dim).frame(width: 10, height: 10).padding(.top, 4)
                         if !last { Rectangle().fill(CV.dim.opacity(0.5)).frame(width: 1.5).frame(maxHeight: .infinity) }
                     }
                     .frame(width: 10)
@@ -592,8 +589,8 @@ struct TripBar: View {
             }
             .buttonStyle(.plain)
             Button(action: plan) {
-                Text("Plan ride").cvText(14, .semibold, color: CV.ink, inter: true)
-                    .padding(.horizontal, 16).frame(height: 40).background(CV.cream, in: Capsule())
+                Text("Plan ride").cvText(14, .semibold, color: CV.onAccent, inter: true)
+                    .padding(.horizontal, 16).frame(height: 40).background(CV.accent, in: Capsule())
             }
             .buttonStyle(.plain)
         }
@@ -622,7 +619,7 @@ struct DiscoverHeader<Trailing: View>: View {
                 trailing
             }
             .padding(.bottom, 18)
-            if let eyebrow { Eyebrow(text: eyebrow, color: CV.red).padding(.bottom, 6) }
+            if let eyebrow { Eyebrow(text: eyebrow, color: CV.accent).padding(.bottom, 6) }
             Text(title).cvText(32, .bold, tracking: -0.6, inter: true)
             if let subtitle { Text(subtitle).cvText(14, color: CV.muted, inter: true).padding(.top, 4) }
         }
@@ -644,7 +641,7 @@ struct DiscoverStateView: View {
     var secondary: (String, () -> Void)? = nil
     var body: some View {
         VStack(spacing: 10) {
-            Image(systemName: symbol).font(.system(size: 18, weight: .medium)).foregroundStyle(CV.cream)
+            Image(systemName: symbol).font(.system(size: 18, weight: .medium)).foregroundStyle(CV.text)
                 .frame(width: 44, height: 60).background(CV.glassFill, in: Capsule())
             Text(title).cvText(18, .semibold, inter: true).multilineTextAlignment(.center).padding(.top, 6)
             Text(message).cvText(13, color: CV.muted, inter: true).multilineTextAlignment(.center)
@@ -671,7 +668,7 @@ struct InfoNote: View {
             Text(text).cvText(12, color: CV.muted, inter: true).fixedSize(horizontal: false, vertical: true)
             if let action {
                 Spacer(minLength: 4)
-                Button(action.0, action: action.1).cvText(13, .semibold, color: CV.red, inter: true).buttonStyle(.plain)
+                Button(action.0, action: action.1).cvText(13, .semibold, color: CV.accent, inter: true).buttonStyle(.plain)
             }
         }
         .foregroundStyle(CV.muted)

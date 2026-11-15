@@ -3,7 +3,7 @@ import SwiftUI
 /// Inter-styled field label ("Ride name", "Route", "When").
 struct FieldLabel: View {
     let text: String
-    var body: some View { Text(text).cvText(14, .semibold, color: CV.cream.opacity(0.6), inter: true) }
+    var body: some View { Text(text).cvText(14, .semibold, color: CV.text.opacity(0.6), inter: true) }
 }
 
 /// From → (stops) → To summary card. Fully dynamic & responsive to any iPhone screen size.
@@ -50,7 +50,7 @@ struct RouteSummaryCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     Text(row.2)
-                        .cvText(13, color: CV.cream.opacity(0.45), inter: true)
+                        .cvText(13, color: CV.text.opacity(0.45), inter: true)
                 }
                 .padding(.horizontal, 16)
                 .frame(height: 50)
@@ -67,7 +67,7 @@ struct RouteSummaryCard: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
         .task(id: draft.from) {
             await resolveStartingLocation()
@@ -98,9 +98,9 @@ struct RouteSummaryCard: View {
 
     @ViewBuilder private func marker(_ k: Kind) -> some View {
         switch k {
-        case .start: Circle().strokeBorder(CV.cream, lineWidth: 3)
-        case .stop:  RoundedRectangle(cornerRadius: 3).strokeBorder(CV.cream, lineWidth: 2).padding(1)
-        case .end:   ZStack { Circle().fill(CV.red); Circle().fill(.white).frame(width: 4, height: 4) }
+        case .start: Circle().strokeBorder(CV.text, lineWidth: 3)
+        case .stop:  RoundedRectangle(cornerRadius: 3).strokeBorder(CV.text, lineWidth: 2).padding(1)
+        case .end:   ZStack { Circle().fill(CV.accent); Circle().fill(.white).frame(width: 4, height: 4) }
         }
     }
 }

@@ -41,11 +41,11 @@ struct ProfileSetupView: View {
                 .clipShape(Circle())
         } else {
             Circle()
-                .fill(Color(hex: 0x1E1E22))
+                .fill(CV.surface)
                 .frame(width: 96, height: 96)
                 .overlay {
                     Text(String(app.displayName.prefix(1)).uppercased())
-                        .cvText(34, .bold, color: CV.cream.opacity(0.8), inter: true)
+                        .cvText(34, .bold, color: CV.text.opacity(0.8), inter: true)
                 }
         }
     }
@@ -53,7 +53,7 @@ struct ProfileSetupView: View {
     var body: some View {
         @Bindable var app = app
         ZStack(alignment: .topLeading) {
-            ContourBackdrop()
+            ScreenBackground()
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
@@ -69,14 +69,14 @@ struct ProfileSetupView: View {
                             Button { showPhotosPicker = true } label: {
                                 ZStack(alignment: .bottomTrailing) {
                                     avatarPreview
-                                        .overlay(Circle().strokeBorder(CV.red, lineWidth: 2.5))
-                                        .shadow(color: CV.red.opacity(0.3), radius: 8)
+                                        .overlay(Circle().strokeBorder(CV.accent, lineWidth: 2.5))
+                                        .shadow(color: .black.opacity(0.25), radius: 8)
 
                                     Image(systemName: "camera.fill")
                                         .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(CV.ink)
+                                        .foregroundStyle(CV.onAccent)
                                         .frame(width: 34, height: 34)
-                                        .background(CV.cream, in: Circle())
+                                        .background(CV.accent, in: Circle())
                                         .overlay(Circle().strokeBorder(CV.bg, lineWidth: 3))
                                 }
                             }.buttonStyle(.plain)
@@ -93,10 +93,10 @@ struct ProfileSetupView: View {
                                             .font(.system(size: 13, weight: .semibold))
                                         Text(photoButtonTitle).cvText(13, .semibold, inter: true)
                                     }
-                                    .foregroundStyle(CV.red)
+                                    .foregroundStyle(CV.accent)
                                     .padding(.horizontal, 14).frame(height: 32)
-                                    .background(CV.red.opacity(0.12), in: Capsule())
-                                    .overlay(Capsule().strokeBorder(CV.red.opacity(0.3), lineWidth: 1))
+                                    .background(CV.accent.opacity(0.12), in: Capsule())
+                                    .overlay(Capsule().strokeBorder(CV.accent.opacity(0.3), lineWidth: 1))
                                 }.buttonStyle(.plain).padding(.top, 4)
                             }
                             Spacer(minLength: 0)
@@ -111,11 +111,11 @@ struct ProfileSetupView: View {
                                     Image(systemName: "crop")
                                         .font(.system(size: 13, weight: .semibold))
                                     Text("Re-crop or Adjust Image")
-                                        .cvText(13, .medium, color: CV.cream.opacity(0.75), inter: true)
+                                        .cvText(13, .medium, color: CV.text.opacity(0.75), inter: true)
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 12))
-                                        .foregroundStyle(CV.cream.opacity(0.4))
+                                        .foregroundStyle(CV.text.opacity(0.4))
                                 }
                                 .padding(.horizontal, 16).frame(height: 44)
                                 .background(Color.white.opacity(0.05),
@@ -126,7 +126,7 @@ struct ProfileSetupView: View {
                         }
                     }
                     .padding(18)
-                    .background(Color(hex: 0x1A1A1D),
+                    .background(CV.surface,
                                 in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
@@ -186,13 +186,13 @@ struct ProfileSetupView: View {
                     Color.black.opacity(0.6).ignoresSafeArea()
                     VStack(spacing: 16) {
                         ProgressView()
-                            .tint(CV.red)
+                            .tint(CV.accent)
                             .scaleEffect(1.5)
                         Text("Setting up your profile…")
                             .cvText(15, .semibold, inter: true)
                     }
                     .padding(32)
-                    .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .background(CV.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
                     .shadow(color: .black.opacity(0.5), radius: 20)
                 }
@@ -203,10 +203,10 @@ struct ProfileSetupView: View {
         .safeAreaInset(edge: .bottom) {
             Button(action: handleContinue) {
                 Text("Continue")
-                    .cvText(17, .medium, color: CV.ink, tracking: -0.17, lineHeight: 22)
+                    .cvText(17, .medium, color: CV.onAccent, tracking: -0.17, lineHeight: 22)
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
-                    .background(CV.cream, in: Capsule())
+                    .background(CV.accent, in: Capsule())
             }
             .buttonStyle(.plain)
             .opacity(canContinue ? 1 : 0.4)

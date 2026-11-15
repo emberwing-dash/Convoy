@@ -8,7 +8,7 @@ struct WelcomeView: View {
     var onContinueGuest: () -> Void
 
     var body: some View {
-        DesignCanvas(background: ContourBackdrop()) {
+        DesignCanvas(background: ScreenBackground()) {
             hero.at(0, 0)
             wordmark.at(0, 56)
             LinearGradient(stops: [
@@ -37,7 +37,7 @@ struct WelcomeView: View {
             Image("rider_grey").resizable().frame(width: 18, height: 18).offset(x: 87, y: 406)
             HStack(spacing: 8) {
                 Image("dot_green").resizable().frame(width: 6, height: 6)
-                Text("LIVE · 4 RIDERS").cvText(11, .medium, tracking: 1.54, lineHeight: 14, mono: true)
+                Text("LIVE · 4 RIDERS").cvText(11, .medium, tracking: 0.6, lineHeight: 14, mono: true)
             }
             .padding(.leading, 10).padding(.trailing, 12).padding(.vertical, 7)
             .glassCapsule()

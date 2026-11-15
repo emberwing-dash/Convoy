@@ -51,7 +51,7 @@ struct RideRosterCard: View {
                 Text("Riders").cvText(17, .bold, inter: true)
                 Spacer()
                 let going = members.filter { $0.status == .accepted }.count
-                Text("\(going) going").cvText(13, color: CV.cream.opacity(0.5), inter: true)
+                Text("\(going) going").cvText(13, color: CV.text.opacity(0.5), inter: true)
             }
             if groups.isEmpty {
                 Text(model.state.isLoading ? "Loading riders…" : "No riders yet").cvText(13, color: CV.muted, inter: true)
@@ -63,7 +63,7 @@ struct RideRosterCard: View {
                             .foregroundStyle(color(group.source))
                         Text(group.title.uppercased())
                             .cvText(11, .bold, color: color(group.source), tracking: 0.8, inter: true)
-                        Text("· \(group.members.count)").cvText(11, .semibold, color: CV.cream.opacity(0.4), inter: true)
+                        Text("· \(group.members.count)").cvText(11, .semibold, color: CV.text.opacity(0.4), inter: true)
                     }
                     ForEach(group.members) { m in row(m) }
                 }
@@ -110,9 +110,9 @@ struct RideRosterCard: View {
         switch s {
         case .admin: return CVSocial.amber
         case .crew: return Color(hex: 0xAF52DE)
-        case .friend: return CV.cream.opacity(0.7)
+        case .friend: return CV.text.opacity(0.7)
         case .feed: return CV.green
-        case .code, .joined: return CV.cream.opacity(0.6)
+        case .code, .joined: return CV.text.opacity(0.6)
         }
     }
 }
@@ -206,7 +206,7 @@ struct TripRidersSection: View {
                             Text(chosenCrew?.name ?? "Choose crew").cvText(13, .semibold, inter: true)
                             Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
                         }
-                        .foregroundStyle(CV.cream)
+                        .foregroundStyle(CV.text)
                         .padding(.horizontal, 12).frame(height: 30)
                         .background(Color.white.opacity(0.08), in: Capsule())
                     }
@@ -220,13 +220,13 @@ struct TripRidersSection: View {
                         Button { toggle(m.id) } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: selected.contains(m.id) ? "checkmark.circle.fill" : "circle")
-                                    .font(.system(size: 18)).foregroundStyle(selected.contains(m.id) ? CV.red : CV.dim)
+                                    .font(.system(size: 18)).foregroundStyle(selected.contains(m.id) ? CV.accent : CV.dim)
                                 Text(m.rider.name).cvText(14, inter: true)
                                 Spacer()
                             }
                         }.buttonStyle(.plain)
                     }
-                    if let error { Text(error).cvText(12, .semibold, color: CV.red, inter: true) }
+                    if let error { Text(error).cvText(12, .semibold, color: CV.accent, inter: true) }
                     if let result { Text(result).cvText(12, .semibold, color: CV.green, inter: true) }
                     Button(action: send) {
                         HStack {
@@ -235,7 +235,7 @@ struct TripRidersSection: View {
                                 .cvText(15, .bold, color: .white, inter: true)
                         }
                         .frame(maxWidth: .infinity).frame(height: 46)
-                        .background(selected.isEmpty ? Color.white.opacity(0.1) : CV.red, in: Capsule())
+                        .background(selected.isEmpty ? Color.white.opacity(0.1) : CV.accent, in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(selected.isEmpty || sending)

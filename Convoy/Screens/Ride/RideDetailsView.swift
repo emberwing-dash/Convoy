@@ -78,7 +78,7 @@ struct RideEditSheet: View {
                             VStack(spacing: 8) {
                                 // Start
                                 HStack(spacing: 10) {
-                                    Circle().fill(Color(hex: 0x30D158)).frame(width: 8, height: 8)
+                                    Circle().fill(CV.success).frame(width: 8, height: 8)
                                     TextField("", text: $fromText, prompt: Text("Start location").foregroundColor(Color.white.opacity(0.35)))
                                         .foregroundStyle(Color.white)
                                         .font(.system(size: 14))
@@ -92,7 +92,7 @@ struct RideEditSheet: View {
                                     HStack(spacing: 10) {
                                         Image(systemName: "flag.fill")
                                             .font(.system(size: 12))
-                                            .foregroundStyle(Color(hex: 0xFF6B00))
+                                            .foregroundStyle(CV.accent)
 
                                         Text(stopName)
                                             .font(.system(size: 14))
@@ -115,8 +115,8 @@ struct RideEditSheet: View {
                                     }
                                     .padding(.horizontal, 14)
                                     .frame(height: 44)
-                                    .background(Color(hex: 0xFF6B00).opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(hex: 0xFF6B00).opacity(0.2), lineWidth: 1))
+                                    .background(CV.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(CV.accent.opacity(0.2), lineWidth: 1))
                                 }
 
                                 // Add new checkpoint field
@@ -124,7 +124,7 @@ struct RideEditSheet: View {
                                     HStack(spacing: 10) {
                                         Image(systemName: "flag")
                                             .font(.system(size: 12))
-                                            .foregroundStyle(Color(hex: 0xFF6B00))
+                                            .foregroundStyle(CV.accent)
 
                                         TextField("", text: $newStopText, prompt: Text("Checkpoint name").foregroundColor(Color.white.opacity(0.35)))
                                             .foregroundStyle(Color.white)
@@ -141,12 +141,12 @@ struct RideEditSheet: View {
                                             addingStop = false
                                         }
                                         .font(.system(size: 13, weight: .bold))
-                                        .foregroundStyle(Color(hex: 0xFF6B00))
+                                        .foregroundStyle(CV.accent)
                                     }
                                     .padding(.horizontal, 14)
                                     .frame(height: 48)
                                     .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(hex: 0xFF6B00).opacity(0.35), lineWidth: 1))
+                                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(CV.accent.opacity(0.35), lineWidth: 1))
                                 } else {
                                     Button {
                                         withAnimation(.snappy) {
@@ -159,13 +159,13 @@ struct RideEditSheet: View {
                                             Text("Add Checkpoint")
                                                 .font(.system(size: 13, weight: .semibold))
                                         }
-                                        .foregroundStyle(Color(hex: 0xFF6B00))
+                                        .foregroundStyle(CV.accent)
                                         .frame(maxWidth: .infinity)
                                         .frame(height: 42)
-                                        .background(Color(hex: 0xFF6B00).opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                                        .background(CV.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .strokeBorder(Color(hex: 0xFF6B00).opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                                                .strokeBorder(CV.accent.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -173,7 +173,7 @@ struct RideEditSheet: View {
 
                                 // Destination
                                 HStack(spacing: 10) {
-                                    Circle().fill(Color(hex: 0xFF6B00)).frame(width: 8, height: 8)
+                                    Circle().fill(CV.accent).frame(width: 8, height: 8)
                                     TextField("", text: $toText, prompt: Text("Destination").foregroundColor(Color.white.opacity(0.35)))
                                         .foregroundStyle(Color.white)
                                         .font(.system(size: 14))
@@ -194,7 +194,7 @@ struct RideEditSheet: View {
                                         RouteSnapshotView(coords: r.coords, size: CGSize(width: UIScreen.main.bounds.width - 40, height: 140))
                                     } else {
                                         Rectangle()
-                                            .fill(Color(hex: 0x18181B))
+                                            .fill(CV.surface)
                                             .frame(height: 140)
                                     }
 
@@ -232,10 +232,10 @@ struct RideEditSheet: View {
                                         HStack(spacing: 8) {
                                             Image(systemName: "bolt.fill")
                                                 .font(.system(size: 13, weight: .bold))
-                                                .foregroundStyle(startNow ? CV.ink : Color(hex: 0xFF6B00))
+                                                .foregroundStyle(startNow ? CV.onAccent : CV.accent)
                                             Text("Start now")
                                                 .font(.system(size: 14, weight: .semibold))
-                                                .foregroundStyle(startNow ? CV.ink : Color.white)
+                                                .foregroundStyle(startNow ? CV.onAccent : Color.white)
                                         }
 
                                         Spacer()
@@ -243,7 +243,7 @@ struct RideEditSheet: View {
                                         if startNow {
                                             Text("Selected")
                                                 .font(.system(size: 11, weight: .bold))
-                                                .foregroundStyle(CV.ink)
+                                                .foregroundStyle(CV.onAccent)
                                                 .padding(.horizontal, 8)
                                                 .padding(.vertical, 3)
                                                 .background(Color.white.opacity(0.35), in: Capsule())
@@ -251,10 +251,10 @@ struct RideEditSheet: View {
                                     }
                                     .padding(.horizontal, 14)
                                     .frame(height: 48)
-                                    .background(startNow ? Color(hex: 0xFF6B00) : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                                    .background(startNow ? CV.accent : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .strokeBorder(startNow ? Color(hex: 0xFF6B00) : Color.white.opacity(0.08), lineWidth: 1)
+                                            .strokeBorder(startNow ? CV.accent : Color.white.opacity(0.08), lineWidth: 1)
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -265,7 +265,7 @@ struct RideEditSheet: View {
                                         HStack(spacing: 8) {
                                             Image(systemName: "calendar")
                                                 .font(.system(size: 14))
-                                                .foregroundStyle(Color(hex: 0xFF6B00))
+                                                .foregroundStyle(CV.accent)
                                             Text("Date")
                                                 .font(.system(size: 14, weight: .medium))
                                                 .foregroundStyle(Color.white)
@@ -277,7 +277,7 @@ struct RideEditSheet: View {
                                             .datePickerStyle(.compact)
                                             .labelsHidden()
                                             .colorScheme(.dark)
-                                            .tint(Color(hex: 0xFF6B00))
+                                            .tint(CV.accent)
                                     }
                                     .padding(.horizontal, 14)
                                     .frame(height: 48)
@@ -289,7 +289,7 @@ struct RideEditSheet: View {
                                         HStack(spacing: 8) {
                                             Image(systemName: "clock")
                                                 .font(.system(size: 14))
-                                                .foregroundStyle(Color(hex: 0xFF6B00))
+                                                .foregroundStyle(CV.accent)
                                             Text("Time")
                                                 .font(.system(size: 14, weight: .medium))
                                                 .foregroundStyle(Color.white)
@@ -301,7 +301,7 @@ struct RideEditSheet: View {
                                             .datePickerStyle(.compact)
                                             .labelsHidden()
                                             .colorScheme(.dark)
-                                            .tint(Color(hex: 0xFF6B00))
+                                            .tint(CV.accent)
                                     }
                                     .padding(.horizontal, 14)
                                     .frame(height: 48)
@@ -317,10 +317,10 @@ struct RideEditSheet: View {
                         } label: {
                             Text("Save")
                                 .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(Color(hex: 0x0D0D0F))
+                                .foregroundStyle(CV.bg)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 52)
-                                .background(Color(hex: 0xF3EEE3), in: Capsule())
+                                .background(CV.accent, in: Capsule())
                         }
                         .buttonStyle(.plain)
                         .padding(.top, 6)
@@ -331,7 +331,7 @@ struct RideEditSheet: View {
             }
             .frame(maxHeight: UIScreen.main.bounds.height * 0.88)
             .background(
-                Color(hex: 0x141416)
+                CV.bg2
                     .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                     .ignoresSafeArea(edges: .bottom)
             )
@@ -358,30 +358,30 @@ struct RideEditSheet: View {
                 if let r = ride.plan.selected {
                     RouteSnapshotView(coords: r.coords, size: CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height))
                 } else {
-                    Color(hex: 0x101013).ignoresSafeArea()
+                    CV.bg2.ignoresSafeArea()
                 }
 
                 VStack {
                     Spacer()
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Circle().fill(Color(hex: 0x30D158)).frame(width: 8, height: 8)
+                            Circle().fill(CV.success).frame(width: 8, height: 8)
                             Text("Start: \(fromText)").font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
                         }
                         ForEach(stops, id: \.self) { s in
                             HStack {
-                                Image(systemName: "flag.fill").font(.system(size: 11)).foregroundStyle(Color(hex: 0xFF6B00))
+                                Image(systemName: "flag.fill").font(.system(size: 11)).foregroundStyle(CV.accent)
                                 Text("Checkpoint: \(s)").font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
                             }
                         }
                         HStack {
-                            Circle().fill(Color(hex: 0xFF6B00)).frame(width: 8, height: 8)
+                            Circle().fill(CV.accent).frame(width: 8, height: 8)
                             Text("End: \(toText)").font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
                         }
                     }
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(hex: 0x1A1A1D).opacity(0.92), in: RoundedRectangle(cornerRadius: 16))
+                    .background(CV.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 16))
                     .padding(.horizontal, 20)
                     .padding(.bottom, 20)
                 }
@@ -392,7 +392,7 @@ struct RideEditSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { showFullMap = false }
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color(hex: 0xFF6B00))
+                        .foregroundStyle(CV.accent)
                 }
             }
             .preferredColorScheme(.dark)
@@ -599,11 +599,11 @@ struct RideDetailsView: View {
         return HStack(spacing: 14) {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(hex: 0xFF3B30).opacity(0.15))
+                    .fill(CV.accentSoft)
                     .frame(width: 42, height: 42)
                 Image(systemName: isPosted ? "person.2.badge.gearshape.fill" : "megaphone.fill")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(CV.red)
+                    .foregroundStyle(CV.accent)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -617,7 +617,7 @@ struct RideDetailsView: View {
                 Text(isPosted
                      ? (pending > 0 ? "\(pending) request\(pending == 1 ? "" : "s") waiting for you" : "Taking requests from Crew feed")
                      : "Open to other riders so they can ask to join")
-                    .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                    .cvText(12, color: CV.text.opacity(0.55), inter: true)
                     .lineLimit(1)
             }
 
@@ -634,7 +634,7 @@ struct RideDetailsView: View {
                     .cvText(13, .semibold, color: .white, inter: true)
                     .padding(.horizontal, 16)
                     .frame(height: 34)
-                    .background(isPosted && pending == 0 ? Color.white.opacity(0.12) : CV.red, in: Capsule())
+                    .background(isPosted && pending == 0 ? Color.white.opacity(0.12) : CV.accent, in: Capsule())
             }
             .buttonStyle(.plain)
         }
@@ -680,9 +680,9 @@ struct RideDetailsView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "mappin.circle.fill")
                         .font(.system(size: 13))
-                        .foregroundStyle(Color(hex: 0xFF6B00))
+                        .foregroundStyle(CV.accent)
                     Text(ride.subtitle)
-                        .cvText(14, .medium, color: CV.cream.opacity(0.75), inter: true)
+                        .cvText(14, .medium, color: CV.text.opacity(0.75), inter: true)
                         .lineLimit(1)
                 }
             }
@@ -764,7 +764,7 @@ struct RideDetailsView: View {
             .cvText(13, .semibold, color: .white, inter: true)
             .padding(.horizontal, 10)
             .frame(height: 26)
-            .background(isRideDay ? Color(hex: 0xFF6B00) : Color.white.opacity(0.18), in: Capsule())
+            .background(isRideDay ? CV.accent : Color.white.opacity(0.18), in: Capsule())
     }
 
     private func stats(ride: Ride) -> some View {
@@ -789,7 +789,7 @@ struct RideDetailsView: View {
                 .cvText(17, .bold, inter: true)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            Text(l).cvText(12, color: CV.cream.opacity(0.45), inter: true)
+            Text(l).cvText(12, color: CV.text.opacity(0.45), inter: true)
         }
         .frame(maxWidth: .infinity)
     }
@@ -800,7 +800,7 @@ struct RideDetailsView: View {
                 Text("Route").cvText(17, .semibold, inter: true)
                 Spacer()
                 Text(ride.plan.style.rawValue)
-                    .cvText(13, .semibold, color: Color(hex: 0xFF6B00), inter: true)
+                    .cvText(13, .semibold, color: CV.accent, inter: true)
             }
 
             Group {
@@ -811,12 +811,12 @@ struct RideDetailsView: View {
                     VStack(spacing: 6) {
                         Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
                             .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(CV.cream.opacity(0.35))
+                            .foregroundStyle(CV.text.opacity(0.35))
                         Text("No route saved for this ride")
-                            .cvText(13, .medium, color: CV.cream.opacity(0.45), inter: true)
+                            .cvText(13, .medium, color: CV.text.opacity(0.45), inter: true)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(hex: 0x101013))
+                    .background(CV.bg2)
                 }
             }
             .frame(height: 120)
@@ -838,10 +838,10 @@ struct RideDetailsView: View {
                     Text("Just you so far").cvText(15, .semibold, inter: true)
                     if !ride.invitedRiders.isEmpty {
                         Text("\(ride.invitedRiders.count) rider\(ride.invitedRiders.count == 1 ? "" : "s") invited · waiting for response")
-                            .cvText(12, color: CV.cream.opacity(0.45), inter: true)
+                            .cvText(12, color: CV.text.opacity(0.45), inter: true)
                     } else {
                         Text("Organised by you · invite riders anytime")
-                            .cvText(12, color: CV.cream.opacity(0.45), inter: true)
+                            .cvText(12, color: CV.text.opacity(0.45), inter: true)
                     }
                 }
             } else {
@@ -863,7 +863,7 @@ struct RideDetailsView: View {
                     }
                     Text(isRideDay ? "On the road"
                                    : "Organised by \(organisedByYou ? "you" : ride.organiser)")
-                        .cvText(12, color: CV.cream.opacity(0.45), inter: true)
+                        .cvText(12, color: CV.text.opacity(0.45), inter: true)
                 }
                 .padding(.leading, 18)
             }
@@ -895,7 +895,7 @@ struct RideDetailsView: View {
             HStack(spacing: 10) {
                 Image(systemName: "flag.checkered").font(.system(size: 16, weight: .medium))
                 Text("Ride Completed")
-                    .cvText(16, .semibold, color: CV.cream.opacity(0.5), tracking: -0.17, inter: true)
+                    .cvText(16, .semibold, color: CV.text.opacity(0.5), tracking: -0.17, inter: true)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 56)
@@ -906,7 +906,7 @@ struct RideDetailsView: View {
                     app.pop()
                 } label: {
                     Text("Decline")
-                        .cvText(15, .semibold, color: CV.cream.opacity(0.6), inter: true)
+                        .cvText(15, .semibold, color: CV.text.opacity(0.6), inter: true)
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)
                         .background(Color.white.opacity(0.08), in: Capsule())
@@ -917,10 +917,10 @@ struct RideDetailsView: View {
                     Task { await app.acceptRideInvitation(rideId: ride.id) }
                 } label: {
                     Text("Accept Ride")
-                        .cvText(15, .semibold, color: CV.ink, inter: true)
+                        .cvText(15, .semibold, color: CV.onAccent, inter: true)
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)
-                        .background(CV.cream, in: Capsule())
+                        .background(CV.accent, in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
@@ -932,12 +932,12 @@ struct RideDetailsView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "play.fill").font(.system(size: 15, weight: .semibold))
                             Text("Start ride")
-                                .cvText(16, .semibold, color: CV.ink, tracking: -0.17, inter: true)
+                                .cvText(16, .semibold, color: CV.onAccent, tracking: -0.17, inter: true)
                         }
-                        .foregroundStyle(CV.ink)
+                        .foregroundStyle(CV.onAccent)
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)
-                        .background(CV.cream, in: Capsule())
+                        .background(CV.accent, in: Capsule())
                     }
                     .buttonStyle(.plain)
                 } else {
@@ -945,17 +945,17 @@ struct RideDetailsView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "lock.fill")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(CV.cream.opacity(0.6))
+                            .foregroundStyle(CV.text.opacity(0.6))
 
                         RideCountdownView(departs: ride.departs) {
                             withAnimation { rideDayOverride = true }
                         }
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(CV.cream.opacity(0.9))
+                        .foregroundStyle(CV.text.opacity(0.9))
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
-                    .background(Color(hex: 0x1E1E22), in: Capsule())
+                    .background(CV.surface, in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
                 }
 
@@ -972,10 +972,10 @@ struct RideDetailsView: View {
                             Text("Edit")
                                 .font(.system(size: 14, weight: .semibold))
                         }
-                        .foregroundStyle(CV.cream)
+                        .foregroundStyle(CV.text)
                         .padding(.horizontal, 20)
                         .frame(height: 56)
-                        .background(Color(hex: 0x1E1E22), in: Capsule())
+                        .background(CV.surface, in: Capsule())
                         .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
@@ -987,14 +987,14 @@ struct RideDetailsView: View {
 
     private var notFound: some View {
         ZStack {
-            ContourBackdrop()
+            ScreenBackground()
             CircleBackButton { app.pop() }
                 .padding(.leading, 20).padding(.top, 4)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             VStack(spacing: 10) {
                 Image(systemName: "questionmark.circle")
                     .font(.system(size: 30))
-                    .foregroundStyle(CV.cream.opacity(0.5))
+                    .foregroundStyle(CV.text.opacity(0.5))
                 Text("Ride not found")
                     .cvText(18, .semibold, inter: true)
                 Text("This ride may have been completed or removed.")

@@ -1,10 +1,8 @@
 // TabBar.swift
 import SwiftUI
 
-/// Custom bottom bar: a luxury frosted liquid-glass pill for the three main tabs,
-/// and a matching circular "Convoy Assistant" button on the right that pushes the chatbot.
-/// Uses native `.ultraThinMaterial`, specular glass gradient borders, and an elastic
-/// liquid-glass `matchedGeometryEffect` indicator when switching tabs.
+/// Custom bottom bar: a frosted graphite pill for the three main tabs (selected tab tinted
+/// system blue) and the Ellis assistant button on the right, which pushes the chatbot.
 struct ConvoyTabBar: View {
     @Binding var selection: AppTab
     @Environment(AppState.self) private var app
@@ -46,28 +44,11 @@ struct ConvoyTabBar: View {
         .background {
             Capsule()
                 .fill(.ultraThinMaterial)
-                .overlay(
-                    Capsule()
-                        .fill(Color(hex: 0x121216).opacity(0.62))
-                )
+                .overlay(Capsule().fill(CV.elevated.opacity(0.78)))
         }
-        .overlay(
-            Capsule()
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.32),
-                            Color.white.opacity(0.10),
-                            Color.white.opacity(0.03)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 0.8
-                )
-        )
-        .shadow(color: Color.black.opacity(0.40), radius: 22, x: 0, y: 10)
-        .shadow(color: Color.black.opacity(0.20), radius: 6, x: 0, y: 2)
+        .environment(\.colorScheme, .dark)
+        .overlay(Capsule().strokeBorder(CV.stroke, lineWidth: 0.8))
+        .shadow(color: Color.black.opacity(0.35), radius: 18, x: 0, y: 8)
     }
 
     private func tabButton(_ tab: AppTab, _ title: String, _ symbol: String) -> some View {
@@ -83,8 +64,8 @@ struct ConvoyTabBar: View {
                 withTransaction(transaction) {
                     selection = tab
                 }
-                // Animate only the tab bar liquid glass pill indicator
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.74, blendDuration: 0.08)) {
+                // Animate only the selection indicator
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
                     animatedTab = tab
                 }
             }
@@ -92,44 +73,18 @@ struct ConvoyTabBar: View {
             ZStack {
                 if isIndicatorHere {
                     Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(hex: 0xFAF7F0),
-                                    Color(hex: 0xEDE8DD)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.white.opacity(0.95),
-                                            Color.white.opacity(0.40)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    ),
-                                    lineWidth: 0.8
-                                )
-                        )
-                        .shadow(color: Color.white.opacity(0.25), radius: 8, x: 0, y: 2)
-                        .shadow(color: Color.black.opacity(0.18), radius: 4, x: 0, y: 1)
-                        .matchedGeometryEffect(id: "liquidGlassIndicator", in: tabNamespace)
+                        .fill(CV.accentSoft)
+                        .matchedGeometryEffect(id: "tabIndicator", in: tabNamespace)
                 }
 
                 VStack(spacing: 3) {
                     Image(systemName: symbol)
-                        .font(.system(size: 18, weight: on ? .bold : .regular))
-                        .scaleEffect(on ? 1.05 : 0.95)
+                        .font(.system(size: 18, weight: on ? .semibold : .regular))
                     Text(title)
-                        .cvText(11, on ? .bold : .regular, color: on ? CV.ink : CV.cream.opacity(0.60), inter: true)
+                        .font(.system(size: 11, weight: on ? .semibold : .medium))
                         .lineLimit(1)
                 }
-                .foregroundStyle(on ? CV.ink : CV.cream.opacity(0.60))
+                .foregroundStyle(on ? CV.accentLight : CV.muted)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
             }
@@ -170,7 +125,7 @@ struct EllisTabBarButton: View {
                 // Subtle ambient glow behind the helmet when excited or surprised
                 if controller.expression == .celebrating || controller.expression == .excited || controller.expression == .surprised {
                     Circle()
-                        .fill(Color(hex: 0xFF6B00).opacity(0.35))
+                        .fill(CV.accent.opacity(0.3))
                         .frame(width: mascotSize * 1.15, height: mascotSize * 1.15)
                         .blur(radius: 10)
                 }

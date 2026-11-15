@@ -20,7 +20,7 @@ struct AllRidersView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
 
             VStack(spacing: 0) {
                 headerView
@@ -75,10 +75,10 @@ struct AllRidersView: View {
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("COMMUNITY DIRECTORY")
-                .cvText(11, .bold, color: CV.red, tracking: 1.6, inter: true)
+                .cvText(12, .semibold, color: CV.muted, tracking: 0.6, inter: true)
             HStack {
                 Text("All Riders")
-                    .cvText(32, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.6, inter: true)
+                    .cvText(32, .bold, color: CV.text, tracking: -0.6, inter: true)
                 Spacer()
                 if !riders.isEmpty {
                     Text("\(riders.count) riders")
@@ -103,7 +103,7 @@ struct AllRidersView: View {
                 .foregroundStyle(CV.muted)
 
             TextField("", text: $searchText, prompt: Text("Search by name or @username...").foregroundColor(CV.muted))
-                .cvText(15, .medium, color: CV.cream, inter: true)
+                .cvText(15, .medium, color: CV.text, inter: true)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
 
@@ -120,7 +120,7 @@ struct AllRidersView: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 48)
-        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
     }
 
@@ -156,17 +156,17 @@ struct AllRidersView: View {
         VStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 32))
-                .foregroundStyle(CV.red)
+                .foregroundStyle(CV.accent)
             Text(message)
                 .cvText(14, color: CV.muted, inter: true)
                 .multilineTextAlignment(.center)
             Button("Try Again") {
                 Task { await loadRiders(force: true) }
             }
-            .cvText(14, .bold, color: CV.ink, inter: true)
+            .cvText(14, .bold, color: CV.onAccent, inter: true)
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
-            .background(CV.cream, in: Capsule())
+            .background(CV.accent, in: Capsule())
             .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -180,14 +180,14 @@ struct AllRidersView: View {
                 .font(.system(size: 36))
                 .foregroundStyle(CV.muted)
             Text("No riders found")
-                .cvText(18, .bold, color: CV.cream, inter: true)
+                .cvText(18, .bold, color: CV.text, inter: true)
             Text("No riders matched '\(searchText)'. Try another search term.")
                 .cvText(14, color: CV.muted, inter: true)
                 .multilineTextAlignment(.center)
             Button("Clear search") {
                 searchText = ""
             }
-            .cvText(13, .semibold, color: CV.red, inter: true)
+            .cvText(13, .semibold, color: CV.accent, inter: true)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -226,7 +226,7 @@ struct RiderDirectoryRow: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(rider.rider.name)
-                            .cvText(16, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                            .cvText(16, .bold, color: CV.text, inter: true)
                             .lineLimit(1)
 
                         Text("@\(rider.rider.username)")
@@ -248,7 +248,7 @@ struct RiderDirectoryRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Color(hex: 0x18181B).opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(CV.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 

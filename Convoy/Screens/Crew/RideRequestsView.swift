@@ -15,7 +15,7 @@ struct RideRequestsView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            ContourBackdrop()
+            ScreenBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 12) {
@@ -36,13 +36,13 @@ struct RideRequestsView: View {
 
             if let toast {
                 HStack(spacing: 10) {
-                    Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(CV.ink)
+                    Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(CV.onAccent)
                         .frame(width: 24, height: 24).background(CV.green, in: Circle())
-                    Text(toast).cvText(13, .semibold, color: CV.cream, inter: true)
+                    Text(toast).cvText(13, .semibold, color: CV.text, inter: true)
                     Spacer()
                 }
                 .padding(.horizontal, 14).padding(.vertical, 12)
-                .background(Color(hex: 0x232326), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(CV.elevated, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(CV.green.opacity(0.4), lineWidth: 1))
                 .shadow(color: .black.opacity(0.5), radius: 20, y: 10)
                 .padding(.horizontal, 20).padding(.bottom, 20)
@@ -84,7 +84,7 @@ struct RideRequestsView: View {
             }
             if let max = maxRiders {
                 HStack {
-                    Text("\(members) of \(max) riders").cvText(15, .bold, color: CV.cream, inter: true)
+                    Text("\(members) of \(max) riders").cvText(15, .bold, color: CV.text, inter: true)
                     Spacer()
                     Text(members >= max ? "Full" : "\(max - members) spot\(max - members == 1 ? "" : "s") left")
                         .cvText(14, .semibold, color: members >= max ? CV.muted : CV.green, inter: true)
@@ -96,7 +96,7 @@ struct RideRequestsView: View {
                     }
                 }.frame(height: 6)
             } else {
-                Text("\(members) rider\(members == 1 ? "" : "s") going").cvText(15, .bold, color: CV.cream, inter: true)
+                Text("\(members) rider\(members == 1 ? "" : "s") going").cvText(15, .bold, color: CV.text, inter: true)
             }
         }
         .padding(16)
@@ -115,7 +115,7 @@ struct RideRequestsView: View {
                                message: "When riders ask to join from the Crew feed or with your ride code, they'll appear here straight away.")
             }
         } else {
-            Text("PENDING · \(requests.count)").cvText(12, .semibold, color: CV.cream.opacity(0.5), tracking: 0.6, inter: true)
+            Text("PENDING · \(requests.count)").cvText(12, .semibold, color: CV.text.opacity(0.5), tracking: 0.6, inter: true)
             ForEach(requests) { req in card(req) }
         }
     }
@@ -126,7 +126,7 @@ struct RideRequestsView: View {
                 HStack(spacing: 12) {
                     AvatarChip(data: req.rider.avatarData, name: req.rider.name, size: 46)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(req.rider.name).cvText(16, .bold, color: CV.cream, inter: true)
+                        Text(req.rider.name).cvText(16, .bold, color: CV.text, inter: true)
                         Text(req.ridesCount == 0 ? "No recorded rides yet" : "\(req.ridesCount) ride\(req.ridesCount == 1 ? "" : "s") · \(RideFormat.km(req.totalKm)) km")
                             .cvText(13, color: CV.muted, inter: true)
                         commonTag(req)
@@ -136,7 +136,7 @@ struct RideRequestsView: View {
                 }
             }.buttonStyle(.plain)
             if let note = req.note {
-                Text("“\(note)”").cvText(14, color: CV.cream, lineHeight: 19, inter: true)
+                Text("“\(note)”").cvText(14, color: CV.text, lineHeight: 19, inter: true)
                     .padding(12).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
@@ -146,15 +146,15 @@ struct RideRequestsView: View {
             }
         }
         .padding(14)
-        .background(Color(hex: 0x1A1A1D).opacity(0.94), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(CV.red.opacity(0.3), lineWidth: 1))
+        .background(CV.surface.opacity(0.94), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(CV.accent.opacity(0.3), lineWidth: 1))
     }
 
     private func actionButton(_ t: String, primary: Bool, busy: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(t).cvText(15, .bold, color: primary ? .white : CV.cream, inter: true)
+            Text(t).cvText(15, .bold, color: primary ? .white : CV.text, inter: true)
                 .frame(maxWidth: .infinity).frame(height: 44)
-                .background(primary ? CV.red : Color.white.opacity(0.08), in: Capsule())
+                .background(primary ? CV.accent : Color.white.opacity(0.08), in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.white.opacity(primary ? 0 : 0.14), lineWidth: 1))
                 .opacity(busy ? 0.5 : 1)
         }
@@ -231,7 +231,7 @@ struct ReviewRequestSheet: View {
                 if let note = request.note {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Message").cvText(12, .semibold, color: CV.muted, inter: true)
-                        Text(note).cvText(15, color: CV.cream, lineHeight: 20, inter: true)
+                        Text(note).cvText(15, color: CV.text, lineHeight: 20, inter: true)
                     }
                     .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -244,14 +244,14 @@ struct ReviewRequestSheet: View {
 
                 HStack(spacing: 10) {
                     Button { onDecide(false) } label: {
-                        Text("Decline").cvText(16, .bold, color: CV.cream, inter: true)
+                        Text("Decline").cvText(16, .bold, color: CV.text, inter: true)
                             .frame(width: 110, height: 52).background(Color.white.opacity(0.08), in: Capsule())
                             .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
                     }.buttonStyle(.plain)
                     Button { onDecide(true) } label: {
                         Text("Accept rider").cvText(16, .bold, color: .white, inter: true)
-                            .frame(maxWidth: .infinity).frame(height: 52).background(CV.red, in: Capsule())
-                            .shadow(color: CV.red.opacity(0.35), radius: 12, y: 6)
+                            .frame(maxWidth: .infinity).frame(height: 52).background(CV.accent, in: Capsule())
+                            .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
                     }.buttonStyle(.plain)
                 }
                 Button { dismiss(); app.push(.riderProfile(request.rider.id)) } label: {
@@ -260,7 +260,7 @@ struct ReviewRequestSheet: View {
             }
             .padding(20)
         }
-        .background(Color(hex: 0x141416).ignoresSafeArea())
+        .background(CV.bg2.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
@@ -269,7 +269,7 @@ struct ReviewRequestSheet: View {
         HStack(spacing: 8) {
             Image(systemName: on ? "checkmark" : "minus").font(.system(size: 12, weight: .bold))
                 .foregroundStyle(on ? CV.green : CV.dim).frame(width: 16)
-            Text(text).cvText(14, color: on ? CV.cream : CV.muted, inter: true)
+            Text(text).cvText(14, color: on ? CV.text : CV.muted, inter: true)
         }
     }
 }

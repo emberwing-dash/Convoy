@@ -16,7 +16,7 @@ struct ShareCardView: View {
     }
 
     var body: some View {
-        DesignCanvas(background: ContourBackdrop()) {
+        DesignCanvas(background: ScreenBackground()) {
             RoundIconButton(symbol: "xmark", dark: false) { app.pop() }.at(20, 58)
             Text("Share ride")
                 .cvText(17, .semibold, inter: true)
@@ -25,7 +25,7 @@ struct ShareCardView: View {
             card.at(40, 118)
 
             HStack(spacing: 6) {
-                Capsule().fill(CV.cream).frame(width: 18, height: 6)
+                Capsule().fill(CV.accent).frame(width: 18, height: 6)
                 ForEach(0..<3, id: \.self) { _ in
                     Circle().fill(Color.white.opacity(0.25)).frame(width: 6, height: 6)
                 }
@@ -35,7 +35,7 @@ struct ShareCardView: View {
             segmented.at(20, 626)
 
             Text("Riders’ photos only appear if they allow it.")
-                .cvText(12, color: CV.cream.opacity(0.4), inter: true)
+                .cvText(12, color: CV.text.opacity(0.4), inter: true)
                 .frame(width: 393).at(0, 684)
             
             Button {
@@ -52,11 +52,11 @@ struct ShareCardView: View {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 17, weight: .medium))
                     Text("Share")
-                        .cvText(15, .semibold, color: CV.ink, inter: true)
+                        .cvText(15, .semibold, color: CV.onAccent, inter: true)
                 }
-                .foregroundStyle(CV.ink)
+                .foregroundStyle(CV.onAccent)
                 .frame(width: 223, height: 56)
-                .background(CV.cream, in: Capsule())
+                .background(CV.accent, in: Capsule())
             }
             .at(150, 750)
         }
@@ -66,7 +66,7 @@ struct ShareCardView: View {
 
     private var card: some View {
         ZStack(alignment: .topLeading) {
-            Color(hex: 0x1A1A1D)
+            CV.surface
 
             if let r = ride,
                let startCoord = coord(from: r, lat: r.startLat, lon: r.startLon),
@@ -78,7 +78,7 @@ struct ShareCardView: View {
                 .frame(width: 313, height: 280)
             } else {
                 LinearGradient(
-                    colors: [Color(hex: 0x2A2A2E), Color(hex: 0x1A1A1D)],
+                    colors: [CV.elevated, CV.surface],
                     startPoint: .topLeading, endPoint: .bottomTrailing
                 )
                 .frame(width: 313, height: 280)
@@ -99,7 +99,7 @@ struct ShareCardView: View {
                 .offset(x: 20, y: 292)
 
             Text("km")
-                .cvText(16, .medium, color: CV.cream.opacity(0.6), inter: true)
+                .cvText(16, .medium, color: CV.text.opacity(0.6), inter: true)
                 .offset(x: 144, y: 326)
 
             Text(time)
@@ -107,12 +107,12 @@ struct ShareCardView: View {
                 .offset(x: 224, y: 300)
 
             Text("riding")
-                .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                .cvText(12, color: CV.text.opacity(0.5), inter: true)
                 .frame(width: 40, alignment: .trailing)
                 .offset(x: 253, y: 328)
 
             Text(routeLine)
-                .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                .cvText(12, color: CV.text.opacity(0.5), inter: true)
                 .lineLimit(1)
                 .frame(width: 273, alignment: .leading)
                 .offset(x: 20, y: 370)
@@ -129,17 +129,17 @@ struct ShareCardView: View {
                     Text(String(app.displayName.prefix(1)).uppercased())
                         .cvText(13, .semibold, inter: true)
                         .frame(width: 30, height: 30)
-                        .background(CV.red, in: Circle())
+                        .background(CV.accent, in: Circle())
                 }
             }
             .offset(x: 20, y: 418)
 
             Text(organiserLine)
-                .cvText(12, color: CV.cream.opacity(0.6), inter: true)
+                .cvText(12, color: CV.text.opacity(0.6), inter: true)
                 .offset(x: 60, y: 424)
 
             Text("CONVOY")
-                .cvText(10, .bold, color: CV.cream.opacity(0.45), tracking: 2, inter: true)
+                .cvText(10, .bold, color: CV.text.opacity(0.45), tracking: 0.6, inter: true)
                 .offset(x: 238, y: 444)
         }
         .frame(width: 313, height: 470, alignment: .topLeading)
@@ -153,11 +153,11 @@ struct ShareCardView: View {
             ForEach(Array(styles.enumerated()), id: \.offset) { i, t in
                 Button { style = i } label: {
                     Text(t)
-                        .cvText(14, .semibold, color: style == i ? CV.ink : CV.cream.opacity(0.6),
+                        .cvText(14, .semibold, color: style == i ? CV.onAccent : CV.text.opacity(0.6),
                                 inter: true)
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
-                        .background(style == i ? CV.cream : .clear, in: Capsule())
+                        .background(style == i ? CV.accent : .clear, in: Capsule())
                 }
                 .buttonStyle(.plain)
             }

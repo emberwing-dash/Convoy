@@ -18,7 +18,7 @@ struct ProfileView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
             ScrollView {
                 VStack(spacing: 0) {
                     avatarView.padding(.top, 62)
@@ -29,7 +29,7 @@ struct ProfileView: View {
 
                     if !app.handle.isEmpty {
                         Text("@\(app.handle)")
-                            .cvText(14, color: CV.cream.opacity(0.55), inter: true)
+                            .cvText(14, color: CV.text.opacity(0.55), inter: true)
                             .padding(.top, 3)
                     }
 
@@ -85,7 +85,7 @@ struct ProfileView: View {
                                 "Help & privacy",
                                 action: { app.push(.placeholder("Help & privacy")) })
                     }
-                    .background(Color(hex: 0x1A1A1D),
+                    .background(CV.surface,
                                 in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
@@ -95,7 +95,7 @@ struct ProfileView: View {
                         showSignOutConfirm = true
                     } label: {
                         Text("Sign out")
-                            .cvText(15, .semibold, color: CV.red, inter: true)
+                            .cvText(15, .semibold, color: CV.danger, inter: true)
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 26)
@@ -146,20 +146,20 @@ struct ProfileView: View {
                     .scaledToFill()
                     .frame(width: 96, height: 96)
                     .clipShape(Circle())
-                    .overlay(Circle().strokeBorder(CV.red, lineWidth: 3))
+                    .overlay(Circle().strokeBorder(CV.accent, lineWidth: 3))
             } else {
                 Circle()
-                    .fill(LinearGradient(colors: [CV.red.opacity(0.8), CV.red],
+                    .fill(LinearGradient(colors: [CV.accent.opacity(0.8), CV.accent],
                                          startPoint: .top, endPoint: .bottom))
                     .frame(width: 96, height: 96)
                     .overlay(
                         Text(String(app.displayName.prefix(1)).uppercased())
                             .cvText(38, .bold, color: .white, inter: true)
                     )
-                    .overlay(Circle().strokeBorder(CV.red, lineWidth: 3))
+                    .overlay(Circle().strokeBorder(CV.accent, lineWidth: 3))
             }
         }
-        .shadow(color: CV.red.opacity(0.35), radius: 12)
+        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
     }
 
     // MARK: - Recent rides
@@ -172,18 +172,18 @@ struct ProfileView: View {
                         Circle().fill(Color.white.opacity(0.06)).frame(width: 44, height: 44)
                         Image(systemName: "flag.checkered")
                             .font(.system(size: 18))
-                            .foregroundStyle(CV.cream.opacity(0.45))
+                            .foregroundStyle(CV.text.opacity(0.45))
                     }
                     VStack(alignment: .leading, spacing: 3) {
                         Text("No completed rides yet")
                             .cvText(15, .semibold, inter: true)
                         Text("End a ride to see your distance, route & stats here")
-                            .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                            .cvText(12, color: CV.text.opacity(0.5), inter: true)
                     }
                     Spacer()
                 }
                 .padding(16)
-                .background(Color(hex: 0x1A1A1D),
+                .background(CV.surface,
                             in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
@@ -200,25 +200,25 @@ struct ProfileView: View {
                                 }
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(r.title)
-                                        .cvText(15, .bold, color: CV.cream, inter: true)
+                                        .cvText(15, .bold, color: CV.text, inter: true)
                                         .lineLimit(1)
                                     Text("\(r.place) · \(r.displayDate)")
-                                        .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                                        .cvText(12, color: CV.text.opacity(0.55), inter: true)
                                 }
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 3) {
                                     Text(r.distance)
-                                        .cvText(14, .bold, color: CV.cream, inter: true)
+                                        .cvText(14, .bold, color: CV.text, inter: true)
                                     Text(r.duration)
-                                        .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                                        .cvText(12, color: CV.text.opacity(0.55), inter: true)
                                 }
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(CV.cream.opacity(0.4))
+                                    .foregroundStyle(CV.text.opacity(0.4))
                             }
                             .padding(.horizontal, 16)
                             .frame(height: 68)
-                            .background(Color(hex: 0x1A1A1D),
+                            .background(CV.surface,
                                         in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
@@ -239,14 +239,14 @@ struct ProfileView: View {
     private func stat(_ v: String, _ l: String) -> some View {
         VStack(spacing: 4) {
             Text(v).cvText(20, .bold, inter: true)
-            Text(l).cvText(12, color: CV.cream.opacity(0.45), inter: true)
+            Text(l).cvText(12, color: CV.text.opacity(0.45), inter: true)
         }
         .frame(maxWidth: .infinity)
     }
 
     private func sectionTitle(_ t: String) -> some View {
         Text(t)
-            .cvText(12, .semibold, color: CV.cream.opacity(0.5), tracking: 1, inter: true)
+            .cvText(12, .semibold, color: CV.text.opacity(0.5), tracking: 1, inter: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 4)
     }
@@ -268,11 +268,11 @@ struct ProfileView: View {
                     Text(title).cvText(16, .medium, inter: true)
                     Spacer()
                     if let t = trailing {
-                        Text(t).cvText(13, color: CV.cream.opacity(0.5), inter: true)
+                        Text(t).cvText(13, color: CV.text.opacity(0.5), inter: true)
                     }
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(CV.cream.opacity(0.5))
+                        .foregroundStyle(CV.text.opacity(0.5))
                 }
                 .padding(.horizontal, 16).frame(height: 52)
                 .contentShape(Rectangle())

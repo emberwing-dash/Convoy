@@ -58,7 +58,7 @@ struct PlanHandoffView: View {
                             if on { excluded.insert(s.name) } else { excluded.remove(s.name) }
                         } trailing: {
                             Image(systemName: on ? "checkmark" : "circle").font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(on ? CV.red : CV.dim)
+                                .foregroundStyle(on ? CV.accent : CV.dim)
                         }
                         .opacity(on ? 1 : 0.5)
                         .accessibilityValue(on ? "Included" : "Left out")
@@ -112,7 +112,7 @@ struct PlanHandoffView: View {
 
     private func startRow(_ s: Start, symbol: String, title: String, subtitle: String) -> some View {
         ListRow(symbol: symbol, title: title, subtitle: subtitle) { start = s } trailing: {
-            if start == s { Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(CV.red) }
+            if start == s { Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(CV.accent) }
         }
     }
 
@@ -142,7 +142,7 @@ struct PlaceSearchSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(CV.muted)
                 TextField("", text: $query, prompt: Text("Search any city or address").foregroundStyle(CV.dim))
-                    .foregroundStyle(CV.cream).autocorrectionDisabled()
+                    .foregroundStyle(CV.text).autocorrectionDisabled()
             }
             .font(.system(size: 15)).padding(.horizontal, 14).frame(height: 44).glassRounded(14)
             ScrollView {
@@ -187,7 +187,7 @@ struct TripSheet: View {
                 .padding(.horizontal, 20).padding(.top, 4)
             List {
                 HStack(spacing: 12) {
-                    Text("S").cvText(12, .bold, color: CV.ink, inter: true).frame(width: 24, height: 24).background(CV.cream, in: Circle())
+                    Text("S").cvText(12, .bold, color: CV.onAccent, inter: true).frame(width: 24, height: 24).background(CV.accent, in: Circle())
                     VStack(alignment: .leading, spacing: 1) {
                         Text(store.origin.map { $0.name.components(separatedBy: ",")[0] } ?? "Choose in the planner").cvText(15, .semibold, inter: true)
                         Text("Start").cvText(12, color: CV.muted, inter: true)
@@ -197,7 +197,7 @@ struct TripSheet: View {
                 .moveDisabled(true)
                 ForEach(Array(store.trip.enumerated()), id: \.element.id) { i, p in
                     HStack(spacing: 12) {
-                        Text("\(i + 1)").cvText(12, .bold, inter: true).frame(width: 24, height: 24).background(CV.red, in: Circle())
+                        Text("\(i + 1)").cvText(12, .bold, inter: true).frame(width: 24, height: 24).background(CV.accent, in: Circle())
                         DiscoverImage(photo: p.photos.first, coord: p.coord).frame(width: 40, height: 40)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         VStack(alignment: .leading, spacing: 1) {
@@ -313,21 +313,21 @@ struct ExploreMapView: View {
         ZStack(alignment: .top) {
             Map(position: $position, selection: $selection) {
                 ForEach(shownRoutes) { r in
-                    MapPolyline(coordinates: r.geometry.map(\.cl)).stroke(CV.red, lineWidth: 3)
+                    MapPolyline(coordinates: r.geometry.map(\.cl)).stroke(CV.accent, lineWidth: 3)
                 }
                 ForEach(shownPlaces) { p in
                     Annotation(p.name, coordinate: p.coord.cl) {
                         DiscoverImage(photo: p.photos.first, coord: p.coord)
                             .frame(width: selection == p.id ? 52 : 40, height: selection == p.id ? 52 : 40)
                             .clipShape(Circle())
-                            .overlay(Circle().strokeBorder(selection == p.id ? CV.red : .white, lineWidth: 2))
+                            .overlay(Circle().strokeBorder(selection == p.id ? CV.accent : .white, lineWidth: 2))
                             .shadow(radius: 4)
                     }
                     .tag(p.id)
                 }
                 if let o = store.origin {
                     Annotation("Start", coordinate: o.coord.cl) {
-                        Circle().fill(CV.red).frame(width: 14, height: 14).overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                        Circle().fill(CV.accent).frame(width: 14, height: 14).overlay(Circle().strokeBorder(.white, lineWidth: 2))
                     }
                 }
             }
@@ -342,7 +342,7 @@ struct ExploreMapView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass").foregroundStyle(CV.muted)
                         TextField("", text: $text, prompt: Text("Search places and routes").foregroundStyle(CV.dim))
-                            .foregroundStyle(CV.cream).autocorrectionDisabled()
+                            .foregroundStyle(CV.text).autocorrectionDisabled()
                         if !text.isEmpty { Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(CV.dim) } }
                     }
                     .font(.system(size: 15)).padding(.horizontal, 14).frame(height: 44)

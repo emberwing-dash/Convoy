@@ -123,7 +123,7 @@ struct RouteFiltersSheet: View {
                     Text("Ridden end-to-end by Convoy riders").cvText(12, color: CV.muted, inter: true)
                 }
             }
-            .tint(CV.red).padding(.top, 22)
+            .tint(CV.accent).padding(.top, 22)
             Spacer(minLength: 20)
             DiscoverButton(title: count == 0 ? "No routes match" : "Show \(count) \(count == 1 ? "route" : "routes")") {
                 filters = draft; dismiss()
@@ -187,7 +187,7 @@ struct DiscoverSearchView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").foregroundStyle(CV.muted)
                     TextField("", text: $text, prompt: Text("Search places, routes, regions").foregroundStyle(CV.dim))
-                        .foregroundStyle(CV.cream).focused($focused).autocorrectionDisabled().submitLabel(.search)
+                        .foregroundStyle(CV.text).focused($focused).autocorrectionDisabled().submitLabel(.search)
                     if !text.isEmpty { Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(CV.dim) } }
                 }
                 .font(.system(size: 15)).padding(.horizontal, 14).frame(height: 44).glassRounded(14)
@@ -238,7 +238,7 @@ struct DiscoverSearchView: View {
             if let s = store.suggestion(for: text) {
                 HStack(spacing: 4) {
                     Text("Did you mean").cvText(13, color: CV.muted, inter: true)
-                    Button("\(s)?") { text = s }.cvText(13, .semibold, color: CV.red, inter: true).buttonStyle(.plain)
+                    Button("\(s)?") { text = s }.cvText(13, .semibold, color: CV.accent, inter: true).buttonStyle(.plain)
                 }
                 .padding(.top, -20)
             }
@@ -324,12 +324,12 @@ struct RouteDetailView: View {
                                         pacing = RidePacingProfile.profile(for: pType)
                                     } label: {
                                         Text(pType.rawValue)
-                                            .cvText(12, .medium, color: pacing.type == pType ? CV.cream : CV.muted, inter: true)
+                                            .cvText(12, .medium, color: pacing.type == pType ? CV.text : CV.muted, inter: true)
                                             .padding(.horizontal, 14)
                                             .padding(.vertical, 8)
-                                            .background(pacing.type == pType ? CV.red.opacity(0.35) : Color.white.opacity(0.06))
+                                            .background(pacing.type == pType ? CV.accent.opacity(0.35) : Color.white.opacity(0.06))
                                             .clipShape(Capsule())
-                                            .overlay(Capsule().stroke(pacing.type == pType ? CV.red : Color.white.opacity(0.12), lineWidth: 1))
+                                            .overlay(Capsule().stroke(pacing.type == pType ? CV.accent : Color.white.opacity(0.12), lineWidth: 1))
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -342,10 +342,10 @@ struct RouteDetailView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 Image(systemName: "gauge.with.needle")
-                                    .foregroundStyle(CV.cream)
+                                    .foregroundStyle(CV.text)
                                     .font(.system(size: 13, weight: .semibold))
                                 Text("Journey Breakdown")
-                                    .cvText(13, .semibold, color: CV.cream, inter: true)
+                                    .cvText(13, .semibold, color: CV.text, inter: true)
                                 Spacer()
                                 if let prov = e.provenance {
                                     Text(prov)
@@ -360,7 +360,7 @@ struct RouteDetailView: View {
                                         .cvText(12, color: CV.muted, inter: true)
                                     Spacer()
                                     Text(e.durationText)
-                                        .cvText(12, .semibold, color: CV.cream, inter: true)
+                                        .cvText(12, .semibold, color: CV.text, inter: true)
                                 }
                                 if let rawProv = e.providerRawDurationText, rawProv != e.durationText {
                                     HStack {
@@ -376,7 +376,7 @@ struct RouteDetailView: View {
                                         .cvText(12, color: CV.muted, inter: true)
                                     Spacer()
                                     Text("+\(Int(st.totalStopsDuration / 60))m")
-                                        .cvText(12, .semibold, color: CV.cream, inter: true)
+                                        .cvText(12, .semibold, color: CV.text, inter: true)
                                 }
                                 if st.fuelCount > 0 {
                                     HStack {
@@ -408,10 +408,10 @@ struct RouteDetailView: View {
                                 Divider().background(Color.white.opacity(0.1)).padding(.vertical, 2)
                                 HStack {
                                     Text("Total journey estimate:")
-                                        .cvText(13, .bold, color: CV.cream, inter: true)
+                                        .cvText(13, .bold, color: CV.text, inter: true)
                                     Spacer()
                                     Text(totalTripText ?? e.durationText)
-                                        .cvText(13, .bold, color: CV.cream, inter: true)
+                                        .cvText(13, .bold, color: CV.text, inter: true)
                                 }
                             }
 
@@ -432,11 +432,11 @@ struct RouteDetailView: View {
                         if let avoided = e.avoidedExpressway {
                             HStack(alignment: .top, spacing: 10) {
                                 Image(systemName: "checkmark.shield.fill")
-                                    .foregroundStyle(CV.red)
+                                    .foregroundStyle(CV.accent)
                                     .font(.system(size: 18))
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("2W Safe Route · \(avoided) Avoided")
-                                        .cvText(13, .semibold, color: CV.cream, inter: true)
+                                        .cvText(13, .semibold, color: CV.text, inter: true)
                                     Text("Complies with two-wheeler highway prohibitions. Routed via legal arterial roads.")
                                         .cvText(11, color: CV.muted, inter: true)
                                     if let citation = e.legalCitation {
@@ -448,9 +448,9 @@ struct RouteDetailView: View {
                             }
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(CV.red.opacity(0.12))
+                            .background(CV.accent.opacity(0.12))
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(CV.red.opacity(0.3), lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(CV.accent.opacity(0.3), lineWidth: 1))
                             .padding(.top, 12)
                         }
 
@@ -465,12 +465,12 @@ struct RouteDetailView: View {
                         Text("Ride time unavailable for this route yet.")
                             .cvText(11, color: CV.dim, inter: true).padding(.top, 8)
                     }
-                    if !r.summary.isEmpty { Text(r.summary).cvText(15, color: CV.cream.opacity(0.9), lineHeight: 22, inter: true).padding(.top, 14) }
+                    if !r.summary.isEmpty { Text(r.summary).cvText(15, color: CV.text.opacity(0.9), lineHeight: 22, inter: true).padding(.top, 14) }
 
                     HStack(spacing: 10) {
                         Button { app.toggleSaved(r) } label: {
                             Image(systemName: app.isSaved(r) ? "bookmark.fill" : "bookmark").font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(CV.cream).frame(width: 52, height: 52).glassRounded(16)
+                                .foregroundStyle(CV.text).frame(width: 52, height: 52).glassRounded(16)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(app.isSaved(r) ? "Remove from saved" : "Save route")
@@ -511,7 +511,7 @@ struct RouteDetailView: View {
 }
 
 func heroIcon(_ symbol: String) -> some View {
-    Image(systemName: symbol).font(.system(size: 16, weight: .semibold)).foregroundStyle(CV.cream)
+    Image(systemName: symbol).font(.system(size: 16, weight: .semibold)).foregroundStyle(CV.text)
         .frame(width: 40, height: 40).background(.black.opacity(0.45), in: Circle())
 }
 

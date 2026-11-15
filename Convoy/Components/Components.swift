@@ -1,11 +1,9 @@
 import SwiftUI
 
-/// Dark contour-map backdrop used by nearly every screen. Never affects layout size.
-struct ContourBackdrop: View {
+/// Standard screen background: flat graphite, edge to edge.
+struct ScreenBackground: View {
     var body: some View {
         CV.bg
-            .overlay(Image("contour").resizable().scaledToFill())
-            .clipped()
             .ignoresSafeArea()
             .allowsHitTesting(false)
     }
@@ -30,19 +28,13 @@ extension View {
     func glassCapsule() -> some View { glass(Capsule()) }
 }
 
-/// 56pt cream pill CTA.
+/// Full-width primary action (system blue).
 struct PrimaryButton: View {
     let title: String
     var action: () -> Void = {}
     var body: some View {
-        Button(action: action) {
-            Text(title)
-                .cvText(17, .medium, color: CV.ink, tracking: -0.17, lineHeight: 22)
-                .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(CV.cream, in: Capsule())
-        }
-        .buttonStyle(.plain)
+        Button(action: action) { Text(title) }
+            .buttonStyle(CVPrimaryButtonStyle(height: 54))
     }
 }
 
@@ -54,9 +46,9 @@ struct CircleBackButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(CV.cream)
+                .foregroundStyle(CV.text)
                 .frame(width: 44, height: 44)
-                .glass(Circle())
+                .background(CV.elevated, in: Circle())
         }
         .buttonStyle(.plain)
     }
@@ -180,11 +172,11 @@ struct RoundIconButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(CV.cream)
+                .foregroundStyle(CV.text)
                 .frame(width: size, height: size)
-                .background(dark ? Color(hex: 0x1A1A1D, opacity: 0.82) : CV.glassFill, in: Circle())
-                .overlay(Circle().strokeBorder(dark ? Color.white.opacity(0.09) : CV.glassStroke, lineWidth: 1))
-                .shadow(color: .black.opacity(dark ? 0.4 : 0), radius: 9, y: 6)
+                .background(dark ? CV.elevated.opacity(0.94) : CV.glassFill, in: Circle())
+                .overlay(Circle().strokeBorder(CV.stroke, lineWidth: 1))
+                .shadow(color: .black.opacity(dark ? 0.3 : 0), radius: 8, y: 4)
         }
         .buttonStyle(.plain)
     }

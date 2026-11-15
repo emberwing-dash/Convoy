@@ -19,7 +19,7 @@ struct CrewDetailView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
 
             if let crew {
                 ScrollView {
@@ -29,7 +29,7 @@ struct CrewDetailView: View {
                             CrewAvatar(data: crew.avatarData, name: crew.name, size: 76)
 
                             Text(crew.name)
-                                .cvText(24, .bold, color: Color(hex: 0xF5EDDE),
+                                .cvText(24, .bold, color: CV.text,
                                         tracking: -0.3, inter: true)
                                 .padding(.top, 16)
 
@@ -39,10 +39,10 @@ struct CrewDetailView: View {
                         }
                         .padding(20)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(CV.red.opacity(0.12),
+                        .background(CV.accent.opacity(0.12),
                                     in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .strokeBorder(CV.red.opacity(0.22), lineWidth: 1))
+                            .strokeBorder(CV.accent.opacity(0.22), lineWidth: 1))
                         .padding(.top, 54)
 
                         PrimaryButton(title: "Invite to crew") {
@@ -52,7 +52,7 @@ struct CrewDetailView: View {
 
                         // MARK: members
                         Text("MEMBERS · \(crew.members.count)")
-                            .cvText(12, .semibold, color: CV.cream.opacity(0.5),
+                            .cvText(12, .semibold, color: CV.text.opacity(0.5),
                                     tracking: 0.6, inter: true)
                             .padding(.top, 22)
                             .padding(.leading, 4)
@@ -63,11 +63,11 @@ struct CrewDetailView: View {
                                     AvatarChip(data: m.avatarData, name: m.name, size: 36)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(m.name)
-                                            .cvText(16, .semibold, color: Color(hex: 0xF5EDDE),
+                                            .cvText(16, .semibold, color: CV.text,
                                                     inter: true)
                                         Text(m.detail)
                                             .cvText(13,
-                                                    color: m.pending ? Color(hex: 0xFFB020) : CV.muted,
+                                                    color: m.pending ? CV.warning : CV.muted,
                                                     inter: true)
                                     }
                                     Spacer()
@@ -77,7 +77,7 @@ struct CrewDetailView: View {
                                         } label: {
                                             Image(systemName: "minus.circle")
                                                 .font(.system(size: 16))
-                                                .foregroundStyle(CV.red.opacity(0.8))
+                                                .foregroundStyle(CV.accent.opacity(0.8))
                                                 .frame(width: 32, height: 32)
                                         }
                                         .buttonStyle(.plain)
@@ -94,7 +94,7 @@ struct CrewDetailView: View {
                                 }
                             }
                         }
-                        .background(Color(hex: 0x1C1C1F),
+                        .background(CV.surface,
                                     in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
@@ -108,13 +108,14 @@ struct CrewDetailView: View {
                                 Image(systemName: "rectangle.portrait.and.arrow.right")
                                     .font(.system(size: 14, weight: .semibold))
                                 Text("Leave crew")
-                                    .cvText(14, .semibold, color: CV.red, inter: true)
+                                    .cvText(14, .semibold, color: CV.danger, inter: true)
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 48)
                             .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CV.red.opacity(0.3), lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CV.danger.opacity(0.3), lineWidth: 1))
                         }
+                        .foregroundStyle(CV.danger)
                         .buttonStyle(.plain)
                         .padding(.top, 24)
 
@@ -123,11 +124,11 @@ struct CrewDetailView: View {
                             VStack(spacing: 0) {
                                 Image(systemName: "person.3")
                                     .font(.system(size: 26))
-                                    .foregroundStyle(CV.cream.opacity(0.6))
+                                    .foregroundStyle(CV.text.opacity(0.6))
                                     .padding(.top, 28)
 
                                 Text("No one else here yet")
-                                    .cvText(17, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                                    .cvText(17, .bold, color: CV.text, inter: true)
                                     .padding(.top, 14)
 
                                 Text("Share the crew code with friends who ride.")
@@ -138,10 +139,10 @@ struct CrewDetailView: View {
                                     app.push(.crewInvite(crew.id))
                                 } label: {
                                     Text("Invite riders")
-                                        .cvText(14, .semibold, color: CV.ink, inter: true)
+                                        .cvText(14, .semibold, color: CV.onAccent, inter: true)
                                         .padding(.horizontal, 30)
                                         .frame(height: 40)
-                                        .background(Color(hex: 0xF5EDDE), in: Capsule())
+                                        .background(CV.accent, in: Capsule())
                                 }
                                 .buttonStyle(.plain)
                                 .padding(.top, 16)

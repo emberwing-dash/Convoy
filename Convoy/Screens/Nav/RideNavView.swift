@@ -166,7 +166,7 @@ struct RideNavView: View {
                             .cvText(13, .semibold, inter: true)
                     }
                     .padding(.horizontal, 14).frame(height: 36)
-                    .background(Color(hex: 0x1A1A1D).opacity(0.94), in: Capsule())
+                    .background(CV.surface.opacity(0.94), in: Capsule())
                     .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
                     .padding(.top, 130)
                     Spacer()
@@ -363,10 +363,10 @@ struct RideNavView: View {
             if let loc = locationService.currentLocation {
                 Annotation("You", coordinate: loc.coordinate) {
                     ZStack {
-                        Circle().fill(CV.red.opacity(0.3)).frame(width: 48, height: 48)
+                        Circle().fill(CV.accent.opacity(0.3)).frame(width: 48, height: 48)
                         Circle().fill(.white).frame(width: 24, height: 24)
                             .shadow(color: .black.opacity(0.4), radius: 4)
-                        Circle().fill(CV.red).frame(width: 18, height: 18)
+                        Circle().fill(CV.accent).frame(width: 18, height: 18)
                         if let h = locationService.currentHeading, h.trueHeading >= 0 {
                             Image(systemName: "location.north.fill")
                                 .font(.system(size: 11, weight: .bold))
@@ -384,7 +384,7 @@ struct RideNavView: View {
                 }
                 if locationService.routeProgressIndex < locationService.routePolyline.count - 1 {
                     MapPolyline(coordinates: Array(locationService.routePolyline.suffix(from: locationService.routeProgressIndex)))
-                        .stroke(CV.red, lineWidth: 8)
+                        .stroke(CV.accent, lineWidth: 8)
                     MapPolyline(coordinates: Array(locationService.routePolyline.suffix(from: locationService.routeProgressIndex)))
                         .stroke(Color.white.opacity(0.4), lineWidth: 2)
                 }
@@ -393,9 +393,9 @@ struct RideNavView: View {
             if let dest = destinationCoordinate {
                 Annotation(destinationName, coordinate: dest) {
                     ZStack {
-                        Circle().fill(CV.red).frame(width: 32, height: 32)
+                        Circle().fill(CV.accent).frame(width: 32, height: 32)
                             .overlay(Circle().strokeBorder(.white, lineWidth: 2.5))
-                            .shadow(color: CV.red.opacity(0.5), radius: 6)
+                            .shadow(color: CV.accent.opacity(0.5), radius: 6)
                         Image(systemName: "flag.checkered")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(.white)
@@ -575,11 +575,11 @@ struct RideNavView: View {
                         Text("Planned stop added")
                             .cvText(15, .bold, inter: true)
                         Text("\(place.name) is saved to this ride\u{2019}s plan.")
-                            .cvText(13, color: CV.cream.opacity(0.7), lineHeight: 18, inter: true)
+                            .cvText(13, color: CV.text.opacity(0.7), lineHeight: 18, inter: true)
                             .lineLimit(2)
                     }
                     Spacer()
-                    Text("now").cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                    Text("now").cvText(12, color: CV.text.opacity(0.5), inter: true)
                 }
                 HStack(spacing: 10) {
                     Button {
@@ -593,9 +593,9 @@ struct RideNavView: View {
                     }
                     Button { alert = .none } label: {
                         Text("Done")
-                            .cvText(15, .semibold, color: CV.ink, inter: true)
+                            .cvText(15, .semibold, color: CV.onAccent, inter: true)
                             .frame(maxWidth: .infinity).frame(height: 40)
-                            .background(Color(hex: 0xF5EDDE), in: Capsule())
+                            .background(CV.accent, in: Capsule())
                     }
                 }
                 .buttonStyle(.plain)
@@ -613,7 +613,7 @@ struct RideNavView: View {
             }
             .padding(.horizontal, 14)
             .frame(height: 44)
-            .background(Color(hex: 0x1A1A1D).opacity(0.94), in: Capsule())
+            .background(CV.surface.opacity(0.94), in: Capsule())
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
         }
     }
@@ -639,7 +639,7 @@ struct RideNavView: View {
                     Text("You Have Arrived!")
                         .cvText(17, .bold, inter: true)
                     Text("Completed ride to \(destinationName)")
-                        .cvText(13, color: CV.cream.opacity(0.6), inter: true)
+                        .cvText(13, color: CV.text.opacity(0.6), inter: true)
                 }
                 Spacer()
             }
@@ -657,7 +657,7 @@ struct RideNavView: View {
                     .cvText(15, .bold, color: .white, inter: true)
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
-                    .background(CV.red, in: Capsule())
+                    .background(CV.accent, in: Capsule())
             }
             .buttonStyle(.plain)
         }
@@ -701,7 +701,7 @@ struct RideNavView: View {
                 Button { panel = .none } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(CV.cream)
+                        .foregroundStyle(CV.text)
                         .frame(width: 36, height: 36)
                         .background(Color.white.opacity(0.12), in: Circle())
                 }
@@ -724,7 +724,7 @@ struct RideNavView: View {
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(CV.cream.opacity(0.4))
+                                .foregroundStyle(CV.text.opacity(0.4))
                         }
                         .padding(.horizontal, 16)
                         .frame(height: 52)
@@ -756,7 +756,7 @@ struct RideNavView: View {
                 Button { panel = .addStop } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(CV.cream)
+                        .foregroundStyle(CV.text)
                         .frame(width: 36, height: 36)
                         .background(Color.white.opacity(0.12), in: Circle())
                 }
@@ -766,7 +766,7 @@ struct RideNavView: View {
                 Button { panel = .none } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(CV.cream)
+                        .foregroundStyle(CV.text)
                         .frame(width: 36, height: 36)
                         .background(Color.white.opacity(0.12), in: Circle())
                 }
@@ -777,16 +777,16 @@ struct RideNavView: View {
             ScrollView {
                 VStack(spacing: 10) {
                     if poiResults.isLoading {
-                        ProgressView().tint(CV.red).padding(.top, 30)
+                        ProgressView().tint(CV.accent).padding(.top, 30)
                     } else if poiResults.results.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: kind.symbol)
                                 .font(.system(size: 24))
-                                .foregroundStyle(CV.cream.opacity(0.4))
+                                .foregroundStyle(CV.text.opacity(0.4))
                             Text("No \(kind.rawValue.lowercased()) places nearby")
                                 .cvText(14, .semibold, inter: true)
                             Text("Try again in a moment.")
-                                .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                                .cvText(12, color: CV.text.opacity(0.5), inter: true)
                         }
                         .padding(.top, 24)
                     } else {
@@ -807,13 +807,13 @@ struct RideNavView: View {
                                             .cvText(15, .bold, inter: true).lineLimit(1)
                                         if !p.address.isEmpty {
                                             Text(p.address)
-                                                .cvText(11, color: CV.cream.opacity(0.45), inter: true)
+                                                .cvText(11, color: CV.text.opacity(0.45), inter: true)
                                                 .lineLimit(2)
                                         }
                                     }
                                     Spacer()
                                     Image(systemName: "plus.circle.fill")
-                                        .font(.system(size: 22)).foregroundStyle(CV.red)
+                                        .font(.system(size: 22)).foregroundStyle(CV.accent)
                                 }
                                 .padding(14)
                                 .background(Color.white.opacity(0.06),
@@ -853,13 +853,13 @@ struct RideNavView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Convoy Riders").cvText(22, .bold, inter: true)
                     Text("Riding together to \(destinationName)")
-                        .cvText(13, color: CV.cream.opacity(0.55), inter: true)
+                        .cvText(13, color: CV.text.opacity(0.55), inter: true)
                 }
                 Spacer()
                 Button { panel = .none } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(CV.cream)
+                        .foregroundStyle(CV.text)
                         .frame(width: 36, height: 36)
                         .background(Color.white.opacity(0.12), in: Circle())
                 }
@@ -871,11 +871,11 @@ struct RideNavView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "person.crop.circle.badge.plus")
                         .font(.system(size: 30))
-                        .foregroundStyle(CV.cream.opacity(0.4))
+                        .foregroundStyle(CV.text.opacity(0.4))
                     Text("No crew riding with you")
                         .cvText(15, .semibold, inter: true)
                     Text("Share the ride code to invite riders.")
-                        .cvText(13, color: CV.cream.opacity(0.55), inter: true)
+                        .cvText(13, color: CV.text.opacity(0.55), inter: true)
                         .multilineTextAlignment(.center)
                 }
                 .padding(28).padding(.bottom, 34)
@@ -926,11 +926,11 @@ struct RideNavView: View {
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 56, height: 56)
-                    .background(CV.red, in: Circle())
+                    .background(CV.danger, in: Circle())
                     .padding(.top, 24)
                 Text("End Route?").cvText(22, .bold, inter: true).padding(.top, 16)
                 Text("End navigation to \(destinationName)? Your trip summary will be saved.")
-                    .cvText(14, color: CV.cream.opacity(0.6), lineHeight: 20, inter: true)
+                    .cvText(14, color: CV.text.opacity(0.6), lineHeight: 20, inter: true)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
                     .padding(.top, 8)
@@ -939,14 +939,14 @@ struct RideNavView: View {
                         .cvText(15, .bold, color: .white, inter: true)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(CV.red, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .background(CV.danger, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
                 Button { panel = .none } label: {
                     Text("Keep Navigating")
-                        .cvText(14, .semibold, color: CV.cream.opacity(0.8), inter: true)
+                        .cvText(14, .semibold, color: CV.text.opacity(0.8), inter: true)
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                 }
@@ -954,7 +954,7 @@ struct RideNavView: View {
                 .padding(.top, 6).padding(.bottom, 14)
             }
             .frame(maxWidth: 350)
-            .navCard(28, fill: Color(hex: 0x1E1E22))
+            .navCard(28, fill: CV.surface)
             .shadow(color: .black.opacity(0.5), radius: 24)
             .padding(.horizontal, 20)
         }
@@ -993,7 +993,7 @@ struct RideNavView: View {
 
                 ZStack {
                     Circle().fill(Color.white.opacity(0.06)).frame(width: 140, height: 140)
-                    Circle().fill(CV.red).frame(width: 90, height: 90)
+                    Circle().fill(CV.danger).frame(width: 90, height: 90)
                     Image(systemName: "phone.fill")
                         .font(.system(size: 38, weight: .bold))
                         .foregroundStyle(.white)
@@ -1011,7 +1011,7 @@ struct RideNavView: View {
                 // Current GPS Coordinates card for sharing with emergency responders
                 VStack(spacing: 6) {
                     Text("YOUR CURRENT COORDINATES")
-                        .cvText(11, .semibold, color: .white.opacity(0.6), tracking: 1.2, inter: true)
+                        .cvText(11, .semibold, color: .white.opacity(0.6), tracking: 0.6, inter: true)
                     if let loc = locationService.currentLocation, loc.horizontalAccuracy >= 0 {
                         let lat = loc.coordinate.latitude
                         let lon = loc.coordinate.longitude
@@ -1032,7 +1032,7 @@ struct RideNavView: View {
                                 Text(copiedCoords ? "Coordinates Copied!" : "Copy Coordinates")
                                     .cvText(13, .semibold, inter: true)
                             }
-                            .foregroundStyle(copiedCoords ? CV.green : CV.cream)
+                            .foregroundStyle(copiedCoords ? CV.green : CV.text)
                             .padding(.horizontal, 14)
                             .frame(height: 32)
                             .background(Color.white.opacity(0.12), in: Capsule())
@@ -1068,7 +1068,7 @@ struct RideNavView: View {
                         .cvText(17, .bold, color: .white, inter: true)
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
-                        .background(CV.red, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(CV.danger, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -1108,8 +1108,8 @@ struct RideStartingView: View {
 
     var body: some View {
         DesignCanvas {
-            ContourBackdrop()
-            Circle().strokeBorder(CV.red, lineWidth: 6).frame(width: 140, height: 140)
+            ScreenBackground()
+            Circle().strokeBorder(CV.accent, lineWidth: 6).frame(width: 140, height: 140)
                 .overlay(
                     Text("\(count)")
                         .cvText(92, .bold, inter: true)
@@ -1120,7 +1120,7 @@ struct RideStartingView: View {
                 .cvText(26, .semibold, inter: true)
                 .frame(width: 393).at(0, 318)
             Text("\(rideTitle) · \(rideDistance)")
-                .cvText(14, color: CV.cream.opacity(0.6), inter: true)
+                .cvText(14, color: CV.text.opacity(0.6), inter: true)
                 .frame(width: 393).at(0, 356)
             VStack(alignment: .leading, spacing: 0) {
                 check("Route loaded", "\(rideDistance) · about \(rideDuration)").padding(.top, 16)
@@ -1129,16 +1129,15 @@ struct RideStartingView: View {
             }
             .padding(.horizontal, 16)
             .frame(width: 353, height: 232, alignment: .topLeading)
-            .background(Color.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .background(CV.surface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                .strokeBorder(CV.separator, lineWidth: 1))
             .at(20, 404)
             Button { app.pop() } label: {
                 Text("Cancel")
                     .cvText(17, .semibold, inter: true)
                     .frame(width: 353, height: 56)
-                    .background(Color.black.opacity(0.35), in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
+                    .background(CV.elevated, in: Capsule())
             }
             .buttonStyle(.plain)
             .at(20, 750)
@@ -1166,12 +1165,12 @@ struct RideStartingView: View {
         HStack(spacing: 12) {
             Image(systemName: ok ? "checkmark" : "exclamationmark.triangle.fill")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(ok ? CV.red : .orange)
+                .foregroundStyle(ok ? CV.success : .orange)
                 .frame(width: 26, height: 26)
-                .background((ok ? CV.red : .orange).opacity(0.22), in: Circle())
+                .background((ok ? CV.success : .orange).opacity(0.22), in: Circle())
             VStack(alignment: .leading, spacing: 3) {
                 Text(t).cvText(15, .bold, inter: true)
-                Text(s).cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                Text(s).cvText(12, color: CV.text.opacity(0.55), inter: true)
             }
         }
     }
@@ -1184,17 +1183,17 @@ struct RideCompleteView: View {
 
     var body: some View {
         let dest = app.upcomingRide?.place ?? app.draft.to
-        DesignCanvas(background: ContourBackdrop()) {
+        DesignCanvas(background: ScreenBackground()) {
             Circle().fill(
-                RadialGradient(colors: [CV.red.opacity(0.4), .clear],
+                RadialGradient(colors: [CV.accent.opacity(0.16), .clear],
                                center: .center, startRadius: 0, endRadius: 200)
             )
             .frame(width: 400, height: 400)
             .at(-3, 50)
 
             ZStack {
-                Circle().fill(Color(hex: 0xFFB020).opacity(0.18)).frame(width: 180, height: 180)
-                Circle().fill(Color(hex: 0xFFB020).opacity(0.3)).frame(width: 144, height: 144)
+                Circle().fill(CV.warning.opacity(0.18)).frame(width: 180, height: 180)
+                Circle().fill(CV.warning.opacity(0.3)).frame(width: 144, height: 144)
                 Circle()
                     .fill(LinearGradient(colors: [Color(hex: 0xFFD27A), Color(hex: 0xF29A2E)],
                                          startPoint: .top, endPoint: .bottom))
@@ -1206,16 +1205,16 @@ struct RideCompleteView: View {
             .frame(width: 393).at(0, 107)
 
             Text("Destination Reached")
-                .cvText(34, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.6, inter: true)
+                .cvText(34, .bold, color: CV.text, tracking: -0.6, inter: true)
                 .frame(width: 393).at(0, 312)
             Text("\(dest.isEmpty ? "Destination" : dest) · Arrived")
-                .cvText(15, color: CV.cream.opacity(0.6), inter: true)
+                .cvText(15, color: CV.text.opacity(0.6), inter: true)
                 .frame(width: 393).at(0, 358)
 
             VStack(spacing: 0) {
                 let km = RideRecorder.shared.liveDistanceM / 1000
                 let recording = RideRecorder.shared.isRecording
-                row("point.topleft.down.to.point.bottomright.curvepath", CV.red,
+                row("point.topleft.down.to.point.bottomright.curvepath", CV.accent,
                     "Route Completed", "You arrived at \(dest.isEmpty ? "your destination" : dest)")
                 sep
                 row(recording && km >= 0.1 ? "location.fill" : "location.slash", recording && km >= 0.1 ? CV.green : CV.muted,
@@ -1262,7 +1261,7 @@ struct RideCompleteView: View {
                 .background(c.opacity(0.2), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(t).cvText(15, .bold, inter: true)
-                Text(s).cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                Text(s).cvText(12, color: CV.text.opacity(0.55), inter: true)
             }
             Spacer()
         }

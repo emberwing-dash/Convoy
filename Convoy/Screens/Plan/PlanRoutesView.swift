@@ -53,9 +53,9 @@ struct PlanRoutesView: View {
                 } label: {
                     Image(systemName: "square.3.layers.3d")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(CV.cream)
+                        .foregroundStyle(CV.text)
                         .frame(width: 44, height: 44)
-                        .background(Color(hex: 0x1A1A1D, opacity: 0.82), in: Circle())
+                        .background(CV.surface.opacity(0.82), in: Circle())
                         .overlay(Circle().strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
                         .shadow(color: .black.opacity(0.4), radius: 9, y: 6)
                 }
@@ -63,11 +63,11 @@ struct PlanRoutesView: View {
 
             if loading {
                 HStack(spacing: 10) {
-                    ProgressView().tint(CV.cream)
+                    ProgressView().tint(CV.accent)
                     Text("Finding routes…").cvText(14, .semibold, inter: true)
                 }
                 .padding(.horizontal, 16).frame(height: 40)
-                .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Capsule())
+                .background(CV.surface.opacity(0.92), in: Capsule())
             } else if failed {
                 Button {
                     Task {
@@ -81,12 +81,12 @@ struct PlanRoutesView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text("Couldn't load routes").cvText(13, .semibold, inter: true)
                             if case .failed(let msg) = app.planner.state {
-                                Text(msg).cvText(10, color: CV.cream.opacity(0.55), inter: true).lineLimit(1)
+                                Text(msg).cvText(10, color: CV.text.opacity(0.55), inter: true).lineLimit(1)
                             }
                         }
                     }
                     .padding(.horizontal, 14).frame(height: 44)
-                    .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Capsule())
+                    .background(CV.surface.opacity(0.92), in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
@@ -119,7 +119,7 @@ struct PlanRoutesView: View {
         .frame(height: sheetHeight)
         .background(
             UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
-                .fill(Color(hex: 0x1A1A1D))
+                .fill(CV.surface)
                 .overlay(
                     UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
@@ -138,14 +138,14 @@ struct PlanRoutesView: View {
                     .cvText(22, .semibold, tracking: -0.33, inter: true)
                     .lineLimit(1)
                 Text("\(n) stop\(n == 1 ? "" : "s") · pick how you want to ride")
-                    .cvText(13, color: CV.cream.opacity(0.55), inter: true)
+                    .cvText(13, color: CV.text.opacity(0.55), inter: true)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
                 Text(app.draft.distanceText(app.draft.style))
                     .cvText(18, .bold, inter: true)
                 Text(app.draft.durationText(app.draft.style))
-                    .cvText(13, color: CV.cream.opacity(0.55), inter: true)
+                    .cvText(13, color: CV.text.opacity(0.55), inter: true)
             }
         }
     }
@@ -154,10 +154,10 @@ struct PlanRoutesView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("Your route")
-                    .cvText(14, .semibold, color: CV.cream.opacity(0.6), inter: true)
+                    .cvText(14, .semibold, color: CV.text.opacity(0.6), inter: true)
                 Spacer()
                 Button { app.pop() } label: {
-                    Text("Edit").cvText(14, .semibold, color: CV.red, inter: true)
+                    Text("Edit").cvText(14, .semibold, color: CV.accent, inter: true)
                 }
                 .buttonStyle(.plain)
             }
@@ -165,7 +165,7 @@ struct PlanRoutesView: View {
             RouteSummaryCard(draft: app.draft)
 
             Text("Route style")
-                .cvText(14, .semibold, color: CV.cream.opacity(0.6), inter: true)
+                .cvText(14, .semibold, color: CV.text.opacity(0.6), inter: true)
                 .padding(.top, 6)
 
             styleRow
@@ -197,19 +197,19 @@ struct PlanRoutesView: View {
         let on = app.draft.style == s
         return Button { app.draft.style = s } label: {
             VStack(alignment: .leading, spacing: 3) {
-                Text(s.rawValue).cvText(14, .semibold, color: on ? CV.red : CV.cream, inter: true)
+                Text(s.rawValue).cvText(14, .semibold, color: on ? CV.accent : CV.text, inter: true)
                 Text(app.draft.durationText(s)).cvText(18, .bold, inter: true)
-                Text(app.draft.distanceText(s)).cvText(12, color: CV.cream.opacity(0.4), inter: true)
+                Text(app.draft.distanceText(s)).cvText(12, color: CV.text.opacity(0.4), inter: true)
             }
             .redacted(reason: loading ? .placeholder : [])
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(height: 86)
-            .background(on ? CV.red.opacity(0.14) : Color.white.opacity(0.05),
+            .background(on ? CV.accent.opacity(0.14) : Color.white.opacity(0.05),
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(on ? CV.red : Color.white.opacity(0.08), lineWidth: on ? 1.5 : 1)
+                    .strokeBorder(on ? CV.accent : Color.white.opacity(0.08), lineWidth: on ? 1.5 : 1)
             )
         }
         .buttonStyle(.plain)
@@ -227,11 +227,11 @@ struct PlanRoutesView: View {
             }
             if let r = routes[app.draft.style] {
                 MapPolyline(coordinates: r.coords.map(\.cl))
-                    .stroke(Color(hex: 0x0A84FF), lineWidth: 7)
+                    .stroke(CV.accent, lineWidth: 7)
             }
             if let a = app.draft.startCoord {
                 Annotation("", coordinate: a.cl) {
-                    Circle().fill(CV.red).frame(width: 18, height: 18)
+                    Circle().fill(CV.accent).frame(width: 18, height: 18)
                         .overlay(Circle().strokeBorder(.white, lineWidth: 3))
                 }
             }
@@ -239,7 +239,7 @@ struct PlanRoutesView: View {
                 Annotation("", coordinate: b.cl) {
                     ZStack {
                         Circle().fill(.white.opacity(0.9)).frame(width: 26, height: 26)
-                        Circle().fill(CV.red).frame(width: 14, height: 14)
+                        Circle().fill(CV.accent).frame(width: 14, height: 14)
                         Circle().fill(.white).frame(width: 5, height: 5)
                     }
                 }

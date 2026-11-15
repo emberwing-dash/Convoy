@@ -90,16 +90,16 @@ struct ImageCropAdjustView: View {
                     VStack(spacing: 16) {
                         HStack(spacing: 14) {
                             Image(systemName: "minus.magnifyingglass")
-                                .foregroundStyle(CV.cream.opacity(0.6))
+                                .foregroundStyle(CV.text.opacity(0.6))
 
                             Slider(value: $scale, in: 0.3...4.0)
-                                .tint(CV.red)
+                                .tint(CV.accent)
                                 .onChange(of: scale) { _, _ in
                                     lastScale = 1.0
                                 }
 
                             Image(systemName: "plus.magnifyingglass")
-                                .foregroundStyle(CV.cream.opacity(0.6))
+                                .foregroundStyle(CV.text.opacity(0.6))
                         }
                         .padding(.horizontal, 28)
 
@@ -124,7 +124,7 @@ struct ImageCropAdjustView: View {
                                 .cvText(
                                     14,
                                     .semibold,
-                                    color: CV.cream.opacity(0.8),
+                                    color: CV.text.opacity(0.8),
                                     inter: true
                                 )
                                 .padding(.horizontal, 16)
@@ -139,14 +139,14 @@ struct ImageCropAdjustView: View {
                             Text("Drag to reposition · Pinch to zoom")
                                 .cvText(
                                     12,
-                                    color: CV.cream.opacity(0.45),
+                                    color: CV.text.opacity(0.45),
                                     inter: true
                                 )
                         }
                     }
                     .padding(.vertical, 20)
                     .background(
-                        Color(hex: 0x1A1A1D, opacity: 0.95),
+                        CV.surface.opacity(0.95),
                         in: UnevenRoundedRectangle(
                             topLeadingRadius: 24,
                             topTrailingRadius: 24
@@ -173,7 +173,7 @@ struct ImageCropAdjustView: View {
                         onCancel()
                     }
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(CV.cream.opacity(0.8))
+                    .foregroundStyle(CV.text.opacity(0.8))
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -187,7 +187,7 @@ struct ImageCropAdjustView: View {
                         onCrop(croppedImage, data)
                     }
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(CV.red)
+                    .foregroundStyle(CV.accent)
                 }
             }
             .preferredColorScheme(.dark)
@@ -289,13 +289,13 @@ private struct CropMaskOverlay: View {
                     }
 
                 Circle()
-                    .strokeBorder(CV.red, lineWidth: 2.5)
+                    .strokeBorder(CV.accent, lineWidth: 2.5)
                     .frame(
                         width: diameter,
                         height: diameter
                     )
                     .shadow(
-                        color: CV.red.opacity(0.4),
+                        color: CV.accent.opacity(0.4),
                         radius: 10
                     )
 

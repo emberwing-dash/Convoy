@@ -82,11 +82,11 @@ struct PlanMapView: View {
                     VStack(spacing: 8) {
                         Text("No places found").cvText(14, .semibold, inter: true)
                         Text("Try a different name or pick a checkpoint from the map.")
-                            .cvText(12, color: CV.cream.opacity(0.55), inter: true)
+                            .cvText(12, color: CV.text.opacity(0.55), inter: true)
                     }
                     .padding(.horizontal, 16)
                     .frame(width: 353, height: 64)
-                    .background(Color(hex: 0x1A1A1D, opacity: 0.96),
+                    .background(CV.surface.opacity(0.96),
                                 in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
@@ -102,11 +102,11 @@ struct PlanMapView: View {
                                 .cvText(13, .semibold, inter: true)
                         }
                         Text(locErr)
-                            .cvText(11, color: CV.cream.opacity(0.6), inter: true)
+                            .cvText(11, color: CV.text.opacity(0.6), inter: true)
                     }
                     .padding(12)
                     .frame(width: 353)
-                    .background(Color(hex: 0x1A1A1D, opacity: 0.96),
+                    .background(CV.surface.opacity(0.96),
                                 in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .strokeBorder(amberC.opacity(0.4), lineWidth: 1))
@@ -130,7 +130,7 @@ struct PlanMapView: View {
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
-                            .background(Color(hex: 0x1A1A1D, opacity: 0.95), in: Circle())
+                            .background(CV.surface.opacity(0.95), in: Circle())
                             .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                             .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
                     }
@@ -174,7 +174,7 @@ struct PlanMapView: View {
                                 .stroke(Color.white.opacity(0.08), lineWidth: 4)
                                 .frame(width: 64, height: 64)
                             ProgressView()
-                                .tint(CV.red)
+                                .tint(CV.accent)
                                 .scaleEffect(1.3)
                         }
                         
@@ -182,13 +182,13 @@ struct PlanMapView: View {
                             Text("Finding best routes...")
                                 .cvText(18, .bold, inter: true)
                             Text("Analyzing roads, stops, and scenic options.")
-                                .cvText(13, color: CV.cream.opacity(0.6), inter: true)
+                                .cvText(13, color: CV.text.opacity(0.6), inter: true)
                                 .multilineTextAlignment(.center)
                         }
                     }
                     .padding(.horizontal, 32)
                     .padding(.vertical, 28)
-                    .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                    .background(CV.surface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
                     .shadow(color: .black.opacity(0.6), radius: 24, y: 12)
                 }
@@ -208,7 +208,7 @@ struct PlanMapView: View {
             if let c = fromCoord {
                 Annotation("Start", coordinate: c) {
                     ZStack {
-                        Circle().fill(CV.red).frame(width: 20, height: 20)
+                        Circle().fill(CV.accent).frame(width: 20, height: 20)
                         Circle().strokeBorder(.white, lineWidth: 3).frame(width: 20, height: 20)
                         Image(systemName: "location.fill")
                             .font(.system(size: 9, weight: .bold))
@@ -233,7 +233,7 @@ struct PlanMapView: View {
             if let c = toCoord {
                 Annotation("Destination", coordinate: c) {
                     ZStack {
-                        Circle().fill(CV.red).frame(width: 34, height: 34)
+                        Circle().fill(CV.accent).frame(width: 34, height: 34)
                         Circle().strokeBorder(.white, lineWidth: 2.5).frame(width: 34, height: 34)
                         Image(systemName: "flag.checkered")
                             .font(.system(size: 14, weight: .bold))
@@ -243,7 +243,7 @@ struct PlanMapView: View {
             }
             if routeLine.count > 1 {
                 MapPolyline(coordinates: routeLine)
-                    .stroke(Color(hex: 0x0A84FF), lineWidth: 7)
+                    .stroke(CV.accent, lineWidth: 7)
                 MapPolyline(coordinates: routeLine)
                     .stroke(Color.white.opacity(0.35), lineWidth: 2)
             }
@@ -263,7 +263,7 @@ struct PlanMapView: View {
             row(marker: { startMarker }, label: "From") {
                 TextField("Starting point…", text: $fromText)
                     .focused($focus, equals: .from)
-                    .tint(CV.red)
+                    .tint(CV.accent)
                     .cvText(16, .semibold, inter: true)
                     .onChange(of: fromText) { _, v in
                         if v == "Current Location" { return }
@@ -311,9 +311,9 @@ struct PlanMapView: View {
                         } label: {
                             Image(systemName: "location.fill")
                                 .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(CV.red)
+                                .foregroundStyle(CV.accent)
                                 .frame(width: 32, height: 32)
-                                .background(CV.red.opacity(0.12), in: Circle())
+                                .background(CV.accent.opacity(0.12), in: Circle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -348,7 +348,7 @@ struct PlanMapView: View {
                         }
                     ))
                     .focused($focus, equals: .stop(idx))
-                    .tint(CV.red)
+                    .tint(CV.accent)
                     .cvText(15, .semibold, inter: true)
                     .onTapGesture {
                         focus = .stop(idx)
@@ -364,7 +364,7 @@ struct PlanMapView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 16))
-                            .foregroundStyle(CV.cream.opacity(0.45))
+                            .foregroundStyle(CV.text.opacity(0.45))
                             .frame(width: 30, height: 30)
                     }
                     .buttonStyle(.plain)
@@ -375,7 +375,7 @@ struct PlanMapView: View {
             row(marker: { endMarker }, label: "To") {
                 TextField("Destination…", text: $toText)
                     .focused($focus, equals: .to)
-                    .tint(CV.red)
+                    .tint(CV.accent)
                     .cvText(16, .semibold, inter: true)
                     .onChange(of: toText) { _, v in
                         toCoord = nil
@@ -422,17 +422,17 @@ struct PlanMapView: View {
                     Spacer()
                     if !stopTexts.isEmpty {
                         Text("\(stopTexts.count) added")
-                            .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                            .cvText(12, color: CV.text.opacity(0.5), inter: true)
                     }
                 }
-                .foregroundStyle(CV.red)
+                .foregroundStyle(CV.accent)
                 .padding(.horizontal, 18)
                 .frame(height: 48)
             }
             .buttonStyle(.plain)
         }
         .frame(width: 353)
-        .background(Color(hex: 0x1A1A1D, opacity: 0.96),
+        .background(CV.surface.opacity(0.96),
                     in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
@@ -450,7 +450,7 @@ struct PlanMapView: View {
             marker().frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
-                    .cvText(10, .bold, color: CV.cream.opacity(0.55), inter: true)
+                    .cvText(10, .bold, color: CV.text.opacity(0.55), inter: true)
                 content()
             }
             Spacer(minLength: 4)
@@ -461,11 +461,11 @@ struct PlanMapView: View {
     }
 
     private var startMarker: some View {
-        Circle().strokeBorder(CV.cream, lineWidth: 2.5).frame(width: 14, height: 14)
+        Circle().strokeBorder(CV.text, lineWidth: 2.5).frame(width: 14, height: 14)
     }
     private var endMarker: some View {
         ZStack {
-            Circle().fill(CV.red).frame(width: 16, height: 16)
+            Circle().fill(CV.accent).frame(width: 16, height: 16)
             Circle().fill(.white).frame(width: 5, height: 5)
         }
     }
@@ -485,7 +485,7 @@ struct PlanMapView: View {
         } label: {
             Image(systemName: "arrow.up.arrow.down")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(CV.cream)
+                .foregroundStyle(CV.text)
                 .frame(width: 32, height: 32)
                 .background(Color.white.opacity(0.08), in: Circle())
         }
@@ -515,7 +515,7 @@ struct PlanMapView: View {
                     HStack(spacing: 12) {
                         Image(systemName: "mappin")
                             .font(.system(size: 14))
-                            .foregroundStyle(CV.red)
+                            .foregroundStyle(CV.accent)
                             .frame(width: 20)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.title)
@@ -523,7 +523,7 @@ struct PlanMapView: View {
                                 .lineLimit(1)
                             if !r.subtitle.isEmpty {
                                 Text(r.subtitle)
-                                    .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                                    .cvText(12, color: CV.text.opacity(0.5), inter: true)
                                     .lineLimit(1)
                             }
                         }
@@ -540,7 +540,7 @@ struct PlanMapView: View {
             }
         }
         .frame(width: 353)
-        .background(Color(hex: 0x1A1A1D, opacity: 0.98), in: shape)
+        .background(CV.surface.opacity(0.98), in: shape)
         .overlay(shape.strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
         .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
     }
@@ -552,19 +552,19 @@ struct PlanMapView: View {
             if let errorMessage {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(CV.red)
+                        .foregroundStyle(CV.accent)
                     Text(errorMessage)
-                        .cvText(12, color: CV.cream.opacity(0.85), inter: true)
+                        .cvText(12, color: CV.text.opacity(0.85), inter: true)
                         .lineLimit(2)
                     Spacer()
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 40)
-                .background(CV.red.opacity(0.15),
+                .background(CV.accent.opacity(0.15),
                             in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else if isCalculating {
                 HStack(spacing: 10) {
-                    ProgressView().tint(CV.red)
+                    ProgressView().tint(CV.accent)
                     Text("Calculating route…")
                         .cvText(14, .semibold, inter: true)
                     Spacer()
@@ -577,10 +577,10 @@ struct PlanMapView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(shortDuration).cvText(22, .bold, inter: true)
                             Text("(\(shortDistance))")
-                                .cvText(14, color: CV.cream.opacity(0.65), inter: true)
+                                .cvText(14, color: CV.text.opacity(0.65), inter: true)
                         }
                         Text(routeSubtitle)
-                            .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                            .cvText(12, color: CV.text.opacity(0.5), inter: true)
                     }
                     Spacer()
                     Button { confirm() } label: {
@@ -592,8 +592,8 @@ struct PlanMapView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 20)
                         .frame(height: 46)
-                        .background(CV.red, in: Capsule())
-                        .shadow(color: CV.red.opacity(0.4), radius: 8, y: 3)
+                        .background(CV.accent, in: Capsule())
+                        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
                     }
                     .buttonStyle(.plain)
                 }
@@ -602,9 +602,9 @@ struct PlanMapView: View {
             } else {
                 HStack(spacing: 8) {
                     Image(systemName: "map")
-                        .foregroundStyle(CV.cream.opacity(0.6))
+                        .foregroundStyle(CV.text.opacity(0.6))
                     Text(toText.isEmpty ? "Pick a destination" : "Loading route…")
-                        .cvText(13, color: CV.cream.opacity(0.6), inter: true)
+                        .cvText(13, color: CV.text.opacity(0.6), inter: true)
                     Spacer()
                 }
                 .padding(.horizontal, 12)
@@ -612,7 +612,7 @@ struct PlanMapView: View {
             }
         }
         .padding(10)
-        .background(Color(hex: 0x1A1A1D, opacity: 0.96),
+        .background(CV.surface.opacity(0.96),
                     in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
             .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))

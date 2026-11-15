@@ -16,7 +16,7 @@ struct ScenicView: View {
                 OriginPill(title: store.origin == nil ? "Choose a start" : "From \(store.originName)") { pickingOrigin = true }
             }
             .padding(.top, 8).padding(.bottom, 18)
-            Eyebrow(text: "Scenic", color: CV.red)
+            Eyebrow(text: "Scenic", color: CV.accent)
             Text("Ride for the view").cvText(30, .bold, tracking: -0.5, inter: true).padding(.top, 6)
             Text("Collections of real places and roads, picked for what you'll see.").cvText(14, color: CV.muted, inter: true).padding(.top, 4)
             OfflineBanner().padding(.top, 14)
@@ -27,15 +27,15 @@ struct ScenicView: View {
                         .overlay(LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .center, endPoint: .bottom))
                         .overlay(alignment: .bottomLeading) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Eyebrow(text: "Featured collection", color: CV.cream.opacity(0.8))
+                                Eyebrow(text: "Featured collection", color: CV.text.opacity(0.8))
                                 Text(featured.title).cvText(28, .bold, inter: true)
-                                Text("\(featured.subtitle) · \(count(featured))").cvText(13, color: CV.cream.opacity(0.85), inter: true)
+                                Text("\(featured.subtitle) · \(count(featured))").cvText(13, color: CV.text.opacity(0.85), inter: true)
                             }
                             .multilineTextAlignment(.leading).padding(18)
                         }
                         .overlay(alignment: .topTrailing) {
-                            Text("Open").cvText(15, .semibold, color: CV.ink, inter: true).padding(.horizontal, 18).frame(height: 38)
-                                .background(CV.cream, in: Capsule()).padding(16)
+                            Text("Open").cvText(15, .semibold, color: CV.onAccent, inter: true).padding(.horizontal, 18).frame(height: 38)
+                                .background(CV.accent, in: Capsule()).padding(16)
                         }
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 }
@@ -114,10 +114,10 @@ struct ScenicCollectionView: View {
                 }
                 .overlay(alignment: .bottomLeading) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Eyebrow(text: "Scenic collection", color: CV.red)
+                        Eyebrow(text: "Scenic collection", color: CV.accent)
                         Text(c.title).cvText(30, .bold, tracking: -0.5, inter: true)
                         Text(store.origin == nil ? c.subtitle : "\(c.subtitle) — from \(store.originName).")
-                            .cvText(14, color: CV.cream.opacity(0.85), inter: true)
+                            .cvText(14, color: CV.text.opacity(0.85), inter: true)
                     }
                     .padding(.horizontal, 20).padding(.bottom, 30)
                 }
@@ -175,14 +175,14 @@ struct SurpriseModeView: View {
         let mode = SurpriseMode(rawValue: modeRaw) ?? .mixed
         VStack(alignment: .leading, spacing: 0) {
                 CircleBackButton(symbol: "xmark") { app.pop() }.padding(.bottom, 26)
-                Label("SURPRISE ME", systemImage: "sparkles").cvText(12, .semibold, color: CV.red, tracking: 1.2, inter: true)
+                Label("SURPRISE ME", systemImage: "sparkles").cvText(12, .semibold, color: CV.accentLight, tracking: 0.6, inter: true)
                 Text("Where should we\ntake you?").cvText(32, .bold, tracking: -0.6, inter: true).padding(.top, 8)
                 Text("Swipe through places and routes you might not have found. Save what you like — skips teach it what to show less.")
-                    .cvText(15, color: CV.cream.opacity(0.75), lineHeight: 21, inter: true).padding(.top, 10)
+                    .cvText(15, color: CV.text.opacity(0.75), lineHeight: 21, inter: true).padding(.top, 10)
                 VStack(spacing: 0) {
                     ForEach(SurpriseMode.allCases) { m in
                         ListRow(symbol: m.symbol, title: m.title, subtitle: subtitle(m)) { modeRaw = m.rawValue } trailing: {
-                            if m == mode { Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(CV.red) }
+                            if m == mode { Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(CV.accent) }
                         }
                         .padding(.horizontal, 14)
                         .opacity(needsOrigin(m) ? 0.45 : 1)
@@ -198,7 +198,7 @@ struct SurpriseModeView: View {
                     Image(systemName: "location.fill").font(.system(size: 11))
                     Text(store.origin == nil ? "No start chosen — Anywhere works without one" : "Starting from \(store.originName)")
                         .cvText(13, color: CV.muted, inter: true)
-                    Button(store.origin == nil ? "Choose" : "Change") { pickingOrigin = true }.cvText(13, .semibold, color: CV.red, inter: true)
+                    Button(store.origin == nil ? "Choose" : "Change") { pickingOrigin = true }.cvText(13, .semibold, color: CV.accent, inter: true)
                 }
                 .foregroundStyle(CV.muted).padding(.bottom, 14)
                 DiscoverButton(title: "Start swiping") { app.push(.surpriseFeed(needsOrigin(mode) ? .anywhere : mode)) }
@@ -293,7 +293,7 @@ struct SurpriseFeedView: View {
                         Text(mode.title).cvText(13, .semibold, inter: true)
                         Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
                     }
-                    .foregroundStyle(CV.cream).padding(.horizontal, 12).frame(height: 34).background(.black.opacity(0.5), in: Capsule())
+                    .foregroundStyle(CV.text).padding(.horizontal, 12).frame(height: 34).background(.black.opacity(0.5), in: Capsule())
                 }
                 Spacer()
                 Color.clear.frame(width: 44, height: 44)
@@ -301,10 +301,10 @@ struct SurpriseFeedView: View {
             if let toast {
                 HStack(spacing: 10) {
                     Image(systemName: "bookmark.fill")
-                    Text(toast.text).cvText(14, .semibold, color: CV.ink, inter: true)
-                    Button("Undo") { toast.undo(); self.toast = nil }.cvText(14, .semibold, color: CV.red, inter: true)
+                    Text(toast.text).cvText(14, .semibold, color: CV.onAccent, inter: true)
+                    Button("Undo") { toast.undo(); self.toast = nil }.cvText(14, .semibold, color: CV.accent, inter: true)
                 }
-                .foregroundStyle(CV.ink).padding(.horizontal, 16).frame(height: 42).background(CV.cream, in: Capsule())
+                .foregroundStyle(CV.onAccent).padding(.horizontal, 16).frame(height: 42).background(CV.accent, in: Capsule())
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
@@ -326,10 +326,10 @@ struct SurpriseFeedView: View {
                         if let credit = photo?.credit, !credit.isEmpty { Attribution(text: credit).padding(.bottom, 4) }
                         PhotoTag(text: kind)
                         Text(title).cvText(30, .bold, tracking: -0.5, inter: true).lineLimit(2)
-                        Text(subtitle).cvText(15, color: CV.cream.opacity(0.8), inter: true)
-                        Label(line, systemImage: "motorcycle").font(.system(size: 14, weight: .semibold)).foregroundStyle(CV.cream)
+                        Text(subtitle).cvText(15, color: CV.text.opacity(0.8), inter: true)
+                        Label(line, systemImage: "motorcycle").font(.system(size: 14, weight: .semibold)).foregroundStyle(CV.text)
                         if let why = store.reason(for: item) {
-                            Label(why, systemImage: "sparkles").font(.system(size: 12)).foregroundStyle(CV.cream.opacity(0.7))
+                            Label(why, systemImage: "sparkles").font(.system(size: 12)).foregroundStyle(CV.text.opacity(0.7))
                         }
                     }
                     Spacer(minLength: 12)
@@ -341,7 +341,7 @@ struct SurpriseFeedView: View {
                 }
                 HStack(spacing: 10) {
                     Button { skip(item) } label: {
-                        Image(systemName: "xmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(CV.cream)
+                        Image(systemName: "xmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(CV.text)
                             .frame(width: 52, height: 52).background(.black.opacity(0.5), in: Circle())
                             .overlay(Circle().strokeBorder(CV.glassStroke, lineWidth: 1))
                     }
@@ -374,7 +374,7 @@ struct SurpriseFeedView: View {
 
     private func railLabel(_ symbol: String, _ label: String) -> some View {
         VStack(spacing: 4) {
-            Image(systemName: symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(CV.cream)
+            Image(systemName: symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(CV.text)
                 .frame(width: 48, height: 48).background(.black.opacity(0.5), in: Circle())
             Text(label).cvText(11, .medium, inter: true)
         }

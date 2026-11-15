@@ -14,7 +14,7 @@ struct PastRideView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
             if let r = ride {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
@@ -24,9 +24,9 @@ struct PastRideView: View {
                         if let log { metrics(log); points(log); share(log) } else { notRecorded(r) }
                         TripRidersSection(rideId: pastID)
                         Button { app.popToRoot(); app.tab = .ride } label: {
-                            Text("Done").cvText(15, .semibold, color: CV.ink, inter: true)
+                            Text("Done").cvText(15, .semibold, color: CV.onAccent, inter: true)
                                 .frame(maxWidth: .infinity).frame(height: 52)
-                                .background(CV.cream, in: Capsule())
+                                .background(CV.accent, in: Capsule())
                         }
                         .buttonStyle(.plain).padding(.top, 6)
                     }
@@ -60,10 +60,10 @@ struct PastRideView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Circle().fill(CV.green).frame(width: 6, height: 6)
-                Text("RIDE COMPLETE").cvText(11, .semibold, color: CV.cream.opacity(0.55), tracking: 1.1, inter: true)
+                Text("RIDE COMPLETE").cvText(11, .semibold, color: CV.text.opacity(0.55), tracking: 1.1, inter: true)
             }
             Text(r.title).cvText(26, .bold, tracking: -0.52, inter: true).lineLimit(2)
-            Text(dateLine(r)).cvText(14, color: CV.cream.opacity(0.55), inter: true)
+            Text(dateLine(r)).cvText(14, color: CV.text.opacity(0.55), inter: true)
         }
     }
 
@@ -82,10 +82,10 @@ struct PastRideView: View {
         if coords.count > 1 {
             ZStack(alignment: .bottomLeading) {
                 RouteSnapshotView(coords: coords, size: CGSize(width: 353, height: 200), corner: 22,
-                                  lineColor: recorded.count > 1 ? Self.green : UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1))
+                                  lineColor: recorded.count > 1 ? Self.green : UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1))
                     .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
                 Text(recorded.count > 1 ? "Your GPS track" : "Planned route")
-                    .cvText(11, .semibold, color: CV.cream, inter: true)
+                    .cvText(11, .semibold, color: CV.text, inter: true)
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(CV.bg.opacity(0.8), in: Capsule()).padding(12)
             }
@@ -130,7 +130,7 @@ struct PastRideView: View {
     private func tile(_ v: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(v).cvText(20, .bold, inter: true).lineLimit(1).minimumScaleFactor(0.6)
-            Text(label).cvText(11, color: CV.cream.opacity(0.5), inter: true)
+            Text(label).cvText(11, color: CV.text.opacity(0.5), inter: true)
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
@@ -167,7 +167,7 @@ struct PastRideView: View {
     }
 
     private func breakdown(_ l: String, _ v: String) -> some View {
-        HStack { Text(l).cvText(13, color: CV.muted, inter: true); Spacer(); Text(v).cvText(13, .semibold, color: CV.cream, inter: true) }
+        HStack { Text(l).cvText(13, color: CV.muted, inter: true); Spacer(); Text(v).cvText(13, .semibold, color: CV.text, inter: true) }
     }
 
     @ViewBuilder
@@ -181,7 +181,7 @@ struct PastRideView: View {
                     Text("Share to Crew feed").cvText(16, .bold, color: .white, inter: true)
                 }
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity).frame(height: 52).background(CV.red, in: Capsule())
+                .frame(maxWidth: .infinity).frame(height: 52).background(CV.accent, in: Capsule())
             }.buttonStyle(.plain)
         }
     }
@@ -205,7 +205,7 @@ struct InfoBanner: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon).foregroundStyle(color)
-            Text(text).cvText(13, color: CV.cream.opacity(0.85), lineHeight: 18, inter: true)
+            Text(text).cvText(13, color: CV.text.opacity(0.85), lineHeight: 18, inter: true)
             Spacer(minLength: 0)
         }
         .padding(14)

@@ -17,9 +17,9 @@ struct LeaderboardSection: View {
                         Button { withAnimation(.snappy(duration: 0.2)) { period = p } } label: {
                             Text(p.label()).cvText(13, .bold, color: on ? .white : CV.muted, tracking: 0.8, inter: true)
                                 .padding(.horizontal, 16).frame(height: 40)
-                                .background(on ? CV.red : Color.white.opacity(0.06), in: Capsule())
+                                .background(on ? CV.accent : Color.white.opacity(0.06), in: Capsule())
                                 .overlay(Capsule().strokeBorder(Color.white.opacity(on ? 0 : 0.12), lineWidth: 1))
-                                .shadow(color: on ? CV.red.opacity(0.4) : .clear, radius: 10, y: 4)
+                                .shadow(color: on ? CV.accent.opacity(0.4) : .clear, radius: 10, y: 4)
                         }.buttonStyle(.plain)
                     }
                 }
@@ -108,7 +108,7 @@ private struct BoardCard: View {
         }
         .padding(16)
         .background {
-            RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Color(hex: 0x1A1A1D).opacity(0.94))
+            RoundedRectangle(cornerRadius: 28, style: .continuous).fill(CV.surface.opacity(0.94))
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(LinearGradient(colors: [accent.opacity(0.14), .clear], startPoint: .top, endPoint: .center))
         }
@@ -120,7 +120,7 @@ private struct BoardCard: View {
             Image(systemName: icon).font(.system(size: 20, weight: .semibold)).foregroundStyle(accent)
                 .frame(width: 48, height: 48).background(accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).cvText(21, .bold, color: CV.cream, inter: true)
+                Text(title).cvText(21, .bold, color: CV.text, inter: true)
                 Text(period.subtitle()).cvText(13, color: CV.muted, inter: true)
             }
             Spacer()
@@ -157,17 +157,17 @@ private struct BoardCard: View {
         let step: CGFloat = position == 0 ? 84 : position == 1 ? 58 : 44
         return Button { app.push(.riderProfile(e.rider.id)) } label: {
             VStack(spacing: 0) {
-                Text("\(e.rank)").cvText(12, .heavy, color: CV.ink, inter: true)
+                Text("\(e.rank)").cvText(12, .heavy, color: CV.onAccent, inter: true)
                     .frame(width: 24, height: 24).background(medal, in: Circle())
                     .padding(.bottom, 8)
                 AvatarChip(data: e.rider.avatarData, name: e.rider.name, size: avatar)
                     .overlay(Circle().strokeBorder(medal, lineWidth: 3))
                     .shadow(color: e.rank == 1 ? medal.opacity(0.45) : .clear, radius: 14)
                     .padding(.bottom, 10)
-                Text(e.isMe ? "You" : e.rider.name).cvText(14, .bold, color: CV.cream, inter: true).lineLimit(1)
-                Text(value(e)).cvText(19, .heavy, color: CV.cream, inter: true).lineLimit(1).minimumScaleFactor(0.7)
+                Text(e.isMe ? "You" : e.rider.name).cvText(14, .bold, color: CV.text, inter: true).lineLimit(1)
+                Text(value(e)).cvText(19, .heavy, color: CV.text, inter: true).lineLimit(1).minimumScaleFactor(0.7)
                 Text(metric == .score ? "pts" : "km").cvText(11, color: CV.muted, inter: true).padding(.bottom, 10)
-                Text("#\(e.rank)").cvText(15, .heavy, color: e.rank == 1 ? CVSocial.amber : CV.cream, inter: true)
+                Text("#\(e.rank)").cvText(15, .heavy, color: e.rank == 1 ? CVSocial.amber : CV.text, inter: true)
                     .frame(maxWidth: .infinity).frame(height: step)
                     .background(
                         LinearGradient(colors: [medal.opacity(e.rank == 1 ? 0.55 : 0.4), medal.opacity(0.08)], startPoint: .top, endPoint: .bottom),
@@ -183,18 +183,18 @@ private struct BoardCard: View {
     private func yourRank(_ me: LeaderboardEntry, board: LeaderboardBoard) -> some View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
-                Text("#\(me.rank)").cvText(13, .heavy, color: CV.ink, inter: true)
+                Text("#\(me.rank)").cvText(13, .heavy, color: CV.onAccent, inter: true)
                     .frame(width: 42, height: 42).background(accent, in: Circle())
                 AvatarChip(data: app.avatarImageData, name: app.displayName, size: 34)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("YOUR RANK").cvText(10, .bold, color: CV.muted, tracking: 1, inter: true)
-                    Text(app.displayName).cvText(16, .bold, color: CV.cream, inter: true).lineLimit(1)
+                    Text(app.displayName).cvText(16, .bold, color: CV.text, inter: true).lineLimit(1)
                 }
                 Spacer()
                 Text("Lv \(me.level)").cvText(12, .bold, color: accent, inter: true)
                     .padding(.horizontal, 8).padding(.vertical, 3).background(accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .trailing, spacing: 0) {
-                    Text(value(me)).cvText(22, .heavy, color: CV.cream, inter: true)
+                    Text(value(me)).cvText(22, .heavy, color: CV.text, inter: true)
                     Text(unit).cvText(10, .bold, color: CV.muted, tracking: 1, inter: true)
                 }
             }
@@ -237,11 +237,11 @@ private struct BoardCard: View {
                         Text("\(e.rank)").cvText(14, .bold, color: e.isMe ? accent : CV.muted, inter: true).frame(width: 28)
                         AvatarChip(data: e.rider.avatarData, name: e.rider.name, size: 32)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(e.isMe ? "You" : e.rider.name).cvText(15, .semibold, color: CV.cream, inter: true).lineLimit(1)
+                            Text(e.isMe ? "You" : e.rider.name).cvText(15, .semibold, color: CV.text, inter: true).lineLimit(1)
                             Text("Lv \(e.level) · \(e.rides) ride\(e.rides == 1 ? "" : "s")").cvText(12, color: CV.muted, inter: true)
                         }
                         Spacer()
-                        Text("\(value(e)) \(metric == .score ? "pts" : "km")").cvText(15, .bold, color: CV.cream, inter: true)
+                        Text("\(value(e)) \(metric == .score ? "pts" : "km")").cvText(15, .bold, color: CV.text, inter: true)
                     }
                     .padding(.vertical, 10)
                 }

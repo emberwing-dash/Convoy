@@ -86,7 +86,7 @@ struct PlaceholderScreen: View {
     var canPop = false
     var body: some View {
         ZStack(alignment: .topLeading) {
-            ContourBackdrop()
+            ScreenBackground()
             Text(title)
                 .cvText(24, .semibold)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

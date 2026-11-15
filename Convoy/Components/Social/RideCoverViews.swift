@@ -16,7 +16,7 @@ struct RideCoverImage: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                Color(hex: 0x141417)
+                CV.bg2
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height).clipped()
@@ -26,7 +26,7 @@ struct RideCoverImage: View {
                     Skeleton(corner: 0)
                 } else {
                     // Nothing to show at all: a calm gradient rather than an error icon.
-                    LinearGradient(colors: [Color(hex: 0x2A2A2E), Color(hex: 0x141417)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    LinearGradient(colors: [CV.elevated, CV.bg2], startPoint: .topLeading, endPoint: .bottomTrailing)
                 }
             }
             .task(id: taskKey(geo.size)) { await load(size: geo.size) }
@@ -114,7 +114,7 @@ struct CoverPickerSheet: View {
                         }
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity).frame(height: 48)
-                        .background(CV.red, in: Capsule())
+                        .background(CV.accent, in: Capsule())
                     }
                     .disabled(saving)
 
@@ -133,17 +133,17 @@ struct CoverPickerSheet: View {
                                 .cvText(12, color: CV.muted, inter: true)
                         }
                     }
-                    if let error { Text(error).cvText(13, .semibold, color: CV.red, inter: true) }
+                    if let error { Text(error).cvText(13, .semibold, color: CV.accent, inter: true) }
                     Text("Photos come from Wikimedia Commons under free licences; the photographer is credited on the image.")
                         .cvText(11, color: CV.dim, inter: true)
                 }
                 .padding(20)
             }
-            .background(Color(hex: 0x141416).ignoresSafeArea())
+            .background(CV.bg2.ignoresSafeArea())
             .navigationTitle("Ride cover")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.tint(CV.cream) } }
-            .overlay { if saving { ProgressView().tint(CV.cream).padding(24).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16)) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.tint(CV.accent) } }
+            .overlay { if saving { ProgressView().tint(CV.accent).padding(24).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16)) } }
         }
         .presentationDragIndicator(.visible)
         .task {
@@ -177,7 +177,7 @@ struct CoverPickerSheet: View {
                         .background(Color.black.opacity(0.5), in: Capsule()).padding(6)
                 }
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(selected ? CV.red : Color.white.opacity(0.1), lineWidth: selected ? 3 : 1))
+                    .strokeBorder(selected ? CV.accent : Color.white.opacity(0.1), lineWidth: selected ? 3 : 1))
         }
         .buttonStyle(.plain)
         .disabled(saving)

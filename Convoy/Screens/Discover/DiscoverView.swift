@@ -62,10 +62,10 @@ struct DiscoverView: View {
                 .frame(height: 470)
             LinearGradient(colors: [.black.opacity(0.35), .clear, CV.bg.opacity(0.9), CV.bg], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 10) {
-                Eyebrow(text: "Discover", color: CV.red)
+                Eyebrow(text: "Discover", color: CV.accent)
                 Text("Find your\nnext ride.").cvText(40, .bold, tracking: -1, inter: true).lineSpacing(-4)
                 Text("Roads, viewpoints and places riders love — with real motorcycle distances from where you start.")
-                    .cvText(14, color: CV.cream.opacity(0.8), inter: true).frame(maxWidth: 300, alignment: .leading)
+                    .cvText(14, color: CV.text.opacity(0.8), inter: true).frame(maxWidth: 300, alignment: .leading)
                 OriginPill(title: store.origin == nil ? "Choose where you ride from" : "From \(store.originName)") { pickingOrigin = true }
                     .padding(.top, 4)
             }
@@ -129,7 +129,7 @@ struct DiscoverView: View {
                     Text("Every place and route around you").cvText(12, color: CV.muted, inter: true)
                 }
                 Spacer()
-                Image(systemName: "map").foregroundStyle(CV.cream).frame(width: 36, height: 36).background(CV.glassFill, in: Circle())
+                Image(systemName: "map").foregroundStyle(CV.text).frame(width: 36, height: 36).background(CV.glassFill, in: Circle())
             }
             .padding(16)
             .background(MapThumb(center: store.origin?.coord, pin: false).opacity(0.35))
@@ -157,7 +157,7 @@ struct DiscoverView: View {
 
     private var locationCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: "location.slash").foregroundStyle(CV.cream)
+            Image(systemName: "location.slash").foregroundStyle(CV.text)
             Text("Pick a city to see what's near it").cvText(16, .semibold, inter: true)
             Text("We need a start to measure ride times. Everything else still works — famous places, collections and Surprise me (Anywhere).")
                 .cvText(13, color: CV.muted, inter: true)
@@ -291,7 +291,7 @@ struct OriginPickerSheet: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(CV.muted)
             TextField("", text: $query, prompt: Text("Search a city or area").foregroundStyle(CV.dim))
-                .foregroundStyle(CV.cream).autocorrectionDisabled().submitLabel(.search)
+                .foregroundStyle(CV.text).autocorrectionDisabled().submitLabel(.search)
             if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(CV.dim) } }
         }
         .font(.system(size: 15))
@@ -300,7 +300,7 @@ struct OriginPickerSheet: View {
     }
 
     @ViewBuilder private func check(_ on: Bool) -> some View {
-        if on { Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(CV.red) }
+        if on { Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(CV.accent) }
     }
 
     private func pick(_ o: DiscoveryOrigin) {

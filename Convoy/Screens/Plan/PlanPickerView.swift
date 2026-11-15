@@ -7,7 +7,7 @@ struct PlanPickerView: View {
     @Environment(AppState.self) private var app
 
     var body: some View {
-        DesignCanvas(background: ContourBackdrop()) {
+        DesignCanvas(background: ScreenBackground()) {
             CircleBackButton { app.pop() }.at(20, 58)
             Text(kind == .crews ? "Crews" : "Friends")
                 .cvText(34, .bold, tracking: -0.85, lineHeight: 40, inter: true).at(20, 118)
@@ -57,7 +57,7 @@ struct PlanPickerView: View {
                         VStack(spacing: 8) {
                             Image(systemName: "person.3")
                                 .font(.system(size: 26))
-                                .foregroundStyle(CV.cream.opacity(0.5))
+                                .foregroundStyle(CV.text.opacity(0.5))
                                 .frame(width: 60, height: 60)
                                 .background(Color.white.opacity(0.06), in: Circle())
                             Text("No friends yet")

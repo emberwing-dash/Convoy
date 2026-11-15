@@ -6,7 +6,7 @@ struct PlanWhoView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            ContourBackdrop()
+            ScreenBackground()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -114,16 +114,16 @@ struct PlanWhoView: View {
                         } label: {
                             ZStack(alignment: .bottomTrailing) {
                                 CrewAvatar(data: c.avatarData, name: c.name, size: 66)
-                                    .overlay(Circle().strokeBorder(on ? CV.red : CV.bg, lineWidth: on ? 3 : 2.5))
+                                    .overlay(Circle().strokeBorder(on ? CV.accent : CV.bg, lineWidth: on ? 3 : 2.5))
                                     .scaleEffect(on ? 1.08 : 1.0)
-                                    .shadow(color: on ? CV.red.opacity(0.35) : .black.opacity(0.3), radius: on ? 8 : 4)
+                                    .shadow(color: on ? CV.accent.opacity(0.35) : .black.opacity(0.3), radius: on ? 8 : 4)
 
                                 if on {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 11, weight: .bold))
                                         .foregroundStyle(.white)
                                         .frame(width: 22, height: 22)
-                                        .background(CV.red, in: Circle())
+                                        .background(CV.accent, in: Circle())
                                         .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
                                         .offset(x: 2, y: 2)
                                 }
@@ -139,12 +139,12 @@ struct PlanWhoView: View {
                         } label: {
                             ZStack {
                                 Circle()
-                                    .fill(Color(hex: 0x222226))
+                                    .fill(CV.elevated)
                                     .frame(width: 66, height: 66)
                                     .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2.5))
                                 VStack(spacing: 2) {
                                     Text("+\(app.crews.count - 3)")
-                                        .cvText(15, .bold, color: CV.cream, inter: true)
+                                        .cvText(15, .bold, color: CV.text, inter: true)
                                     Text("more")
                                         .cvText(10, .medium, color: CV.muted, inter: true)
                                 }
@@ -166,9 +166,9 @@ struct PlanWhoView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(CV.red)
+                        .foregroundStyle(CV.accent)
                     Text(selectedCrew.name)
-                        .cvText(14, .semibold, color: CV.cream, inter: true)
+                        .cvText(14, .semibold, color: CV.text, inter: true)
                     Text("· selected")
                         .cvText(13, color: CV.muted, inter: true)
                 }
@@ -192,7 +192,7 @@ struct PlanWhoView: View {
             VStack(spacing: 8) {
                 ZStack(alignment: .bottomTrailing) {
                     Circle()
-                        .strokeBorder(on ? CV.red : Color.white.opacity(0.12),
+                        .strokeBorder(on ? CV.accent : Color.white.opacity(0.12),
                                       lineWidth: on ? 2.5 : 1.5)
                         .frame(width: 76, height: 76)
                     CrewAvatar(data: c.avatarData, name: c.name, size: 66)
@@ -203,14 +203,14 @@ struct PlanWhoView: View {
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 22, height: 22)
-                            .background(CV.red, in: Circle())
+                            .background(CV.accent, in: Circle())
                             .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
                             .offset(x: 2, y: 2)
                     }
                 }
                 Text(c.name)
                     .cvText(13, on ? .semibold : .medium,
-                            color: on ? CV.cream : CV.muted, inter: true)
+                            color: on ? CV.text : CV.muted, inter: true)
                     .lineLimit(1)
                     .multilineTextAlignment(.center)
                     .frame(width: 80)
@@ -228,12 +228,12 @@ struct PlanWhoView: View {
                         .fill(Color.white.opacity(0.04))
                         .frame(width: 66, height: 66)
                     Circle()
-                        .strokeBorder(CV.red.opacity(0.6),
+                        .strokeBorder(CV.accent.opacity(0.6),
                                       style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
                         .frame(width: 66, height: 66)
                     Image(systemName: "plus")
                         .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(CV.red)
+                        .foregroundStyle(CV.accent)
                 }
                 Text("Add crew")
                     .cvText(15, .medium, color: CV.muted, inter: true)
@@ -250,13 +250,13 @@ struct PlanWhoView: View {
         VStack(spacing: 0) {
             Image(systemName: "person.3")
                 .font(.system(size: 24))
-                .foregroundStyle(CV.red)
+                .foregroundStyle(CV.accent)
                 .frame(width: 56, height: 56)
-                .background(CV.red.opacity(0.15), in: Circle())
+                .background(CV.accent.opacity(0.15), in: Circle())
                 .padding(.top, 16)
 
             Text("No crews yet")
-                .cvText(17, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                .cvText(17, .bold, color: CV.text, inter: true)
                 .padding(.top, 10)
 
             Text("Create a crew to plan rides with the people you ride with.")
@@ -267,10 +267,10 @@ struct PlanWhoView: View {
 
             Button { app.push(.newCrew) } label: {
                 Text("Create a crew")
-                    .cvText(14, .semibold, color: CV.ink, inter: true)
+                    .cvText(14, .semibold, color: CV.onAccent, inter: true)
                     .padding(.horizontal, 26)
                     .frame(height: 38)
-                    .background(Color(hex: 0xF5EDDE), in: Capsule())
+                    .background(CV.accent, in: Capsule())
             }
             .buttonStyle(.plain)
             .padding(.top, 14)
@@ -311,9 +311,9 @@ struct PlanWhoView: View {
             HStack(spacing: 8) {
                 Image(systemName: "person.badge.plus")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(CV.red)
+                    .foregroundStyle(CV.accent)
                 Text("Invite friends")
-                    .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                    .cvText(15, .semibold, color: CV.text, inter: true)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 50)
@@ -349,7 +349,7 @@ struct PlanWhoView: View {
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text(friend.display_name.isEmpty ? "@\(friend.username)" : friend.display_name)
-                                .cvText(16, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                                .cvText(16, .semibold, color: CV.text, inter: true)
                                 .lineLimit(1)
                             Text(friendSubtitle(for: friend))
                                 .cvText(13, color: CV.muted, inter: true)
@@ -362,7 +362,7 @@ struct PlanWhoView: View {
                         ZStack {
                             if isSelected {
                                 Circle()
-                                    .fill(CV.red)
+                                    .fill(CV.accent)
                                     .frame(width: 26, height: 26)
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 12, weight: .bold))
@@ -393,7 +393,7 @@ struct PlanWhoView: View {
                 seeAll { app.push(.pickFriends) }
             }
         }
-        .background(Color(hex: 0x141417), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(CV.bg2, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 
@@ -410,13 +410,13 @@ struct PlanWhoView: View {
         VStack(spacing: 0) {
             Image(systemName: "person.3")
                 .font(.system(size: 26))
-                .foregroundStyle(CV.red)
+                .foregroundStyle(CV.accent)
                 .frame(width: 60, height: 60)
-                .background(CV.red.opacity(0.15), in: Circle())
+                .background(CV.accent.opacity(0.15), in: Circle())
                 .padding(.top, 18)
 
             Text("No friends yet")
-                .cvText(18, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                .cvText(18, .bold, color: CV.text, inter: true)
                 .padding(.top, 12)
 
             Text("Invite the people you ride with. Once they join, you can add them to crews and plan rides together.")
@@ -427,10 +427,10 @@ struct PlanWhoView: View {
 
             Button { app.push(.inviteFriends) } label: {
                 Text("Invite friends")
-                    .cvText(14, .semibold, color: CV.ink, inter: true)
+                    .cvText(14, .semibold, color: CV.accentLight, inter: true)
                     .padding(.horizontal, 30)
                     .frame(height: 38)
-                    .background(Color(hex: 0xF5EDDE), in: Capsule())
+                    .background(CV.accentSoft, in: Capsule())
             }
             .buttonStyle(.plain)
             .padding(.top, 16)
@@ -510,7 +510,7 @@ struct PlanWhoView: View {
             }
 
             Text(titleText)
-                .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), tracking: -0.2, inter: true)
+                .cvText(15, .semibold, color: CV.text, tracking: -0.2, inter: true)
                 .lineLimit(1)
 
             Spacer()
@@ -552,7 +552,7 @@ struct SelectDot: View {
     var body: some View {
         ZStack {
             if on {
-                Circle().fill(CV.red)
+                Circle().fill(CV.accent)
                 Image(systemName: "checkmark")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.white)

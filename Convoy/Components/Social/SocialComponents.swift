@@ -2,11 +2,11 @@
 import SwiftUI
 
 enum CVSocial {
-    static let amber = Color(hex: 0xFFB020)
+    static let amber = CV.warning
     static let silver = Color(hex: 0xC7C9D1)
     static let bronze = Color(hex: 0xC98A5B)
-    static let card = Color(hex: 0x1A1A1D)
-    static let headline = Color(hex: 0xF5EDDE)
+    static let card = CV.surface
+    static let headline = CV.text
 }
 
 /// Card used for every "nothing here yet" state, with an optional call to action.
@@ -21,7 +21,7 @@ struct EmptyStateCard: View {
         VStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(CV.cream.opacity(0.7))
+                .foregroundStyle(CV.text.opacity(0.7))
                 .frame(width: 54, height: 54)
                 .background(Color.white.opacity(0.06), in: Circle())
             Text(title)
@@ -36,7 +36,7 @@ struct EmptyStateCard: View {
                     Text(actionTitle)
                         .cvText(14, .bold, color: .white, inter: true)
                         .padding(.horizontal, 20).frame(height: 42)
-                        .background(CV.red, in: Capsule())
+                        .background(CV.accent, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 4)
@@ -73,7 +73,7 @@ struct SectionTitleRow: View {
             }
             Spacer()
             if let trailing, let action {
-                Button(action: action) { Text(trailing).cvText(15, .semibold, color: CV.red, inter: true) }
+                Button(action: action) { Text(trailing).cvText(15, .semibold, color: CV.accent, inter: true) }
                     .buttonStyle(.plain)
             }
         }
@@ -96,14 +96,14 @@ struct FollowButton: View {
             }
         } label: {
             ZStack {
-                if busy { ProgressView().tint(on ? CV.cream : .white) }
+                if busy { ProgressView().tint(on ? CV.accent : .white) }
                 else {
                     Text(on ? "Following" : "Follow")
-                        .cvText(compact ? 14 : 15, .bold, color: on ? CV.cream : .white, inter: true)
+                        .cvText(compact ? 14 : 15, .bold, color: on ? CV.text : .white, inter: true)
                 }
             }
             .frame(maxWidth: .infinity).frame(height: compact ? 36 : 40)
-            .background(on ? Color.white.opacity(0.08) : CV.red, in: Capsule())
+            .background(on ? Color.white.opacity(0.08) : CV.accent, in: Capsule())
             .overlay(Capsule().strokeBorder(Color.white.opacity(on ? 0.14 : 0), lineWidth: 1))
         }
         .buttonStyle(.plain)
@@ -120,7 +120,7 @@ struct StatColumn: View {
     var label: String
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(value).cvText(17, .bold, color: CV.cream, inter: true).lineLimit(1).minimumScaleFactor(0.7)
+            Text(value).cvText(17, .bold, color: CV.text, inter: true).lineLimit(1).minimumScaleFactor(0.7)
             Text(label).cvText(12, color: CV.muted, inter: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -175,10 +175,10 @@ struct NoteField: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
-            TextField("", text: $text, prompt: Text(placeholder).foregroundColor(CV.cream.opacity(0.35)), axis: .vertical)
+            TextField("", text: $text, prompt: Text(placeholder).foregroundColor(CV.text.opacity(0.35)), axis: .vertical)
                 .font(.system(size: 15))
-                .foregroundStyle(CV.cream)
-                .tint(CV.red)
+                .foregroundStyle(CV.text)
+                .tint(CV.accent)
                 .lineLimit(3...6)
                 .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
                 .onChange(of: text) { _, v in if v.count > limit { text = String(v.prefix(limit)) } }

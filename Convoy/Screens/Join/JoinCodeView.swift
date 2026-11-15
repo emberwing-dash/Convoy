@@ -19,12 +19,12 @@ struct JoinCodeView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Join a ride")
-                        .cvText(30, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                        .cvText(30, .bold, color: CV.text, inter: true)
                         .padding(.top, 64)
                     Text(foundRide == nil
                          ? "Enter the 6-character code the organiser shared.\nYou'll preview the ride before sending a join request."
@@ -40,9 +40,9 @@ struct JoinCodeView: View {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 13))
                             Text(errorMessage)
-                                .cvText(13, color: CV.red, inter: true)
+                                .cvText(13, color: CV.accent, inter: true)
                         }
-                        .foregroundStyle(CV.red)
+                        .foregroundStyle(CV.accent)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 14)
                     } else if let successMessage {
@@ -134,15 +134,15 @@ struct JoinCodeView: View {
                 let chars = Array(code)
                 let active = i == min(chars.count, 5) && focused
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(hex: 0x1C1C1F))
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(CV.surface)
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(active ? CV.red : Color.white.opacity(0.09),
+                        .strokeBorder(active ? CV.accent : Color.white.opacity(0.09),
                                       lineWidth: active ? 1.5 : 1)
                     if i < chars.count {
                         Text(String(chars[i]))
-                            .cvText(26, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                            .cvText(26, .bold, color: CV.text, inter: true)
                     } else if active {
-                        Rectangle().fill(CV.red).frame(width: 2, height: 28)
+                        Rectangle().fill(CV.accent).frame(width: 2, height: 28)
                     }
                 }
                 .frame(maxWidth: .infinity).frame(height: 60)
@@ -162,7 +162,7 @@ struct JoinCodeView: View {
                     Text("Paste code").cvText(14, .semibold, inter: true)
                 }
                 .frame(maxWidth: .infinity).frame(height: 48)
-                .background(Color(hex: 0x1C1C1F), in: Capsule())
+                .background(CV.surface, in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
             }
             Button { showScanner = true } label: {
@@ -171,7 +171,7 @@ struct JoinCodeView: View {
                     Text("Scan QR").cvText(14, .semibold, inter: true)
                 }
                 .frame(maxWidth: .infinity).frame(height: 48)
-                .background(Color(hex: 0x1C1C1F), in: Capsule())
+                .background(CV.surface, in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
             }
         }
@@ -194,7 +194,7 @@ struct JoinCodeView: View {
                 Spacer()
 
                 Text("CODE: \(ride.code)")
-                    .cvText(12, .semibold, color: CV.muted, tracking: 1.2, inter: true)
+                    .cvText(12, .semibold, color: CV.muted, tracking: 0.6, inter: true)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(Color.white.opacity(0.06), in: Capsule())
@@ -203,7 +203,7 @@ struct JoinCodeView: View {
             // Title & Destination
             VStack(alignment: .leading, spacing: 4) {
                 Text(ride.title)
-                    .cvText(22, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.3, inter: true)
+                    .cvText(22, .bold, color: CV.text, tracking: -0.3, inter: true)
                     .lineLimit(2)
                 if !ride.subtitle.isEmpty {
                     Text(ride.subtitle)
@@ -233,7 +233,7 @@ struct JoinCodeView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(Color(hex: 0x161618), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(CV.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
 
@@ -242,7 +242,7 @@ struct JoinCodeView: View {
                 AvatarChip(data: nil, name: ride.organiser, size: 36)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Organised by \(ride.organiser == "you" ? "you" : ride.organiser)")
-                        .cvText(13, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                        .cvText(13, .semibold, color: CV.text, inter: true)
                     Text("\(ride.riders.count) rider\(ride.riders.count == 1 ? "" : "s") going")
                         .cvText(12, color: CV.muted, inter: true)
                 }
@@ -255,7 +255,7 @@ struct JoinCodeView: View {
                 .padding(.top, 4)
         }
         .padding(18)
-        .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
             .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
     }
@@ -263,7 +263,7 @@ struct JoinCodeView: View {
     private func statBlock(_ val: String, _ lbl: String) -> some View {
         VStack(spacing: 3) {
             Text(val)
-                .cvText(14, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                .cvText(14, .bold, color: CV.text, inter: true)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             Text(lbl)
@@ -285,10 +285,10 @@ struct JoinCodeView: View {
                     Image(systemName: "person.crop.circle.badge.checkmark")
                         .font(.system(size: 15))
                     Text("You organized this ride · View")
-                        .cvText(15, .semibold, color: CV.ink, inter: true)
+                        .cvText(15, .semibold, color: CV.onAccent, inter: true)
                 }
                 .frame(maxWidth: .infinity).frame(height: 50)
-                .background(CV.cream, in: Capsule())
+                .background(CV.accent, in: Capsule())
             }
             .buttonStyle(.plain)
 
@@ -303,10 +303,10 @@ struct JoinCodeView: View {
                         .font(.system(size: 15))
                         .foregroundStyle(CV.green)
                     Text("You're in this ride · View")
-                        .cvText(15, .semibold, color: CV.ink, inter: true)
+                        .cvText(15, .semibold, color: CV.onAccent, inter: true)
                 }
                 .frame(maxWidth: .infinity).frame(height: 50)
-                .background(CV.cream, in: Capsule())
+                .background(CV.accent, in: Capsule())
             }
             .buttonStyle(.plain)
 
@@ -315,13 +315,13 @@ struct JoinCodeView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "clock.badge.checkmark.fill")
                         .font(.system(size: 15))
-                        .foregroundStyle(Color(hex: 0xFFA500))
+                        .foregroundStyle(CV.warning)
                     Text("Request Pending")
-                        .cvText(15, .bold, color: Color(hex: 0xFFA500), inter: true)
+                        .cvText(15, .bold, color: CV.warning, inter: true)
                 }
                 .frame(maxWidth: .infinity).frame(height: 48)
-                .background(Color(hex: 0xFFA500).opacity(0.12), in: Capsule())
-                .overlay(Capsule().strokeBorder(Color(hex: 0xFFA500).opacity(0.3), lineWidth: 1))
+                .background(CV.warning.opacity(0.12), in: Capsule())
+                .overlay(Capsule().strokeBorder(CV.warning.opacity(0.3), lineWidth: 1))
 
                 Text("Awaiting organizer approval. You'll be notified when accepted.")
                     .cvText(12, color: CV.muted, inter: true)
@@ -336,7 +336,7 @@ struct JoinCodeView: View {
                     if isSendingRequest {
                         ProgressView().tint(Color.white)
                             .frame(maxWidth: .infinity).frame(height: 50)
-                            .background(CV.red, in: Capsule())
+                            .background(CV.accent, in: Capsule())
                     } else {
                         HStack(spacing: 8) {
                             Image(systemName: "paperplane.fill")
@@ -345,7 +345,7 @@ struct JoinCodeView: View {
                                 .cvText(15, .bold, color: Color.white, inter: true)
                         }
                         .frame(maxWidth: .infinity).frame(height: 50)
-                        .background(CV.red, in: Capsule())
+                        .background(CV.accent, in: Capsule())
                     }
                 }
                 .buttonStyle(.plain)
@@ -365,18 +365,18 @@ struct JoinCodeView: View {
                     Task { await searchCode() }
                 } label: {
                     if isSearching {
-                        ProgressView().tint(CV.ink)
+                        ProgressView().tint(CV.onAccent)
                             .frame(maxWidth: .infinity).frame(height: 50)
-                            .background(CV.cream, in: Capsule())
+                            .background(CV.accent, in: Capsule())
                     } else {
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 15, weight: .bold))
                             Text("Find ride")
-                                .cvText(17, .semibold, color: CV.ink, inter: true)
+                                .cvText(17, .semibold, color: CV.onAccent, inter: true)
                         }
                         .frame(maxWidth: .infinity).frame(height: 50)
-                        .background(CV.cream, in: Capsule())
+                        .background(CV.accent, in: Capsule())
                     }
                 }
                 .buttonStyle(.plain)
@@ -394,9 +394,9 @@ struct JoinCodeView: View {
                     focused = true
                 } label: {
                     Text("Search a different code")
-                        .cvText(15, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                        .cvText(15, .semibold, color: CV.text, inter: true)
                         .frame(maxWidth: .infinity).frame(height: 48)
-                        .background(Color(hex: 0x2A2A2E), in: Capsule())
+                        .background(CV.elevated, in: Capsule())
                         .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                 }
                 .buttonStyle(.plain)

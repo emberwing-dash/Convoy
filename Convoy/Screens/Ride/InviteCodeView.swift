@@ -16,16 +16,16 @@ struct InviteCodeView: View {
     }
 
     var body: some View {
-        DesignCanvas(background: ContourBackdrop()) {
+        DesignCanvas(background: ScreenBackground()) {
             CircleBackButton { app.pop() }.at(20, 58)
 
             if let ride {
                 Text("Invite to \(ride.title)")
-                    .cvText(26, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                    .cvText(26, .bold, color: CV.text, inter: true)
                     .at(24, 116)
 
                 Text("Share the ride code or link. Riders who join see the route, scheduled stops and start time.")
-                    .cvText(14, color: Color(hex: 0x99948C), inter: true)
+                    .cvText(14, color: CV.muted, inter: true)
                     .frame(width: 345, alignment: .leading)
                     .at(24, 152)
 
@@ -36,9 +36,9 @@ struct InviteCodeView: View {
                 if let shareURL = URL(string: link) {
                     ShareLink(item: shareURL) {
                         Text("Share invite link")
-                            .cvText(14, .semibold, color: Color(hex: 0x121214), inter: true)
+                            .cvText(14, .semibold, color: CV.bg2, inter: true)
                             .frame(width: 353, height: 50)
-                            .background(Color(hex: 0xF5EDDE), in: Capsule())
+                            .background(CV.accent, in: Capsule())
                     }
                     .at(20, 412)
                 }
@@ -46,7 +46,7 @@ struct InviteCodeView: View {
                 // ✅ QR Code Section
                 VStack(spacing: 12) {
                     Text("SCAN TO JOIN")
-                        .cvText(11, .semibold, color: Color(hex: 0x99948C), tracking: 1.5, inter: true)
+                        .cvText(11, .semibold, color: CV.muted, tracking: 0.6, inter: true)
                     
                     QRCodeView(text: link)
                         .frame(width: 140, height: 140)
@@ -60,9 +60,9 @@ struct InviteCodeView: View {
                 // Done Button
                 Button { app.pop() } label: {
                     Text("Done")
-                        .cvText(14, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                        .cvText(14, .semibold, color: CV.text, inter: true)
                         .frame(width: 353, height: 52)
-                        .background(Color(hex: 0x333336), in: Capsule())
+                        .background(CV.fill, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .at(20, 752)
@@ -70,7 +70,7 @@ struct InviteCodeView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "calendar.badge.exclamationmark")
                         .font(.system(size: 30))
-                        .foregroundStyle(CV.cream.opacity(0.5))
+                        .foregroundStyle(CV.text.opacity(0.5))
                     Text("No upcoming ride").cvText(17, .semibold, inter: true)
                     Text("Plan a ride first to get an invite code.")
                         .cvText(13, color: CV.muted, inter: true)
@@ -86,9 +86,9 @@ struct InviteCodeView: View {
 
     private func codeCard(ride: Ride) -> some View {
         ZStack(alignment: .topLeading) {
-            Circle().fill(CV.red).frame(width: 6, height: 6).offset(x: 17, y: 21)
+            Circle().fill(CV.accent).frame(width: 6, height: 6).offset(x: 17, y: 21)
             Text("RIDE CODE")
-                .cvText(11, .semibold, color: Color(hex: 0x99948C), tracking: 1.54, inter: true)
+                .cvText(11, .semibold, color: CV.muted, tracking: 0.6, inter: true)
                 .offset(x: 29, y: 17)
 
             HStack(spacing: 6) {
@@ -109,15 +109,15 @@ struct InviteCodeView: View {
 
             Image(systemName: "link")
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color(hex: 0x99948C))
+                .foregroundStyle(CV.muted)
                 .offset(x: 17, y: 139)
 
             Text(link)
-                .cvText(13, color: Color(hex: 0x99948C), tracking: -0.13, inter: true)
+                .cvText(13, color: CV.muted, tracking: -0.13, inter: true)
                 .offset(x: 37, y: 137)
 
             Text("\(ride.distance) · \(ride.riders.count) rider\(ride.riders.count == 1 ? "" : "s")")
-                .cvText(12, color: Color(hex: 0x736E69), tracking: -0.12, inter: true)
+                .cvText(12, color: CV.dim, tracking: -0.12, inter: true)
                 .offset(x: 17, y: 157)
 
             Button {
@@ -126,15 +126,15 @@ struct InviteCodeView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
             } label: {
                 Text(copied ? "Copied" : "Copy")
-                    .cvText(14, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                    .cvText(14, .semibold, color: CV.text, inter: true)
                     .frame(width: 76, height: 36)
-                    .background(Color(hex: 0x333336), in: Capsule())
+                    .background(CV.fill, in: Capsule())
             }
             .buttonStyle(.plain)
             .offset(x: 258, y: 133)
         }
         .frame(width: 353, height: 184, alignment: .topLeading)
-        .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
             .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
     }
@@ -146,7 +146,7 @@ struct SplitFlap: View {
         ZStack {
             RoundedRectangle(cornerRadius: 9, style: .continuous).fill(CV.bg)
             VStack(spacing: 0) {
-                Rectangle().fill(Color(hex: 0x131315)).frame(height: 31)
+                Rectangle().fill(CV.bg2).frame(height: 31)
                 Spacer()
             }
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))

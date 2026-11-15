@@ -16,11 +16,11 @@ struct UserSearchView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     Text(titleText)
-                        .cvText(34, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.68, inter: true)
+                        .cvText(34, .bold, color: CV.text, tracking: -0.68, inter: true)
                         .padding(.top, 62)
                     Text("Search by unique @handle.")
                         .cvText(15, color: CV.muted, inter: true)
@@ -28,33 +28,33 @@ struct UserSearchView: View {
                     HStack(spacing: 12) {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(CV.cream.opacity(0.5))
+                            .foregroundStyle(CV.text.opacity(0.5))
                         TextField("", text: $searchText,
-                                  prompt: Text("e.g. rider123").foregroundColor(CV.cream.opacity(0.4)))
+                                  prompt: Text("e.g. rider123").foregroundColor(CV.text.opacity(0.4)))
                             .cvText(16, .medium, inter: true)
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
-                            .tint(CV.red)
+                            .tint(CV.accent)
                             .onSubmit { search() }
                         Button { search() } label: {
                             if isSearching {
-                                ProgressView().tint(CV.ink).frame(width: 80, height: 44)
+                                ProgressView().tint(CV.onAccent).frame(width: 80, height: 44)
                             } else {
-                                Text("Search").cvText(14, .semibold, color: CV.ink, inter: true)
+                                Text("Search").cvText(14, .semibold, color: CV.onAccent, inter: true)
                                     .frame(width: 80, height: 44)
                             }
                         }
-                        .background(CV.cream, in: Capsule())
+                        .background(CV.accent, in: Capsule())
                         .disabled(searchText.isEmpty || isSearching)
                         .opacity(searchText.isEmpty || isSearching ? 0.5 : 1)
                     }
                     .padding(.horizontal, 16).frame(height: 56)
-                    .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .background(CV.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
 
                     if let error = errorMessage {
-                        Text(error).cvText(13, color: CV.red, inter: true)
+                        Text(error).cvText(13, color: CV.accent, inter: true)
                     }
 
                     if let user = foundUser {
@@ -69,13 +69,13 @@ struct UserSearchView: View {
                                 Spacer()
                             }
                             if isProcessing {
-                                ProgressView().tint(CV.red)
+                                ProgressView().tint(CV.accent)
                             } else {
                                 actionButtons(for: user)
                             }
                         }
                         .padding(20)
-                        .background(Color(hex: 0x1C1C1F), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .background(CV.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                     }
@@ -89,9 +89,9 @@ struct UserSearchView: View {
                         let link = inviteLink
                         ShareLink(item: "Join me on Convoy: \(link)") {
                             Text("Share Invite Link")
-                                .cvText(15, .semibold, color: CV.ink, inter: true)
+                                .cvText(15, .semibold, color: CV.onAccent, inter: true)
                                 .frame(maxWidth: .infinity).frame(height: 50)
-                                .background(CV.cream, in: Capsule())
+                                .background(CV.accent, in: Capsule())
                         }
                     }
                     .padding(20)
@@ -141,9 +141,9 @@ struct UserSearchView: View {
             } else if context == .friends {
                 Button { sendFriendRequest(to: user.username) } label: {
                     Text("Send Friend Request")
-                        .cvText(15, .semibold, color: CV.ink, inter: true)
+                        .cvText(15, .semibold, color: CV.onAccent, inter: true)
                         .frame(maxWidth: .infinity).frame(height: 50)
-                        .background(CV.cream, in: Capsule())
+                        .background(CV.accent, in: Capsule())
                 }.buttonStyle(.plain)
             } else if case .crew = context {
                 if isInCrew {
@@ -151,9 +151,9 @@ struct UserSearchView: View {
                 } else {
                     Button { addToCrew(user: user) } label: {
                         Text("Add to Crew")
-                            .cvText(15, .semibold, color: CV.ink, inter: true)
+                            .cvText(15, .semibold, color: CV.onAccent, inter: true)
                             .frame(maxWidth: .infinity).frame(height: 50)
-                            .background(CV.cream, in: Capsule())
+                            .background(CV.accent, in: Capsule())
                     }.buttonStyle(.plain)
                 }
                 if !isFriend {
@@ -162,7 +162,7 @@ struct UserSearchView: View {
                     } else {
                         Button { sendFriendRequest(to: user.username) } label: {
                             Text("Also Send Friend Request")
-                                .cvText(14, .semibold, color: CV.cream, inter: true)
+                                .cvText(14, .semibold, color: CV.text, inter: true)
                                 .frame(maxWidth: .infinity).frame(height: 44)
                                 .background(Color.white.opacity(0.1), in: Capsule())
                         }.buttonStyle(.plain)

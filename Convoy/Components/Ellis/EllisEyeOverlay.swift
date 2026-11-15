@@ -219,7 +219,7 @@ struct EllisEyeOverlay: View {
     /// Excited star / joyful diamond eye
     private func excitedEye(center: CGPoint, w: CGFloat, h: CGFloat, stroke: CGFloat) -> some View {
         happyArc(center: center, w: w * 1.1, h: h * 1.2, stroke: stroke)
-            .shadow(color: Color(hex: 0xFF6B00).opacity(0.8), radius: 3)
+            .shadow(color: CV.accent.opacity(0.8), radius: 3)
     }
 }
 

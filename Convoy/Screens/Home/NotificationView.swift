@@ -32,7 +32,7 @@ struct NotificationView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ContourBackdrop()
+            ScreenBackground()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -89,9 +89,9 @@ struct NotificationView: View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("ACTIVITY FEED")
-                    .cvText(11, .bold, color: CV.red, tracking: 1.6, inter: true)
+                    .cvText(12, .semibold, color: CV.muted, tracking: 0.6, inter: true)
                 Text("Notifications")
-                    .cvText(32, .bold, color: Color(hex: 0xF5EDDE), tracking: -0.6, inter: true)
+                    .cvText(32, .bold, color: CV.text, tracking: -0.6, inter: true)
             }
 
             Spacer()
@@ -99,15 +99,15 @@ struct NotificationView: View {
             if pendingCount > 0 {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(CV.red)
+                        .fill(CV.accent)
                         .frame(width: 7, height: 7)
                     Text("\(pendingCount) PENDING")
-                        .cvText(11, .bold, color: CV.red, tracking: 0.8, inter: true)
+                        .cvText(11, .bold, color: CV.accent, tracking: 0.8, inter: true)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(CV.red.opacity(0.12), in: Capsule())
-                .overlay(Capsule().strokeBorder(CV.red.opacity(0.25), lineWidth: 1))
+                .background(CV.accent.opacity(0.12), in: Capsule())
+                .overlay(Capsule().strokeBorder(CV.accent.opacity(0.25), lineWidth: 1))
             } else {
                 HStack(spacing: 5) {
                     Image(systemName: "checkmark")
@@ -147,13 +147,13 @@ struct NotificationView: View {
                                     .cvText(11, .bold, inter: true)
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 1)
-                                    .background(isSelected ? CV.ink.opacity(0.2) : Color.white.opacity(0.08), in: Capsule())
+                                    .background(isSelected ? CV.onAccent.opacity(0.2) : Color.white.opacity(0.08), in: Capsule())
                             }
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .foregroundStyle(isSelected ? CV.ink : CV.cream)
-                        .background(isSelected ? CV.cream : Color(hex: 0x1A1A1D), in: Capsule())
+                        .foregroundStyle(isSelected ? CV.onAccent : CV.text)
+                        .background(isSelected ? CV.accent : CV.surface, in: Capsule())
                         .overlay(Capsule().strokeBorder(isSelected ? Color.clear : Color.white.opacity(0.08), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
@@ -194,7 +194,7 @@ struct NotificationView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(notif.actorName ?? notif.title)
-                            .cvText(15, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                            .cvText(15, .bold, color: CV.text, inter: true)
                         if let handle = notif.actorHandle, !handle.isEmpty {
                             Text("@\(handle)")
                                 .cvText(12, color: CV.muted, inter: true)
@@ -221,7 +221,7 @@ struct NotificationView: View {
             }
             if notif.type == .postComment, !notif.subtitle.isEmpty {
                 Text("“\(notif.subtitle)”")
-                    .cvText(14, color: CV.cream, lineHeight: 19, inter: true)
+                    .cvText(14, color: CV.text, lineHeight: 19, inter: true)
                     .lineLimit(3)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -249,10 +249,10 @@ struct NotificationView: View {
                                 Text("Decline")
                                     .cvText(13, .semibold, inter: true)
                             }
-                            .foregroundStyle(Color(hex: 0xF5EDDE))
+                            .foregroundStyle(CV.text)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .background(Color(hex: 0x2A2A2E), in: Capsule())
+                            .background(CV.elevated, in: Capsule())
                             .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
                         }
                         .buttonStyle(.plain)
@@ -265,11 +265,11 @@ struct NotificationView: View {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 11, weight: .bold))
                                 Text("Accept")
-                                    .cvText(13, .bold, color: CV.ink, inter: true)
+                                    .cvText(13, .bold, color: CV.onAccent, inter: true)
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
-                            .background(CV.cream, in: Capsule())
+                            .background(CV.accent, in: Capsule())
                         }
                         .buttonStyle(.plain)
                     }
@@ -299,9 +299,9 @@ struct NotificationView: View {
             }
         }
         .padding(16)
-        .background(Color(hex: 0x18181B), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .strokeBorder(isUnread(notif) ? CV.red.opacity(0.2) : Color.white.opacity(0.07), lineWidth: 1))
+            .strokeBorder(isUnread(notif) ? CV.accent.opacity(0.2) : Color.white.opacity(0.07), lineWidth: 1))
     }
 
     private func isUnread(_ n: AppNotification) -> Bool {
@@ -320,7 +320,7 @@ struct NotificationView: View {
             }
             if let note = req.note {
                 Text("“\(note)”")
-                    .cvText(14, color: CV.cream, lineHeight: 19, inter: true)
+                    .cvText(14, color: CV.text, lineHeight: 19, inter: true)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -366,9 +366,9 @@ struct NotificationView: View {
     private func pillButton(_ title: String, filled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .cvText(13, .bold, color: filled ? CV.ink : CV.cream, inter: true)
+                .cvText(13, .bold, color: filled ? CV.onAccent : CV.text, inter: true)
                 .padding(.horizontal, 16).padding(.vertical, 8)
-                .background(filled ? CV.cream : Color(hex: 0x2A2A2E), in: Capsule())
+                .background(filled ? CV.accent : CV.elevated, in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.white.opacity(filled ? 0 : 0.08), lineWidth: 1))
         }
         .buttonStyle(.plain)
@@ -390,16 +390,16 @@ struct NotificationView: View {
             HStack(spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(CV.red.opacity(0.12))
+                        .fill(CV.accent.opacity(0.12))
                         .frame(width: 36, height: 36)
                     Image(systemName: "flag.2.crossed.fill")
                         .font(.system(size: 13))
-                        .foregroundStyle(CV.red)
+                        .foregroundStyle(CV.accent)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(rideTitle)
-                        .cvText(14, .semibold, color: Color(hex: 0xF5EDDE), inter: true)
+                        .cvText(14, .semibold, color: CV.text, inter: true)
                         .lineLimit(1)
                     if let r = matchingRide {
                         Text("\(r.distance.isEmpty ? "Trip" : r.distance) · \(r.displayDate.isEmpty ? "Upcoming" : r.displayDate)")
@@ -419,7 +419,7 @@ struct NotificationView: View {
                 }
             }
             .padding(10)
-            .background(Color(hex: 0x1F1F24), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(CV.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
         }
@@ -454,7 +454,7 @@ struct NotificationView: View {
             Circle()
                 .fill(typeColor(type))
                 .frame(width: 18, height: 18)
-                .overlay(Circle().strokeBorder(Color(hex: 0x18181B), lineWidth: 2))
+                .overlay(Circle().strokeBorder(CV.surface, lineWidth: 2))
 
             Group {
                 switch type {
@@ -483,14 +483,14 @@ struct NotificationView: View {
     private func typeTag(_ type: NotificationType) -> some View {
         let (text, color): (String, Color) = {
             switch type {
-            case .rideJoin: return ("TRIP JOIN", CV.red)
-            case .friendRequest: return ("FRIEND", Color(hex: 0xFFA500))
+            case .rideJoin: return ("TRIP JOIN", CV.accent)
+            case .friendRequest: return ("FRIEND", CV.warning)
             case .crewInvite: return ("CREW", Color(hex: 0xAF52DE))
             case .rideJoinAccepted: return ("ACCEPTED", CV.green)
             case .rideJoinDeclined: return ("DECLINED", CV.muted)
-            case .newFollower: return ("FOLLOWER", Color(hex: 0xFFB020))
-            case .postLike: return ("LIKE", CV.red)
-            case .postComment: return ("COMMENT", Color(hex: 0xFFB020))
+            case .newFollower: return ("FOLLOWER", CV.warning)
+            case .postLike: return ("LIKE", CV.accent)
+            case .postComment: return ("COMMENT", CV.warning)
             }
         }()
 
@@ -503,13 +503,13 @@ struct NotificationView: View {
 
     private func typeColor(_ type: NotificationType) -> Color {
         switch type {
-        case .rideJoin: return CV.red
-        case .friendRequest: return Color(hex: 0xFFA500)
+        case .rideJoin: return CV.accent
+        case .friendRequest: return CV.warning
         case .crewInvite: return Color(hex: 0xAF52DE)
         case .rideJoinAccepted: return CV.green
         case .rideJoinDeclined: return CV.dim
-        case .newFollower, .postComment: return Color(hex: 0xFFB020)
-        case .postLike: return CV.red
+        case .newFollower, .postComment: return CV.warning
+        case .postLike: return CV.accent
         }
     }
 
@@ -532,17 +532,17 @@ struct NotificationView: View {
                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                     .frame(width: 70, height: 70)
                 Circle()
-                    .fill(Color(hex: 0x222226))
+                    .fill(CV.elevated)
                     .frame(width: 46, height: 46)
                 Image(systemName: "bell.badge.slash")
                     .font(.system(size: 20))
-                    .foregroundStyle(CV.cream.opacity(0.6))
+                    .foregroundStyle(CV.text.opacity(0.6))
             }
             .padding(.top, 10)
 
             VStack(spacing: 6) {
                 Text(filter == .all ? "All caught up" : "No \(filter.rawValue.lowercased()) notifications")
-                    .cvText(18, .bold, color: Color(hex: 0xF5EDDE), inter: true)
+                    .cvText(18, .bold, color: CV.text, inter: true)
                 Text(filter == .all
                      ? "Join requests, replies to your requests, new followers and reactions to your rides show up here as they happen."
                      : "Nothing here yet.")
@@ -554,7 +554,7 @@ struct NotificationView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 44)
         .padding(.horizontal, 24)
-        .background(Color(hex: 0x161619), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
             .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
     }

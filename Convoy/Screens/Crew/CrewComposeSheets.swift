@@ -52,10 +52,10 @@ struct CrewComposeSheet: View {
                 }
                 .padding(20)
             }
-            .background(Color(hex: 0x141416).ignoresSafeArea())
+            .background(CV.bg2.ignoresSafeArea())
             .navigationTitle("Post to Crew")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.tint(CV.cream) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.tint(CV.accent) } }
             .navigationDestination(item: $shareLog) { ShareRideForm(log: $0) { dismiss() } }
             .navigationDestination(item: $openRide) { OpenRideForm(ride: $0) { dismiss() } }
         }
@@ -73,10 +73,10 @@ struct CrewComposeSheet: View {
     private func row(icon: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: icon).font(.system(size: 15)).foregroundStyle(CV.red)
-                    .frame(width: 40, height: 40).background(CV.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                Image(systemName: icon).font(.system(size: 15)).foregroundStyle(CV.accent)
+                    .frame(width: 40, height: 40).background(CV.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).cvText(15, .semibold, color: CV.cream, inter: true).lineLimit(1)
+                    Text(title).cvText(15, .semibold, color: CV.text, inter: true).lineLimit(1)
                     Text(subtitle).cvText(12, color: CV.muted, inter: true).lineLimit(1)
                 }
                 Spacer()
@@ -110,15 +110,15 @@ struct ShareRideForm: View {
                 NoteField(placeholder: "How was the ride?", text: $caption, limit: 500)
                 Text("Visible to everyone on Convoy. The first and last 400 m of your route are hidden.")
                     .cvText(12, color: CV.muted, inter: true)
-                if let error { Text(error).cvText(13, .semibold, color: CV.red, inter: true) }
+                if let error { Text(error).cvText(13, .semibold, color: CV.accent, inter: true) }
                 Button(action: post) {
                     HStack { if posting { ProgressView().tint(.white) }; Text("Share to Crew feed").cvText(16, .bold, color: .white, inter: true) }
-                        .frame(maxWidth: .infinity).frame(height: 52).background(CV.red, in: Capsule())
+                        .frame(maxWidth: .infinity).frame(height: 52).background(CV.accent, in: Capsule())
                 }.buttonStyle(.plain).disabled(posting)
             }
             .padding(20)
         }
-        .background(Color(hex: 0x141416).ignoresSafeArea())
+        .background(CV.bg2.ignoresSafeArea())
         .navigationTitle("Share ride")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -162,23 +162,23 @@ struct OpenRideForm: View {
                 }
                 Stepper(value: $maxRiders, in: minimum...50) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Max riders · \(maxRiders)").cvText(15, .semibold, color: CV.cream, inter: true)
+                        Text("Max riders · \(maxRiders)").cvText(15, .semibold, color: CV.text, inter: true)
                         Text("\(ride.acceptedRiders.count) already going · requests stop when it's full").cvText(12, color: CV.muted, inter: true)
                     }
                 }
-                .tint(CV.red)
+                .tint(CV.accent)
                 .padding(14)
                 .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 NoteField(placeholder: "Pace, stops, what riders should know", text: $caption, limit: 500)
-                if let error { Text(error).cvText(13, .semibold, color: CV.red, inter: true) }
+                if let error { Text(error).cvText(13, .semibold, color: CV.accent, inter: true) }
                 Button(action: post) {
                     HStack { if posting { ProgressView().tint(.white) }; Text("Post to Crew feed").cvText(16, .bold, color: .white, inter: true) }
-                        .frame(maxWidth: .infinity).frame(height: 52).background(CV.red, in: Capsule())
+                        .frame(maxWidth: .infinity).frame(height: 52).background(CV.accent, in: Capsule())
                 }.buttonStyle(.plain).disabled(posting)
             }
             .padding(20)
         }
-        .background(Color(hex: 0x141416).ignoresSafeArea())
+        .background(CV.bg2.ignoresSafeArea())
         .navigationTitle("Open to requests")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { maxRiders = max(minimum, min(50, ride.acceptedRiders.count + 4)) }
@@ -187,7 +187,7 @@ struct OpenRideForm: View {
     private func infoRow(_ icon: String, _ text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon).font(.system(size: 13)).foregroundStyle(CV.green).frame(width: 18)
-            Text(text).cvText(14, color: CV.cream, inter: true)
+            Text(text).cvText(14, color: CV.text, inter: true)
         }
     }
 

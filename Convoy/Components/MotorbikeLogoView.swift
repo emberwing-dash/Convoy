@@ -12,7 +12,7 @@ struct MotorbikeLogoView: View {
             // Ambient glow
             Circle()
                 .fill(RadialGradient(
-                    colors: [Color(hex: 0xFF5C00).opacity(0.35), Color.clear],
+                    colors: [CV.accent.opacity(0.35), Color.clear],
                     center: .center,
                     startRadius: 0,
                     endRadius: size * 0.7

@@ -20,7 +20,7 @@ struct ConvoyOpeningAnimationView: View {
     @State private var startDate: Date? = nil
     @State private var isFinished = false
 
-    private let orangeGlow = Color(red: 1.000, green: 0.420, blue: 0.000) // #FF6B00
+    private let orangeGlow = CV.accent
 
     var body: some View {
         TimelineView(.animation) { tl in
@@ -31,7 +31,7 @@ struct ConvoyOpeningAnimationView: View {
 
             GeometryReader { geo in
                 ZStack {
-                    Color.black.ignoresSafeArea()
+                    CV.bg.ignoresSafeArea()
                     animContent(t: t, w: geo.size.width, h: geo.size.height)
                 }
             }
