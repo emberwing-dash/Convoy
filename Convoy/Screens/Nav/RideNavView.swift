@@ -117,6 +117,16 @@ struct RideNavView: View {
                     .padding(.top, 6)
                 }
 
+                // MARK: - Rally warning banner (#13)
+                if let banner = RallyCoordinator.shared.activeBanner, phase == .riding {
+                    RallyBannerView(warning: banner) {
+                        RallyCoordinator.shared.dismissBanner()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 if phase != .arrived {
                     HStack(alignment: .top) {
                         Spacer()
@@ -205,6 +215,7 @@ struct RideNavView: View {
         .animation(.snappy(duration: 0.25), value: panel)
         .animation(.snappy(duration: 0.25), value: alert)
         .animation(.snappy(duration: 0.25), value: isRerouting)
+        .animation(.snappy(duration: 0.3), value: RallyCoordinator.shared.activeBanner?.id)
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())

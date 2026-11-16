@@ -4,14 +4,26 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppState.self) private var app
 
+    private var hasAnyContent: Bool {
+        !app.rides.isEmpty || !app.completedRides.isEmpty || !app.pendingRideJoinsByMe.isEmpty
+    }
+
+    private var upcomingRides: [Ride] {
+        app.sortedRides.filter { $0.id != app.activeRide?.id }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             ContourBackdrop()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
-                    if app.rides.isEmpty && app.pendingRideJoinsByMe.isEmpty { newUserContent }
-                    else { upcomingContent }
+
+                    if !hasAnyContent {
+                        newUserContent
+                    } else {
+                        existingUserContent
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
@@ -32,13 +44,12 @@ struct HomeView: View {
         }
     }
 
+    // MARK: - Header
+
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Welcome to Convoy").cvText(13, .medium, color: CV.red, lineHeight: 16, inter: true)
-                    .padding(.top, 3)
-                Text("Hey \(app.displayName)").cvText(20, .semibold, tracking: -0.3, lineHeight: 24, inter: true)
-            }
+        HStack(alignment: .center, spacing: 12) {
+            Text("Hey \(app.displayName)")
+                .cvText(22, .semibold, tracking: -0.3, lineHeight: 26, inter: true)
             Spacer()
             HStack(spacing: 12) {
                 Button { app.push(.notifications) } label: {
@@ -61,8 +72,10 @@ struct HomeView: View {
                 }.buttonStyle(.plain)
             }
         }
-        .frame(height: 44)
+        .padding(.top, 8)
     }
+
+    // MARK: - Actions (unchanged)
 
     private var actions: some View {
         VStack(spacing: 12) {
@@ -72,7 +85,8 @@ struct HomeView: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "map").font(.system(size: 18, weight: .semibold))
-                    Text("Initiate Plan").cvText(17, .semibold, color: CV.ink, tracking: -0.17, lineHeight: 22, inter: true)
+                    Text("Initiate Plan")
+                        .cvText(17, .semibold, color: CV.ink, tracking: -0.17, lineHeight: 22, inter: true)
                 }
                 .foregroundStyle(CV.ink)
                 .frame(maxWidth: .infinity).frame(height: 56)
@@ -82,7 +96,8 @@ struct HomeView: View {
             Button { app.push(.joinCode(nil)) } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "qrcode").font(.system(size: 18, weight: .semibold))
-                    Text("Join with a code").cvText(17, .semibold, tracking: -0.17, lineHeight: 22, inter: true)
+                    Text("Join with a code")
+                        .cvText(17, .semibold, tracking: -0.17, lineHeight: 22, inter: true)
                 }
                 .frame(maxWidth: .infinity).frame(height: 56)
                 .background(Color.white.opacity(0.07), in: Capsule())
@@ -91,98 +106,158 @@ struct HomeView: View {
         }
     }
 
+    // MARK: - New user
+
     private var newUserContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Your first ride\nstarts here").cvText(34, .bold, tracking: -0.85, lineHeight: 40, inter: true)
-                .padding(.top, 26)
-            Text("Bring your crew and Plan a route, or join a ride a friend already planned.")
-                .cvText(17, color: CV.muted, tracking: -0.17, lineHeight: 24, inter: true)
-                .padding(.top, 24)
-            actions.padding(.top, 24)
-            Text("Upcoming rides").cvText(20, .semibold, tracking: -0.3, lineHeight: 25, inter: true)
+            Text("Your first ride\nstarts here")
+                .cvText(34, .bold, tracking: -0.85, lineHeight: 40, inter: true)
                 .padding(.top, 32)
-            VStack() {
-                Image("no_upcomming_rides")
-                    .resizable().scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 24))
-                    .overlay(
-                        ZStack {
-                            LinearGradient(
-                                colors: [.clear, .black.opacity(0.55), .black.opacity(0.95)],
-                                startPoint: .center, endPoint: .bottom
-                            ).clipShape(RoundedRectangle(cornerRadius: 24))
-                            VStack(alignment: .leading) {
-                                Text("No rides planned yet").font(.subheadline).bold().foregroundStyle(.white)
-                                Text("Plan your next adventure and ride together!")
-                                    .font(.caption).foregroundStyle(.white.opacity(0.9))
-                            }.offset(x: 0, y: 50)
-                        }
-                    )
-            }
-            .frame(maxWidth: .infinity)
-            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
-            .padding(.top, 12)
+            actions.padding(.top, 28)
+            emptyUpcomingCard.padding(.top, 32)
         }
     }
 
-    private var upcomingContent: some View {
-        let sorted = app.sortedRides
-        let top3 = Array(sorted.prefix(3))
-        return VStack(alignment: .leading, spacing: 0) {
+    private var emptyUpcomingCard: some View {
+        VStack(spacing: 0) {
+            Image("no_upcomming_rides")
+                .resizable().scaledToFit()
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .overlay(
+                    ZStack {
+                        LinearGradient(
+                            colors: [.clear, .black.opacity(0.55), .black.opacity(0.95)],
+                            startPoint: .center, endPoint: .bottom
+                        ).clipShape(RoundedRectangle(cornerRadius: 24))
+                        VStack(alignment: .leading) {
+                            Text("No rides planned yet").font(.subheadline).bold().foregroundStyle(.white)
+                            Text("Plan your next adventure and ride together!")
+                                .font(.caption).foregroundStyle(.white.opacity(0.9))
+                        }.offset(x: 0, y: 50)
+                    }
+                )
+        }
+        .frame(maxWidth: .infinity)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+    }
+
+    // MARK: - Existing user
+
+    private var existingUserContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
             (Text("Where to ") + Text("next").foregroundColor(CV.red) + Text("?"))
                 .cvText(30, .bold, tracking: -0.6, inter: true)
                 .padding(.top, 22)
-            Text("Plan another route or hop into a friend's ride.")
-                .cvText(15, color: CV.cream.opacity(0.6), inter: true)
-                .padding(.top, 4)
-            actions.padding(.top, 28)
+            actions.padding(.top, 24)
 
-            // Active / Ongoing ride banner
-            if let active = app.activeRide {
+            ongoingSection
+            pendingSection
+            upcomingSection
+            recentSection
+        }
+    }
+
+    // MARK: - Sections
+
+    @ViewBuilder
+    private var ongoingSection: some View {
+        if let active = app.activeRide {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("Ongoing", seeAll: nil)
                 ActiveRideBanner(ride: active) {
                     app.push(.rideNav)
                 }
-                .padding(.top, 20)
             }
+            .padding(.top, 28)
+        }
+    }
 
-            // Pending joins (organiser hasn't accepted yet)
-            if !app.pendingRideJoinsByMe.isEmpty {
-                HStack {
-                    Text("Waiting for approval")
-                        .cvText(20, .semibold, tracking: -0.24, inter: true)
-                    Spacer()
-                    Text("\(app.pendingRideJoinsByMe.count)")
-                        .cvText(14, .medium, color: CV.muted, inter: true)
-                }
-                .padding(.top, 28)
-                ForEach(app.pendingRideJoinsByMe) { ride in
-                    pendingRideCard(ride).padding(.top, 10)
+    @ViewBuilder
+    private var pendingSection: some View {
+        if !app.pendingRideJoinsByMe.isEmpty {
+            let pending = app.pendingRideJoinsByMe
+            VStack(alignment: .leading, spacing: 10) {
+                sectionHeader("Waiting for approval", count: pending.count, seeAll: nil)
+                ForEach(pending.prefix(3)) { ride in
+                    pendingRideCard(ride)
                 }
             }
+            .padding(.top, 28)
+        }
+    }
 
-            HStack {
-                Text("Upcoming").cvText(20, .semibold, tracking: -0.24, inter: true)
-                Spacer()
-                Button { app.push(.myRides) } label: {
-                    Text("See all (\(sorted.count))")
-                        .cvText(14, .medium, color: CV.cream.opacity(0.55), inter: true)
+    @ViewBuilder
+    private var upcomingSection: some View {
+        let upcoming = upcomingRides
+        if !upcoming.isEmpty {
+            let top3 = Array(upcoming.prefix(3))
+            let seeAll: (() -> Void)? = upcoming.count > 3
+                ? {
+                    app.pendingMyRidesTab = "upcoming"
+                    app.push(.myRides)
+                }
+                : nil
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader("Upcoming", count: upcoming.count, seeAll: seeAll)
+                ForEach(Array(top3.enumerated()), id: \.element.id) { i, ride in
+                    if i == 0 {
+                        UpcomingRideCard(ride: ride) { app.push(.rideDetails(ride.id)) }
+                    } else {
+                        CompactRideCard(ride: ride) { app.push(.rideDetails(ride.id)) }
+                    }
+                }
+            }
+            .padding(.top, 28)
+        }
+    }
+
+    @ViewBuilder
+    private var recentSection: some View {
+        let recent = app.completedRides
+        if !recent.isEmpty {
+            let top3 = Array(recent.prefix(3))
+            let seeAll: (() -> Void)? = recent.count > 3
+                ? {
+                    app.pendingMyRidesTab = "past"
+                    app.push(.myRides)
+                }
+                : nil
+            VStack(alignment: .leading, spacing: 10) {
+                sectionHeader("Recent", count: recent.count, seeAll: seeAll)
+                ForEach(top3, id: \.id) { p in
+                    recentCard(p)
+                }
+            }
+            .padding(.top, 28)
+        }
+    }
+
+    // MARK: - Section header
+
+    private func sectionHeader(_ title: String, count: Int? = nil, seeAll: (() -> Void)?) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).cvText(20, .semibold, tracking: -0.24, inter: true)
+            if let count, count > 0 {
+                Text("\(count)").cvText(14, .medium, color: CV.muted, inter: true)
+            }
+            Spacer()
+            if let seeAll {
+                Button(action: seeAll) {
+                    HStack(spacing: 4) {
+                        Text("See all")
+                            .cvText(14, .medium, color: CV.cream.opacity(0.55), inter: true)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(CV.cream.opacity(0.45))
+                    }
                 }.buttonStyle(.plain)
-            }
-            .padding(.top, 32)
-
-            ForEach(Array(top3.enumerated()), id: \.element.id) { i, ride in
-                if i == 0 {
-                    UpcomingRideCard(ride: ride) { app.push(.rideDetails(ride.id)) }
-                        .padding(.top, 12)
-                } else {
-                    CompactRideCard(ride: ride) { app.push(.rideDetails(ride.id)) }
-                        .padding(.top, 10)
-                }
             }
         }
     }
+
+    // MARK: - Cards
 
     private func pendingRideCard(_ ride: Ride) -> some View {
         HStack(spacing: 12) {
@@ -203,11 +278,40 @@ struct HomeView: View {
             Spacer()
         }
         .padding(12)
-        .background(Color(hex: 0x1A1A1D), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
             .strokeBorder(Color(hex: 0xFFB020).opacity(0.3), lineWidth: 1))
     }
+
+    private func recentCard(_ p: PersistedRideEntity) -> some View {
+        Button { app.push(.pastRide(p.id)) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 22)).foregroundStyle(CV.green)
+                    .frame(width: 52, height: 52)
+                    .background(CV.green.opacity(0.15), in: Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(p.title).cvText(15, .semibold, inter: true).lineLimit(1)
+                    Text("\(p.displayDate) · \(p.distance)")
+                        .cvText(12, color: CV.cream.opacity(0.5), inter: true)
+                        .lineLimit(1)
+                    Text(p.duration)
+                        .cvText(12, .semibold, color: CV.cream.opacity(0.7), inter: true)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(CV.cream.opacity(0.4))
+            }
+            .padding(12)
+            .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        }.buttonStyle(.plain)
+    }
 }
+
+// MARK: - Preserved card components
 
 struct ActiveRideBanner: View {
     let ride: Ride

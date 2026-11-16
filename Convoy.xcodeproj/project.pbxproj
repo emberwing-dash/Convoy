@@ -48,7 +48,17 @@
 				Screens/ChatBot/ChatbotEngine.swift,
 				Screens/ChatBot/ChatbotView.swift,
 				Screens/ChatBot/ChatTools.swift,
+				Screens/Crew/CrewFeedView.swift,
+				Screens/Crew/CrewHomeView.swift,
+				Screens/Crew/CrewLeaderboardView.swift,
+				Screens/Crew/PostComposerView.swift,
+				Screens/Join/JoinCrewView.swift,
 				Screens/Join/QRScannerView.swift,
+				Screens/Nav/RallyCoordinator.swift,
+				Screens/Profile/RiderProfileSheet.swift,
+				Services/CodeExtractor.swift,
+				Services/ConvoyAppDelegate.swift,
+				Services/NotificationService.swift,
 			);
 		};
 /* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
@@ -383,7 +393,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Convoy/Info.plist;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Convoy uses the camera for ride photos.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Convoy needs camera access to scan ride QR codes.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Convoy keeps your crew updated on your live position while navigating.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Convoy shows your crew where you are during a ride.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Convoy needs access to choose an avatar and attach ride photos.";
@@ -421,7 +431,7 @@
 				EXCLUDED_SOURCE_FILE_NAMES = DiscoverMock.xcassets;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Convoy/Info.plist;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Convoy uses the camera for ride photos.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Convoy needs camera access to scan ride QR codes.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Convoy keeps your crew updated on your live position while navigating.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Convoy shows your crew where you are during a ride.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Convoy needs access to choose an avatar and attach ride photos.";

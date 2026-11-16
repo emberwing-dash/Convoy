@@ -336,12 +336,24 @@ struct CrewInviteView: View {
                             .cvText(12, color: CV.muted, inter: true)
                     }
                     Spacer()
-                    ShareLink(item: "Join \(crew.name) on Convoy: convoy://crew/\(crew.code.lowercased())") {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(CV.ink)
-                            .frame(width: 44, height: 44)
-                            .background(Color(hex: 0xF5EDDE), in: Circle())
+                    HStack(spacing: 10) {
+                        Button {
+                            UIPasteboard.general.string = "convoy://crew/\(crew.code.lowercased())"
+                            showToast("Crew invite link copied")
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(CV.cream)
+                                .frame(width: 44, height: 44)
+                                .background(Color.white.opacity(0.08), in: Circle())
+                        }.buttonStyle(.plain)
+                        ShareLink(item: "Join \(crew.name) on Convoy: convoy://crew/\(crew.code.lowercased())") {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(CV.ink)
+                                .frame(width: 44, height: 44)
+                                .background(Color(hex: 0xF5EDDE), in: Circle())
+                        }
                     }
                 }
                 .padding(16)

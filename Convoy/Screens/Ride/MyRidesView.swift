@@ -24,6 +24,12 @@ struct MyRidesView: View {
         }
         .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
+        .onAppear {
+            if let hint = app.pendingMyRidesTab {
+                tab = (hint == "past") ? .past : .upcoming
+                app.pendingMyRidesTab = nil
+            }
+        }
     }
 
     private var tabs: some View {

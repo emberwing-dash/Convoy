@@ -17,6 +17,7 @@ struct ProfileView: View {
     }
 
     var body: some View {
+        @Bindable var app = app
         ZStack(alignment: .top) {
             ContourBackdrop()
             ScrollView {
@@ -28,7 +29,7 @@ struct ProfileView: View {
                         .padding(.top, 14)
 
                     if !app.handle.isEmpty {
-                        Text("@\(app.handle)")
+                        Text("@\(app.handle.replacingOccurrences(of: "@", with: ""))")
                             .cvText(14, color: CV.cream.opacity(0.55), inter: true)
                             .padding(.top, 3)
                     }
@@ -41,10 +42,10 @@ struct ProfileView: View {
                         stat("\(totalPlaces)", "destinations")
                     }
                     .frame(height: 76)
-                    .background(Color.white.opacity(0.04),
+                    .background(CV.glassFill,
                                 in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
+                        .strokeBorder(CV.glassStroke, lineWidth: 1))
                     .padding(.top, 20)
 
                     sectionTitle("RECENT RIDES & HISTORY").padding(.top, 26)
@@ -66,21 +67,22 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal, 16)
                         .frame(height: 72)
-                        .background(Color(hex: 0x1A1A1D),
+                        .background(CV.surface,
                                     in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                            .strokeBorder(CV.glassStroke, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 7)
 
                     sectionTitle("SETTINGS").padding(.top, 24)
                     VStack(spacing: 0) {
+                        // MARK: - Appearance (new)
+                        appearanceRow(binding: $app.appearance, first: true)
                         rowLink("point.topleft.down.to.point.bottomright.curvepath",
                                 "Saved routes",
                                 trailing: "\(app.savedRoutes.count)",
-                                action: { app.push(.discoverSaved) },
-                                first: true)
+                                action: { app.push(.discoverSaved) })
                         rowLink("bell",
                                 "Notifications",
                                 trailing: app.notifications.isEmpty ? nil : "\(app.notifications.count)",
@@ -92,10 +94,10 @@ struct ProfileView: View {
                                 "Help & privacy",
                                 action: { app.push(.placeholder("Help & privacy")) })
                     }
-                    .background(Color(hex: 0x1A1A1D),
+                    .background(CV.surface,
                                 in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                        .strokeBorder(CV.glassStroke, lineWidth: 1))
                     .padding(.top, 7)
 
                     Button {
@@ -140,6 +142,35 @@ struct ProfileView: View {
         }
     }
 
+    // MARK: - Appearance row
+
+    private func appearanceRow(binding: Binding<AppState.Appearance>, first: Bool) -> some View {
+        VStack(spacing: 0) {
+            if !first {
+                Rectangle().fill(CV.glassStroke)
+                    .frame(height: 1).padding(.leading, 52)
+            }
+            HStack(spacing: 14) {
+                Image(systemName: binding.wrappedValue == .dark
+                      ? "moon.fill"
+                      : "sun.max.fill")
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(CV.cream)
+                    .frame(width: 22)
+                Text("Appearance").cvText(16, .medium, inter: true)
+                Spacer()
+                Picker("Appearance", selection: binding) {
+                    Text("Dark").tag(AppState.Appearance.dark)
+                    Text("Light").tag(AppState.Appearance.light)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 140)
+                .tint(CV.red)
+            }
+            .padding(.horizontal, 16).frame(height: 56)
+        }
+    }
+
     // MARK: - Avatar
 
     private var avatarView: some View {
@@ -173,7 +204,7 @@ struct ProfileView: View {
             if app.completedRides.isEmpty {
                 HStack(spacing: 14) {
                     ZStack {
-                        Circle().fill(Color.white.opacity(0.06)).frame(width: 44, height: 44)
+                        Circle().fill(CV.glassFill).frame(width: 44, height: 44)
                         Image(systemName: "flag.checkered")
                             .font(.system(size: 18))
                             .foregroundStyle(CV.cream.opacity(0.45))
@@ -187,10 +218,10 @@ struct ProfileView: View {
                     Spacer()
                 }
                 .padding(16)
-                .background(Color(hex: 0x1A1A1D),
+                .background(CV.surface,
                             in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                    .strokeBorder(CV.glassStroke, lineWidth: 1))
             } else {
                 VStack(spacing: 10) {
                     ForEach(app.completedRides, id: \.id) { r in
@@ -222,10 +253,10 @@ struct ProfileView: View {
                             }
                             .padding(.horizontal, 16)
                             .frame(height: 68)
-                            .background(Color(hex: 0x1A1A1D),
+                            .background(CV.surface,
                                         in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                                .strokeBorder(CV.glassStroke, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                     }
@@ -237,7 +268,7 @@ struct ProfileView: View {
     // MARK: - Helpers
 
     private var divider: some View {
-        Rectangle().fill(Color.white.opacity(0.09)).frame(width: 1, height: 36)
+        Rectangle().fill(CV.glassStroke).frame(width: 1, height: 36)
     }
 
     private func stat(_ v: String, _ l: String) -> some View {
@@ -261,13 +292,14 @@ struct ProfileView: View {
                          first: Bool = false) -> some View {
         VStack(spacing: 0) {
             if !first {
-                Rectangle().fill(Color.white.opacity(0.07))
+                Rectangle().fill(CV.glassStroke)
                     .frame(height: 1).padding(.leading, 52)
             }
             Button(action: action) {
                 HStack(spacing: 14) {
                     Image(systemName: symbol)
                         .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(CV.cream)
                         .frame(width: 22)
                     Text(title).cvText(16, .medium, inter: true)
                     Spacer()

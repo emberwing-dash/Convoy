@@ -30,6 +30,7 @@ struct MainShell: View {
                 case .shareCard:          ShareCardView()
                 case .profile:            ProfileView()
                 case .joinCode(let code): JoinCodeView(initialCode: code)
+                case .joinCrew:           JoinCrewView()
                 case .joinFound:          JoinFoundView()
                 case .myRides:            MyRidesView()
                 case .crewDetail(let id): CrewDetailView(crewID: id)

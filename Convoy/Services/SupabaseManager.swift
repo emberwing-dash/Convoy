@@ -586,7 +586,131 @@ final class SupabaseManager {
     func deleteRide(id: UUID) async throws {
         try await client.from("rides").delete().eq("id", value: id).execute()
     }
+
+    // MARK: - Community v2 — follows
+    func followUser(followerId: UUID, followingId: UUID) async throws {
+        try await client.from("follows")
+            .insert(FollowInsert(follower_id: followerId, following_id: followingId))
+            .execute()
+    }
+
+    func unfollowUser(followerId: UUID, followingId: UUID) async throws {
+        try await client.from("follows").delete()
+            .eq("follower_id", value: followerId)
+            .eq("following_id", value: followingId)
+            .execute()
+    }
+
+    func isFollowing(followerId: UUID, followingId: UUID) async throws -> Bool {
+        let rows: [FollowRow] = try await client.from("follows").select()
+            .eq("follower_id", value: followerId)
+            .eq("following_id", value: followingId)
+            .execute().value
+        return !rows.isEmpty
+    }
+
+    func fetchFollowingIds(for userId: UUID) async throws -> [UUID] {
+        let rows: [FollowRow] = try await client.from("follows").select()
+            .eq("follower_id", value: userId).execute().value
+        return rows.map { $0.following_id }
+    }
+
+    func fetchSuggestedRiders(for userId: UUID, limit: Int = 20) async throws -> [SuggestedRider] {
+        let params = SuggestRidersParams(p_user_id: userId, p_limit: limit)
+        return try await client.rpc("suggest_riders_for_user", params: params).execute().value
+    }
+
+    // MARK: - Community v2 — posts
+    func createPost(_ post: PostInsert) async throws -> UUID {
+        struct Response: Decodable { let id: UUID }
+        let rows: [Response] = try await client.from("posts")
+            .insert(post).select("id").execute().value
+        guard let id = rows.first?.id else {
+            throw NSError(domain: "Convoy", code: 500,
+                          userInfo: [NSLocalizedDescriptionKey: "Post create failed"])
+        }
+        return id
+    }
+
+    func fetchFeed(limit: Int = 30) async throws -> [PostRow] {
+        try await client.from("posts")
+            .select("*, profiles!posts_author_id_fkey(*)")
+            .order("created_at", ascending: false)
+            .limit(limit)
+            .execute().value
+    }
+
+    func deletePost(id: UUID) async throws {
+        try await client.from("posts").delete().eq("id", value: id).execute()
+    }
+
+    func likePost(postId: UUID, userId: UUID) async throws {
+        try await client.from("post_likes")
+            .insert(PostLikeInsert(post_id: postId, user_id: userId))
+            .execute()
+    }
+
+    func unlikePost(postId: UUID, userId: UUID) async throws {
+        try await client.from("post_likes").delete()
+            .eq("post_id", value: postId).eq("user_id", value: userId).execute()
+    }
+
+    // MARK: - Community v2 — leaderboard
+    func fetchLeaderboard(year: Int, month: Int) async throws -> [LeaderboardEntry] {
+        try await client.from("leaderboard_monthly")
+            .select("*, profiles!leaderboard_monthly_user_id_fkey(*)")
+            .eq("period_year", value: year)
+            .eq("period_month", value: month)
+            .execute().value
+    }
+
+    func fetchCrewLeaderboard(year: Int, month: Int) async throws -> [CrewLeaderboardEntry] {
+        let params = RefreshLeaderboardParams(p_year: year, p_month: month)
+        return try await client.rpc("crew_leaderboard_for_month", params: params).execute().value
+    }
+
+    /// Optional manual refresh — the app calls this after a ride completes so the
+    /// leaderboard updates without waiting for the nightly cron job.
+    func refreshLeaderboard(year: Int, month: Int) async throws {
+        let params = RefreshLeaderboardParams(p_year: year, p_month: month)
+        let _: Int = try await client.rpc("refresh_leaderboard_monthly", params: params).execute().value
+    }
+
+    // MARK: - Community v2 — device tokens & outbox
+    func registerDeviceToken(userId: UUID, token: String) async throws {
+        try await client.from("device_tokens").upsert(
+            DeviceTokenInsert(user_id: userId, apns_token: token,
+                              environment: "production", platform: "ios"),
+            onConflict: "user_id,apns_token"
+        ).execute()
+    }
+
+    /// Queues a push notification for delivery by the `notify-outbox` edge function.
+    /// Never throws if the RPC is unavailable — falls back to a silent no-op so
+    /// local notifications still work.
+    func enqueueNotification(userId: UUID, kind: String, title: String, body: String,
+                             payload: [String: String] = [:]) async {
+        do {
+            let params = EnqueueNotificationParams(
+                p_user_id: userId, p_kind: kind, p_title: title, p_body: body, p_payload: payload
+            )
+            let _: UUID = try await client.rpc("enqueue_notification", params: params).execute().value
+        } catch {
+            print("⚠️ [Supabase] enqueue_notification failed: \(error)")
+        }
+    }
+
+    // MARK: - Ride telemetry (feeds top-speed leaderboard)
+    func updateRideMaxSpeed(id: UUID, maxSpeedKmh: Double, userId: UUID) async throws {
+        struct Update: Encodable { let max_speed_kmh: Double }
+        try await client.from("rides")
+            .update(Update(max_speed_kmh: maxSpeedKmh))
+            .eq("id", value: id)
+            .eq("organiser_id", value: userId)
+            .execute()
+    }
 }
+
 
 // MARK: - Codable payloads
 
@@ -879,4 +1003,114 @@ extension RideRow {
             code: code
         )
     }
+}
+
+// MARK: - Community v2 payloads
+
+struct FollowInsert: Codable {
+    let follower_id: UUID
+    let following_id: UUID
+}
+
+struct FollowRow: Codable {
+    let follower_id: UUID
+    let following_id: UUID
+}
+
+struct SuggestedRider: Codable, Identifiable, Sendable, Hashable {
+    let id: UUID
+    let username: String
+    let display_name: String
+    let avatar_data: String?
+    let followers_count: Int64
+    let following_count: Int64
+    let is_followed: Bool
+    static func == (l: SuggestedRider, r: SuggestedRider) -> Bool { l.id == r.id }
+    func hash(into h: inout Hasher) { h.combine(id) }
+}
+
+struct SuggestRidersParams: Encodable {
+    let p_user_id: UUID
+    let p_limit: Int
+}
+
+struct PostInsert: Codable {
+    let author_id: UUID
+    let kind: String            // "ride" | "experience" | "update" | "photo"
+    let visibility: String      // "public" | "followers" | "crew"
+    let crew_id: UUID?
+    let ride_id: UUID?
+    let title: String?
+    let body: String?
+    let media_json: String
+    let route_km: Double?
+    let route_from: String?
+    let route_to: String?
+}
+
+struct PostRow: Codable, Identifiable, Sendable, Hashable {
+    let id: UUID
+    let author_id: UUID
+    let kind: String
+    let visibility: String
+    let crew_id: UUID?
+    let ride_id: UUID?
+    let title: String?
+    let body: String?
+    let media_json: String?
+    let route_km: Double?
+    let route_from: String?
+    let route_to: String?
+    let created_at: String?
+    let updated_at: String?
+    let profiles: ProfileRow?
+    static func == (l: PostRow, r: PostRow) -> Bool { l.id == r.id }
+    func hash(into h: inout Hasher) { h.combine(id) }
+}
+
+struct PostLikeInsert: Codable {
+    let post_id: UUID
+    let user_id: UUID
+}
+
+struct LeaderboardEntry: Codable, Identifiable, Sendable, Hashable {
+    let id: UUID
+    let user_id: UUID
+    let period_year: Int
+    let period_month: Int
+    let total_km: Double
+    let rides_count: Int
+    let longest_ride_km: Double
+    let top_speed_kmh: Double
+    let streak_days: Int
+    let profiles: ProfileRow?
+    static func == (l: LeaderboardEntry, r: LeaderboardEntry) -> Bool { l.id == r.id }
+    func hash(into h: inout Hasher) { h.combine(id) }
+}
+
+struct CrewLeaderboardEntry: Codable, Identifiable, Sendable, Hashable {
+    var id: UUID { crew_id }
+    let crew_id: UUID
+    let crew_name: String
+    let total_km: Double
+}
+
+struct RefreshLeaderboardParams: Encodable {
+    let p_year: Int
+    let p_month: Int
+}
+
+struct DeviceTokenInsert: Codable {
+    let user_id: UUID
+    let apns_token: String
+    let environment: String
+    let platform: String
+}
+
+struct EnqueueNotificationParams: Encodable {
+    let p_user_id: UUID
+    let p_kind: String
+    let p_title: String
+    let p_body: String
+    let p_payload: [String: String]
 }

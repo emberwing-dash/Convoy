@@ -292,6 +292,16 @@ struct InviteFriendsView: View {
                         .cvText(12, color: CV.muted, inter: true)
                 }
                 Spacer()
+                Button {
+                    UIPasteboard.general.string = inviteLink
+                    showToast("Invite link copied")
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(CV.cream)
+                        .frame(width: 38, height: 38)
+                        .background(Color.white.opacity(0.08), in: Circle())
+                }.buttonStyle(.plain)
                 ShareLink(item: "Ride with me on Convoy: \(inviteLink)") {
                     Text("Share")
                         .cvText(14, .semibold, color: CV.ink, inter: true)

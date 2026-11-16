@@ -4,6 +4,18 @@ import MapKit
 
 struct FillUp: Hashable { var odo: Int; var litres: Double; var price: Double }
 enum CrewSegment { case crews, friends }
+
+enum CrewSegmentV2: String, CaseIterable {
+    case feed, leaderboard, crews
+    var title: String {
+        switch self {
+        case .feed: "Feed"
+        case .leaderboard: "Leaderboard"
+        case .crews: "Crews"
+        }
+    }
+}
+
 enum RidePhase { case starting, navigating }
 enum AppTab: Hashable { case ride, discover, crew }
 
@@ -57,6 +69,7 @@ enum SearchContext: Hashable { case friends, crew(UUID) }
 enum Route: Hashable {
     case profile, joinFound, myRides, garage
     case joinCode(String? = nil)
+    case joinCrew
     case document(String)
     case mileageIntro, logFillUp, mileageProgress, mileageResults
     case crewDetail(UUID), newCrew, crewInvite(UUID), inviteFriends
@@ -92,7 +105,6 @@ final class AppState {
         didSet { UserDefaults.standard.set(appearance.rawValue, forKey: "app.appearance") }
     }
     var hasCompletedPermissions: Bool = UserDefaults.standard.bool(forKey: "hasCompletedPermissionPrompt")
-    
     var activeRideMedia: [RideMediaItem] = []
 
     // Profile
@@ -157,6 +169,14 @@ final class AppState {
     var selectedCrew: UUID? = nil
     var selectedFriends: Set<String> = []
 
+    // Community v2 (Feed / Leaderboard / Crews)
+    var crewSegmentV2: CrewSegmentV2 = .feed
+    var followingIds: Set<UUID> = []
+
+    // Set by HomeView "See all" on the Recent section. MyRidesView reads
+    // it on appear and clears it. "upcoming" or "past".
+    var pendingMyRidesTab: String? = nil
+
     // Garage
     var fillUps: [FillUp] = []
 
@@ -186,6 +206,13 @@ final class AppState {
         if let storedActive = UserDefaults.standard.string(forKey: "activeRideID"),
            let activeUUID = UUID(uuidString: storedActive) {
             self.activeRideID = activeUUID
+            // Resume rally monitoring if the ride was still running when the
+            // app was killed (#13). Delayed to let the rest of init settle.
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard let self, self.activeRideID == activeUUID else { return }
+                RallyCoordinator.shared.start(app: self, rideId: activeUUID)
+            }
         }
 
         if let storedId = UserDefaults.standard.string(forKey: "backendUserId"),
@@ -242,7 +269,53 @@ final class AppState {
         return (routes, places)
     }
 
-    // MARK: - Session helper (now internal so RootView can call it)
+    // MARK: - Community v2 — follow / following
+
+    func loadFollowingIds() async {
+        guard let userId = await resolvedUserId() else { return }
+        if let ids = try? await SupabaseManager.shared.fetchFollowingIds(for: userId) {
+            await MainActor.run { self.followingIds = Set(ids) }
+        }
+    }
+
+    func isFollowing(_ riderId: UUID) -> Bool {
+        followingIds.contains(riderId)
+    }
+
+    func followRider(_ riderId: UUID) async {
+        guard let me = await resolvedUserId(), riderId != me else { return }
+        do {
+            try await SupabaseManager.shared.followUser(followerId: me, followingId: riderId)
+            await MainActor.run { self.followingIds.insert(riderId) }
+            // Push for the followed rider (fire-and-forget)
+            await SupabaseManager.shared.enqueueNotification(
+                userId: riderId,
+                kind: ConvoyNotificationKind.newFollower(
+                    byName: displayName,
+                    handle: handle.replacingOccurrences(of: "@", with: "")
+                ).kind,
+                title: ConvoyNotificationKind.newFollower(
+                    byName: displayName,
+                    handle: handle.replacingOccurrences(of: "@", with: "")
+                ).title,
+                body: ConvoyNotificationKind.newFollower(
+                    byName: displayName,
+                    handle: handle.replacingOccurrences(of: "@", with: "")
+                ).body,
+                payload: ["follower_id": me.uuidString, "deep_link": "convoy://friend"]
+            )
+        } catch { print("⚠️ follow failed: \(error)") }
+    }
+
+    func unfollowRider(_ riderId: UUID) async {
+        guard let me = await resolvedUserId() else { return }
+        do {
+            try await SupabaseManager.shared.unfollowUser(followerId: me, followingId: riderId)
+            await MainActor.run { self.followingIds.remove(riderId) }
+        } catch { print("⚠️ unfollow failed: \(error)") }
+    }
+
+    // MARK: - Session helper
     func resolvedUserId() async -> UUID? {
         if let id = backendUserId { return id }
         if let restored = await SupabaseManager.shared.getOrRestoreUserId() {
@@ -253,7 +326,6 @@ final class AppState {
     }
 
     // MARK: - Refresh coordinator
-    /// Force-refresh all core data. Call on foreground and after pop-to-root.
     func refreshEverything(force: Bool = true) async {
         async let rides: () = refreshRides(force: force)
         async let notifs: () = refreshNotifications(force: force)
@@ -276,6 +348,10 @@ final class AppState {
                 self.rides = (fetched + localOnly).sorted { $0.departs < $1.departs }
                 self.ridesLoadedAt = Date()
                 for r in fetched { StorageService.shared.saveRide(r) }
+            }
+            // Schedule a local reminder 30 min before each upcoming ride.
+            for ride in fetched where ride.departs > Date() {
+                await NotificationService.shared.scheduleRideReminder(ride: ride)
             }
         } catch {
             print("[Rides] refresh failed: \(error)")
@@ -415,6 +491,38 @@ final class AppState {
             case .crewInvite:    await loadCrews(force: true)
             case .rideJoin:      await refreshRides(force: true)
             }
+
+            // Push back to the original requester (fire-and-forget).
+            let requesterName = displayName
+            let requesterHandle = handle.replacingOccurrences(of: "@", with: "")
+            switch notif.type {
+            case .friendRequest:
+                await SupabaseManager.shared.enqueueNotification(
+                    userId: notif.requestId, // requestId == the sender's profile id in this flow
+                    kind: "friend_request_accepted",
+                    title: "Request accepted",
+                    body: "\(requesterName) accepted your friend request.",
+                    payload: ["deep_link": "convoy://friend"]
+                )
+            case .crewInvite:
+                if let crewId = notif.crewId {
+                    await SupabaseManager.shared.enqueueNotification(
+                        userId: notif.requestId,
+                        kind: "crew_invite_accepted",
+                        title: "Crew joined",
+                        body: "\(requesterName) joined your crew.",
+                        payload: ["crew_id": crewId.uuidString, "deep_link": "convoy://crew"]
+                    )
+                }
+            case .rideJoin:
+                await SupabaseManager.shared.enqueueNotification(
+                    userId: notif.requestId,
+                    kind: "ride_join_approved",
+                    title: "You're in!",
+                    body: "The organiser approved your ride request.",
+                    payload: ["deep_link": "convoy://ride"]
+                )
+            }
         } catch { print("Error accepting: \(error)") }
     }
 
@@ -550,6 +658,8 @@ final class AppState {
     func signOut() async {
         try? await SupabaseManager.shared.signOut()
 
+        NotificationService.shared.clearAll()
+
         backendUserId = nil
         friends = []
         crews = []
@@ -570,6 +680,7 @@ final class AppState {
         draft = PlanDraft()
         selectedCrew = nil
         selectedFriends = []
+        followingIds = []
         lastCompletedRideID = nil
         lastCreatedRideID = nil
         lastJoinedRideID = nil
@@ -611,6 +722,9 @@ final class AppState {
         rideDay = false
         selectedCrew = nil
         selectedFriends = []
+        // Land the organiser directly on the summary screen (#6). Pushing
+        // planDetails underneath means the "Edit route" button on the
+        // summary can pop back to it instead of the ride list.
         push(.planDetails)
         push(.planReview)
     }
@@ -703,9 +817,16 @@ final class AppState {
                 try? await SupabaseManager.shared.updateRideTag(id: id, tag: "Ongoing", userId: userId)
             }
         }
+        // Kick off rally monitoring (#13)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            RallyCoordinator.shared.start(app: self, rideId: id)
+        }
     }
 
     func completeRide(id: UUID) {
+        NotificationService.shared.cancelRideReminder(rideId: id)
+        Task { @MainActor in RallyCoordinator.shared.stop() }
         if activeRideID == id {
             activeRideID = nil
             UserDefaults.standard.removeObject(forKey: "activeRideID")
