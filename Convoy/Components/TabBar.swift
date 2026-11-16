@@ -1,15 +1,14 @@
 // TabBar.swift
 import SwiftUI
 
-/// Bottom bar: 3-tab liquid glass navigation bar featuring a sliding refractive glass dome lens,
-/// paired with the Ellis assistant mascot button.
+/// Bottom bar: iOS default Liquid Glass pill with 3 navigation tabs, paired with the Ellis assistant mascot.
 struct ConvoyTabBar: View {
     @Binding var selection: AppTab
     @Environment(AppState.self) private var app
     @Namespace private var lensNamespace
     @State private var animatedTab: AppTab = .ride
 
-    /// Unified height for the tab bar pill
+    /// Unified height for the tab bar pill and the Ellis mascot container
     static let height: CGFloat = 54
     /// Space under the bar's bottom edge (above the home indicator)
     static let bottomGap: CGFloat = 4
@@ -20,7 +19,6 @@ struct ConvoyTabBar: View {
             chatbotButton
         }
         .padding(.horizontal, 16)
-        .padding(.top, 14) // Extra headroom for the protruding liquid glass dome
         .padding(.bottom, Self.bottomGap)
         .frame(maxWidth: .infinity, alignment: .center)
         .onAppear {
@@ -28,7 +26,7 @@ struct ConvoyTabBar: View {
         }
         .onChange(of: selection) { _, newTab in
             if animatedTab != newTab {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.74, blendDuration: 0.08)) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.76, blendDuration: 0.08)) {
                     animatedTab = newTab
                 }
             }
@@ -47,29 +45,7 @@ struct ConvoyTabBar: View {
         .frame(maxWidth: 296)
         .frame(height: Self.height)
         .background(
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    // Dark ambient glass tint
-                    Capsule().fill(Color(hex: 0x121216).opacity(0.68))
-                }
-                .overlay {
-                    // Specular rim light along the capsule border
-                    Capsule().strokeBorder(
-                        LinearGradient(
-                            stops: [
-                                .init(color: Color.white.opacity(0.38), location: 0.0),
-                                .init(color: Color.white.opacity(0.12), location: 0.35),
-                                .init(color: Color.white.opacity(0.04), location: 1.0)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 0.85
-                    )
-                }
-                .shadow(color: Color.black.opacity(0.40), radius: 20, x: 0, y: 10)
-                .shadow(color: Color.black.opacity(0.18), radius: 6, x: 0, y: 2)
+            LiquidGlassContainer(shape: Capsule())
         )
     }
 
@@ -86,33 +62,32 @@ struct ConvoyTabBar: View {
             withTransaction(tx) {
                 selection = tab
             }
-            // Fluid spring physics for the sliding liquid glass dome lens
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.74, blendDuration: 0.08)) {
+            // Smooth fluid animation for the liquid glass lens
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.76, blendDuration: 0.08)) {
                 animatedTab = tab
             }
         } label: {
             ZStack {
-                // Sliding Liquid Glass Dome Lens over active tab
                 if isLensHere {
-                    LiquidGlassDomeLens()
-                        .matchedGeometryEffect(id: "liquidGlassDome", in: lensNamespace)
+                    LiquidGlassLens()
+                        .matchedGeometryEffect(id: "liquidGlassLens", in: lensNamespace)
                 }
 
                 VStack(spacing: 2) {
                     Image(systemName: isSelected ? symbol + ".fill" : symbol)
-                        .font(.system(size: 19, weight: isSelected ? .bold : .regular))
-                        .scaleEffect(isSelected ? 1.08 : 0.95)
+                        .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
+                        .scaleEffect(isSelected ? 1.05 : 0.96)
                         .frame(height: 22)
                     Text(title)
                         .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
                         .lineLimit(1)
                 }
-                .foregroundStyle(isSelected ? CV.accent : Color.white.opacity(0.65))
+                .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.55))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
             }
             .frame(maxWidth: .infinity)
-            .frame(height: Self.height - 8)
+            .frame(height: 46)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
@@ -127,73 +102,101 @@ struct ConvoyTabBar: View {
     }
 }
 
-// MARK: - Liquid Glass Dome Lens (Protruding & Prismatic)
+// MARK: - iOS Default Liquid Glass Styling
 
-/// Convex liquid glass dome lens that sits over the active tab, protruding above the bar
-/// with an iridescent prismatic chromatic reflection along its top arc and caustic glass refraction.
-struct LiquidGlassDomeLens: View {
+/// Reusable Apple Liquid Glass container: ultra-thin blur material, subtle dynamic tint,
+/// specular rim light gradient, and natural diffused drop shadow.
+struct LiquidGlassContainer<S: InsettableShape>: View {
+    let shape: S
+
     var body: some View {
-        ZStack(alignment: .top) {
-            // Glass bubble body with ultra-thin blur material
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    // Refractive glass depth gradient
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: Color.white.opacity(0.24), location: 0.0),
-                                    .init(color: Color.white.opacity(0.08), location: 0.28),
-                                    .init(color: Color.clear, location: 0.65),
-                                    .init(color: Color.white.opacity(0.06), location: 1.0)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                }
-                .overlay {
-                    // Prismatic chromatic dispersion rim (rainbow glass reflection along the top arc)
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: Color.white.opacity(0.95), location: 0.0),
-                                    .init(color: Color(hex: 0x6FE3FF).opacity(0.90), location: 0.12),
-                                    .init(color: Color(hex: 0xA78BFA).opacity(0.70), location: 0.28),
-                                    .init(color: Color.white.opacity(0.30), location: 0.60),
-                                    .init(color: Color.white.opacity(0.10), location: 1.0)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: 1.0
-                        )
-                }
-                // Ambient caustic glow and glass drop shadow
-                .shadow(color: Color.black.opacity(0.40), radius: 12, x: 0, y: 7)
-                .shadow(color: CV.accent.opacity(0.16), radius: 8, x: 0, y: 3)
-
-            // Specular glint on the top dome crest
-            Ellipse()
-                .fill(
+        shape
+            .fill(.ultraThinMaterial)
+            .overlay {
+                // Subtle ambient glass tint
+                shape.fill(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(0.85),
-                            Color(hex: 0x6FE3FF).opacity(0.5),
-                            Color.clear
+                            Color.white.opacity(0.12),
+                            Color.white.opacity(0.02),
+                            Color.black.opacity(0.12)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
-                .frame(width: 42, height: 5)
-                .padding(.top, 1.5)
+            }
+            .overlay {
+                // Top crescent reflection
+                shape.fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.08),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                )
                 .allowsHitTesting(false)
-        }
-        .frame(height: 66)
-        .offset(y: -7) // Protrudes gracefully above the 54pt tab bar
+            }
+            .overlay {
+                // Specular rim light (Apple glass highlight catching the top curve)
+                shape.strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.48), location: 0.0),
+                            .init(color: Color.white.opacity(0.16), location: 0.35),
+                            .init(color: Color.white.opacity(0.04), location: 0.70),
+                            .init(color: Color.white.opacity(0.12), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.85
+                )
+            }
+            .shadow(color: Color.black.opacity(0.35), radius: 20, x: 0, y: 10)
+            .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 2)
+            .environment(\.colorScheme, .dark)
+    }
+}
+
+/// Liquid Glass sliding lens for the active tab: translucent glass with inner refraction and specular border.
+struct LiquidGlassLens: View {
+    var body: some View {
+        Capsule()
+            .fill(.thinMaterial)
+            .overlay {
+                // Inner liquid glass refraction glow
+                Capsule().fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.24),
+                            Color.white.opacity(0.08)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            }
+            .overlay {
+                // Specular glass highlight on lens edge
+                Capsule().strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.55), location: 0.0),
+                            .init(color: Color.white.opacity(0.18), location: 0.5),
+                            .init(color: Color.white.opacity(0.10), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.8
+                )
+            }
+            .shadow(color: Color.white.opacity(0.20), radius: 6, x: 0, y: 1)
+            .shadow(color: Color.black.opacity(0.22), radius: 4, x: 0, y: 2)
     }
 }
 
