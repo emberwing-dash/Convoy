@@ -34,7 +34,7 @@ struct EmptyStateCard: View {
             if let actionTitle, let action {
                 Button(action: action) {
                     Text(actionTitle)
-                        .cvText(14, .bold, color: .white, inter: true)
+                        .cvText(14, .bold, color: CV.onAccent, inter: true)
                         .padding(.horizontal, 20).frame(height: 42)
                         .background(CV.accent, in: Capsule())
                 }
@@ -96,10 +96,10 @@ struct FollowButton: View {
             }
         } label: {
             ZStack {
-                if busy { ProgressView().tint(on ? CV.accent : .white) }
+                if busy { ProgressView().tint(on ? CV.text : CV.onAccent) }
                 else {
                     Text(on ? "Following" : "Follow")
-                        .cvText(compact ? 14 : 15, .bold, color: on ? CV.text : .white, inter: true)
+                        .cvText(compact ? 14 : 15, .bold, color: on ? CV.text : CV.onAccent, inter: true)
                 }
             }
             .frame(maxWidth: .infinity).frame(height: compact ? 36 : 40)

@@ -13,9 +13,48 @@ enum NotificationType: String, Codable, Hashable {
     case friendRequest, crewInvite, rideJoin
     // Informational entries from the server inbox (no accept / decline).
     case rideJoinAccepted, rideJoinDeclined, newFollower, postLike, postComment
+    case friendAccepted, crewJoined, crewLeft
+    case rideInvite, rideUpdated, rideStarted, rideCompleted, rideCancelled, sos
+    case newPost, achievement
 
-    var isRideRelated: Bool { self == .rideJoin || self == .rideJoinAccepted || self == .rideJoinDeclined }
-    var isSocial: Bool { self == .newFollower || self == .postLike || self == .postComment }
+    var isRideRelated: Bool {
+        [.rideJoin, .rideJoinAccepted, .rideJoinDeclined, .rideInvite, .rideUpdated,
+         .rideStarted, .rideCompleted, .rideCancelled, .sos].contains(self)
+    }
+    var isSocial: Bool { [.newFollower, .postLike, .postComment, .friendAccepted, .newPost, .achievement].contains(self) }
+    var isCrew: Bool { [.crewInvite, .crewJoined, .crewLeft].contains(self) }
+
+    init(inbox kind: InboxKind) {
+        switch kind {
+        case .rideJoinAccepted: self = .rideJoinAccepted
+        case .rideJoinDeclined: self = .rideJoinDeclined
+        case .newFollower: self = .newFollower
+        case .postLike: self = .postLike
+        case .postComment: self = .postComment
+        case .friendAccepted: self = .friendAccepted
+        case .crewJoined: self = .crewJoined
+        case .crewLeft: self = .crewLeft
+        case .rideInvite: self = .rideInvite
+        case .rideUpdated: self = .rideUpdated
+        case .rideStarted: self = .rideStarted
+        case .rideCompleted: self = .rideCompleted
+        case .rideCancelled: self = .rideCancelled
+        case .sos: self = .sos
+        case .newPost: self = .newPost
+        case .achievement: self = .achievement
+        }
+    }
+
+    /// Card title when there's no rider behind the notification (e.g. achievements).
+    var fallbackTitle: String {
+        switch self {
+        case .achievement: return "Achievement unlocked"
+        case .rideCancelled: return "Ride cancelled"
+        case .rideUpdated: return "Ride updated"
+        case .sos: return "SOS alert"
+        default: return "Convoy"
+        }
+    }
 }
 enum NotificationStatus: String, Codable, Hashable { case pending, accepted, declined, info }
 
@@ -91,6 +130,8 @@ enum SearchContext: Hashable { case friends, crew(UUID) }
 enum Route: Hashable {
     case profile, joinFound, myRides, garage
     case joinCode(String? = nil)
+    case joinCrew(String? = nil)
+    case notificationSettings
     case document(String)
     case mileageIntro, logFillUp, mileageProgress, mileageResults
     case crewDetail(UUID), newCrew, crewInvite(UUID), inviteFriends
@@ -172,11 +213,16 @@ final class AppState {
 
     // Rides
     var rides: [Ride] = []
+    /// The ride currently being navigated (persisted so live location + rally alerts resume after a relaunch).
+    var activeRideID: UUID? = nil
     var completedRides: [PersistedRideEntity] = []
     var lastCompletedRideID: UUID? = nil
     var lastCreatedRideID: UUID? = nil
     var lastJoinedRideID: UUID? = nil
     var newCrewID: UUID? = nil
+    /// Everyone in the crew picked on "Who's riding?", including people just invited to the crew
+    /// (still pending). Loaded by PlanWhoView so they get the ride invite too.
+    var selectedCrewRoster: [CrewMember] = []
     var ridePhase: RidePhase = .starting
     var rideDay = false
     var draft = PlanDraft()
@@ -210,19 +256,31 @@ final class AppState {
     var lastRideLog: RideLog? = nil
 
     // MARK: - Computed
-    var upcomingRide: Ride? { rides.first }
+    var activeRide: Ride? { activeRideID.flatMap { id in rides.first { $0.id == id } } }
+    var upcomingRide: Ride? { activeRide ?? rides.first }
     var sortedRides: [Ride] {
         // Tie-break on id so rides at the same time keep a stable order between refreshes.
         rides.sorted { $0.departs != $1.departs ? $0.departs < $1.departs : $0.id.uuidString < $1.id.uuidString }
     }
     var hasUnreadNotifications: Bool { unreadNotificationCount > 0 }
 
+    /// A notification the rider tapped; `MainShell` opens the right screen once the app is ready.
+    var pendingNotificationTap: NotificationTap? = nil
+    /// Handle to search for when Add Friend is opened from a convoy://friend link.
+    var pendingUserSearch: String? = nil
+
     init() {
         if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
             self.phase = .main
             self.displayName = profile.displayName.isEmpty ? "Rider" : profile.displayName
-            self.handle = profile.handle.isEmpty ? "rider" : profile.handle
+            // Handles are stored without "@"; the UI adds it. Strip any legacy prefix.
+            let stored = profile.handle.replacingOccurrences(of: "@", with: "")
+            self.handle = stored.isEmpty ? "rider" : stored
             self.avatarImageData = profile.avatarImageData
+        }
+        if let storedActive = UserDefaults.standard.string(forKey: "activeRideID"),
+           let activeUUID = UUID(uuidString: storedActive) {
+            self.activeRideID = activeUUID
         }
         // Production / normal launch with no stored profile: remain in `.onboarding`
         // (the default) so the real onboarding flow captures the authenticated identity.
@@ -406,8 +464,15 @@ final class AppState {
     /// Connects the live notification inbox and uploads any rides recorded while offline.
     func startSocial() async {
         guard let userId = await resolvedUserId() else { return }
+        await syncHandleWithServer(userId: userId)
         social.onNotificationsChanged = { [weak self] in self?.rebuildNotifications() }
+        // A live notification (friend request, crew invite, join request…) refreshes the whole
+        // list, including the request types the inbox RPC doesn't return.
+        social.onLiveEvent = { [weak self] in await self?.refreshNotifications(force: true) }
         await social.start(userId: userId)
+        await PushNotificationManager.shared.requestAuthorizationAndRegister()
+        await PushNotificationManager.shared.uploadTokenIfPossible()
+        await NotificationPrefsStore.shared.load(userId: userId)
         await social.uploadPendingRideLogs()
     }
 
@@ -425,6 +490,10 @@ final class AppState {
                 self.rides = (fetched + localOnly).sorted { $0.departs < $1.departs }
                 self.ridesLoadedAt = Date()
                 for r in fetched { StorageService.shared.saveRide(r) }
+            }
+            // "Ride starts in 30 min" reminders (replaced when a ride's time changes).
+            for ride in fetched where ride.departs > Date() && !ride.isCompleted {
+                await NotificationService.shared.scheduleRideReminder(ride: ride)
             }
         } catch {
             print("[Rides] refresh failed: \(error)")
@@ -500,17 +569,9 @@ final class AppState {
             fresh[fresh.count - 1].actorId = req.rider.id
         }
         for item in social.inbox {
-            let type: NotificationType = {
-                switch item.kind {
-                case .rideJoinAccepted: return .rideJoinAccepted
-                case .rideJoinDeclined: return .rideJoinDeclined
-                case .newFollower: return .newFollower
-                case .postLike: return .postLike
-                case .postComment: return .postComment
-                }
-            }()
+            let type = NotificationType(inbox: item.kind)
             fresh.append(AppNotification(
-                id: item.id, type: type, title: item.kind.rawValue, subtitle: item.body,
+                id: item.id, type: type, title: type.fallbackTitle, subtitle: item.body,
                 avatarData: item.actor?.avatarData, date: item.createdAt,
                 requestId: item.id, crewId: nil, rideId: item.rideId,
                 actorName: item.actor?.name, actorHandle: item.actor?.username,
@@ -528,6 +589,7 @@ final class AppState {
         }
         notifications = (fresh + recentlyHandled).sorted { $0.date > $1.date }
         StorageService.shared.saveNotifications(notifications)
+        NotificationService.shared.setBadge(unreadNotificationCount)
     }
 
     var unreadNotificationCount: Int {
@@ -639,7 +701,7 @@ final class AppState {
             await loadCrews(force: true)
         case .rideJoin:
             await acceptRideJoinRequest(requestId: notif.requestId)
-        case .rideJoinAccepted, .rideJoinDeclined, .newFollower, .postLike, .postComment:
+        default:
             break
         }
     }
@@ -668,7 +730,7 @@ final class AppState {
             }
         case .rideJoin:
             await declineRideJoinRequest(requestId: notif.requestId)
-        case .rideJoinAccepted, .rideJoinDeclined, .newFollower, .postLike, .postComment:
+        default:
             break
         }
     }
@@ -774,13 +836,20 @@ final class AppState {
 
     func completeOnboarding(name: String, handle: String, imageData: Data? = nil) {
         self.displayName = name.isEmpty ? "Rider" : name
-        self.handle = handle.isEmpty ? "rider" : handle
+        let clean = handle.replacingOccurrences(of: "@", with: "")
+        self.handle = clean.isEmpty ? "rider" : clean
         self.avatarImageData = imageData
         self.phase = .main
-        StorageService.shared.saveOnboardingCompleted(name: displayName, handle: handle, imageData: imageData)
+        StorageService.shared.saveOnboardingCompleted(name: displayName, handle: self.handle, imageData: imageData)
     }
 
     func signOut() async {
+        RallyCoordinator.shared.stop()
+        await RideLiveLocationManager.shared.stopSharing()
+        activeRideID = nil
+        UserDefaults.standard.removeObject(forKey: "activeRideID")
+        await PushNotificationManager.shared.unregisterCurrentDevice()
+        NotificationService.shared.clearAll()
         await social.reset()
         RideRecorder.shared.clearAll()
         RideCoverStore.shared.clearAll()
@@ -901,7 +970,8 @@ final class AppState {
 
         // If a crew was selected in PlanWhoView, invite its members
         if let crewId = selectedCrew, let crew = crews.first(where: { $0.id == crewId }) {
-            for member in crew.members {
+            let roster = selectedCrewRoster.isEmpty ? crew.members : selectedCrewRoster
+            for member in roster {
                 // Deduplicate strictly: skip organiser (by ID or name fallback) and avoid duplicate additions by UUID
                 guard member.id != organiserId && member.name != displayName else { continue }
                 guard !allRiders.contains(where: { $0.id == member.id }) else { continue }
@@ -1130,6 +1200,90 @@ final class AppState {
         return true
     }
 
+    /// Marks a ride as the one being navigated and starts pack monitoring (rider separation alerts).
+    /// Live location sharing itself is started by `RideNavView`.
+    func startRide(id: UUID) {
+        activeRideID = id
+        UserDefaults.standard.set(id.uuidString, forKey: "activeRideID")
+        StorageService.shared.markRideActive(id: id)
+        if let idx = rides.firstIndex(where: { $0.id == id }) { rides[idx].tag = "Ongoing" }
+        RallyCoordinator.shared.start(app: self, rideId: id)
+        // Organiser starting the ride tells everyone on it (the server ignores this for other riders).
+        if let ride = rides.first(where: { $0.id == id }), ride.organiserId == backendUserId || ride.organiser == "you" {
+            Task { try? await SupabaseManager.shared.markRideStarted(rideId: id) }
+        }
+    }
+
+    /// The server may have given this account a different username than the one typed at
+    /// onboarding (e.g. "vignesh547_5007" when "vignesh547" was taken). Friends find you by the
+    /// server username, so show and share that one — otherwise requests go to someone else.
+    func syncHandleWithServer(userId: UUID) async {
+        guard let profile = try? await SupabaseManager.shared.fetchProfile(id: userId) else { return }
+        let server = profile.username.replacingOccurrences(of: "@", with: "")
+        guard !server.isEmpty, server != handle else { return }
+        handle = server
+        if phase == .main {
+            StorageService.shared.saveOnboardingCompleted(name: displayName, handle: server, imageData: nil)
+        }
+    }
+
+    // MARK: - Notification taps
+
+    /// Opens the screen a tapped notification points to.
+    func handlePendingNotificationTap() async {
+        guard phase == .main, let tap = pendingNotificationTap else { return }
+        pendingNotificationTap = nil
+        if tap.kind.hasPrefix("rally") {
+            if activeRide != nil, path.last != .rideNav { push(.rideNav) }
+            return
+        }
+        if let rideId = tap.rideId {
+            await refreshRides(force: true)
+            tab = .ride
+            popToRoot()
+            if rides.contains(where: { $0.id == rideId }) { push(.rideDetails(rideId)) } else { push(.notifications) }
+            return
+        }
+        if let crewId = tap.crewId {
+            await loadCrews(force: true)
+            tab = .crew
+            popToRoot()
+            if crews.contains(where: { $0.id == crewId }) { push(.crewDetail(crewId)) } else { push(.notifications) }
+            return
+        }
+        if let link = tap.link, let url = URL(string: link), url.host != "notifications" {
+            openNotificationLink(url)
+            return
+        }
+        popToRoot()
+        push(.notifications)
+        await refreshNotifications(force: true)
+    }
+
+    /// convoy://ride-details/<id>, convoy://crew-detail/<id>, convoy://notifications
+    func openNotificationLink(_ url: URL) {
+        let id = url.pathComponents.filter { $0 != "/" }.first.flatMap(UUID.init(uuidString:))
+        switch url.host?.lowercased() {
+        case "ride-details": pendingNotificationTap = NotificationTap(kind: "link", rideId: id)
+        case "crew-detail": pendingNotificationTap = NotificationTap(kind: "link", crewId: id)
+        default: pendingNotificationTap = NotificationTap(kind: "link")
+        }
+        if id == nil { popToRoot(); push(.notifications); pendingNotificationTap = nil }
+    }
+
+    /// Stops live location, pack monitoring and the ride reminder for a ride that ended or was left.
+    func endActiveRide(id: UUID) {
+        NotificationService.shared.cancelRideReminder(rideId: id)
+        if activeRideID == id || activeRideID == nil {
+            RallyCoordinator.shared.stop()
+            Task { await RideLiveLocationManager.shared.stopSharing() }
+        }
+        if activeRideID == id {
+            activeRideID = nil
+            UserDefaults.standard.removeObject(forKey: "activeRideID")
+        }
+    }
+
     @discardableResult
     func completeRide(id: UUID, isGroupClosure: Bool = false) async -> Bool {
         if isGroupClosure {
@@ -1153,6 +1307,7 @@ final class AppState {
             lastRideLog = RideRecorder.shared.log(forRide: id)
         }
         activeRideMedia.removeAll()
+        endActiveRide(id: id)
         StorageService.shared.markRideCompleted(id: id)
         completedRides = StorageService.shared.loadCompletedRides()
         lastCompletedRideID = id
@@ -1276,7 +1431,7 @@ final class AppState {
     func startNewPlan(keepCrew: Bool = false) {
         draft = PlanDraft()
         editingRideID = nil
-        if !keepCrew { selectedCrew = nil; selectedFriends = [] }
+        if !keepCrew { selectedCrew = nil; selectedFriends = []; selectedCrewRoster = [] }
         planner.reset()
     }
 

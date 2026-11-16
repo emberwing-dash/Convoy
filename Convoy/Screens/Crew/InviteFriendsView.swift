@@ -283,26 +283,7 @@ struct InviteFriendsView: View {
             Text("OR SHARE INVITE LINK")
                 .cvText(12, .semibold, color: CV.text.opacity(0.5), tracking: 0.6, inter: true)
                 .padding(.leading, 4)
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(inviteLink)
-                        .cvText(18, .bold, color: CV.text, inter: true)
-                        .lineLimit(1)
-                    Text("Share this link with someone who isn't on Convoy yet.")
-                        .cvText(12, color: CV.muted, inter: true)
-                }
-                Spacer()
-                ShareLink(item: "Ride with me on Convoy: \(inviteLink)") {
-                    Text("Share")
-                        .cvText(14, .semibold, color: CV.onAccent, inter: true)
-                        .padding(.horizontal, 20).frame(height: 38)
-                        .background(CV.accent, in: Capsule())
-                }
-            }
-            .padding(16)
-            .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+            CopyLinkRow(value: inviteLink, shareText: "Ride with me on Convoy: \(inviteLink)")
         }
     }
 

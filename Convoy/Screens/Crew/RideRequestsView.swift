@@ -152,7 +152,7 @@ struct RideRequestsView: View {
 
     private func actionButton(_ t: String, primary: Bool, busy: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(t).cvText(15, .bold, color: primary ? .white : CV.text, inter: true)
+            Text(t).cvText(15, .bold, color: primary ? CV.onAccent : CV.text, inter: true)
                 .frame(maxWidth: .infinity).frame(height: 44)
                 .background(primary ? CV.accent : Color.white.opacity(0.08), in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.white.opacity(primary ? 0 : 0.14), lineWidth: 1))
@@ -249,7 +249,7 @@ struct ReviewRequestSheet: View {
                             .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
                     }.buttonStyle(.plain)
                     Button { onDecide(true) } label: {
-                        Text("Accept rider").cvText(16, .bold, color: .white, inter: true)
+                        Text("Accept rider").cvText(16, .bold, color: CV.onAccent, inter: true)
                             .frame(maxWidth: .infinity).frame(height: 52).background(CV.accent, in: Capsule())
                             .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
                     }.buttonStyle(.plain)

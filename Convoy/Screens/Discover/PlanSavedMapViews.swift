@@ -313,7 +313,7 @@ struct ExploreMapView: View {
         ZStack(alignment: .top) {
             Map(position: $position, selection: $selection) {
                 ForEach(shownRoutes) { r in
-                    MapPolyline(coordinates: r.geometry.map(\.cl)).stroke(CV.accent, lineWidth: 3)
+                    MapPolyline(coordinates: r.geometry.map(\.cl)).stroke(CV.route, lineWidth: 3)
                 }
                 ForEach(shownPlaces) { p in
                     Annotation(p.name, coordinate: p.coord.cl) {

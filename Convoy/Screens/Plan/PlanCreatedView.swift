@@ -1,6 +1,50 @@
 // PlanCreatedView.swift
 import SwiftUI
 
+/// White disc that pops in, then a dark checkmark that draws itself, with a ring that ripples out.
+struct SuccessCheckBadge: View {
+    @State private var disc = false
+    @State private var trim: CGFloat = 0
+    @State private var ripple = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(CV.accent.opacity(ripple ? 0 : 0.5), lineWidth: 2)
+                .scaleEffect(ripple ? 1.6 : 1)
+            Circle()
+                .fill(LinearGradient(colors: [.white, Color(hex: 0xE4E4E4)], startPoint: .top, endPoint: .bottom))
+                .shadow(color: .white.opacity(0.25), radius: 24)
+                .scaleEffect(disc ? 1 : 0.4)
+                .opacity(disc ? 1 : 0)
+            CheckShape()
+                .trim(from: 0, to: trim)
+                .stroke(CV.onAccent, style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
+                .frame(width: 56, height: 44)
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Done")
+        .task {
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.62)) { disc = true }
+            try? await Task.sleep(for: .milliseconds(220))
+            withAnimation(.easeOut(duration: 0.38)) { trim = 1 }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            withAnimation(.easeOut(duration: 1.0)) { ripple = true }
+        }
+    }
+}
+
+/// A checkmark path drawn left-to-right so `trim` animates it like a pen stroke.
+private struct CheckShape: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX, y: r.midY + r.height * 0.05))
+        p.addLine(to: CGPoint(x: r.minX + r.width * 0.36, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+        return p
+    }
+}
+
 struct PlanCreatedView: View {
     @Environment(AppState.self) private var app
     @State private var progress: CGFloat = 0.62
@@ -41,14 +85,8 @@ struct PlanCreatedView: View {
                 .frame(width: 300, height: 300).at(46, 166)
             Circle().strokeBorder(CV.accent.opacity(0.25), lineWidth: 1).frame(width: 260, height: 260).at(66.5, 186)
             Circle().strokeBorder(CV.accent.opacity(0.35), lineWidth: 1).frame(width: 196, height: 196).at(98.5, 218)
-            Circle()
-                .fill(LinearGradient(colors: [CV.accentLight, CV.accent],
-                                     startPoint: .top, endPoint: .bottom))
+            SuccessCheckBadge()
                 .frame(width: 128, height: 128)
-                .overlay(Image(systemName: "checkmark")
-                    .font(.system(size: 56, weight: .semibold))
-                    .foregroundStyle(.white))
-                .shadow(color: CV.accent.opacity(0.35), radius: 24)
                 .at(132.5, 252)
 
             ForEach(chips) { c in

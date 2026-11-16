@@ -14,7 +14,7 @@ struct BikeTint: Equatable {
     /// Human name when we know it ("Racing Red"), else nil.
     let name: String?
 
-    static let fallback = BikeTint(color: CV.accent, deep: Color(hex: 0x0B2A55), onColor: .white, name: nil)
+    static let fallback = BikeTint(color: .white, deep: Color(hex: 0x1C1C1C), onColor: CV.onAccent, name: nil)
 
     init(color: Color, deep: Color, onColor: Color, name: String?) {
         self.color = color; self.deep = deep; self.onColor = onColor; self.name = name

@@ -52,6 +52,11 @@ struct RootView: View {
 
         let host = url.host?.lowercased() ?? ""
         let parts = url.pathComponents.filter { $0 != "/" }
+        // Links carried by push notifications (some have no path).
+        if ["ride-details", "crew-detail", "notifications"].contains(host) {
+            app.openNotificationLink(url)
+            return
+        }
         guard let payload = parts.first, !payload.isEmpty else { return }
 
         switch host {
@@ -63,19 +68,18 @@ struct RootView: View {
             }
 
         case "friend":
+            // convoy://friend/<handle> → open Add Friend with the handle already searched.
             app.tab = .crew
             app.crewSegment = .friends
             app.popToRoot()
+            app.pendingUserSearch = payload.replacingOccurrences(of: "@", with: "")
             app.push(.userSearch(.friends))
 
         case "crew":
-            guard let userId = await app.resolvedUserId() else { break }
-            if let crew = try? await SupabaseManager.shared.joinCrewByCode(payload, userId: userId) {
-                app.tab = .crew
-                app.crewSegment = .crews
-                app.popToRoot()
-                app.push(.crewDetail(crew.id))
-            }
+            // Same as Join Ride: show the code, the rider confirms with one tap.
+            app.tab = .crew
+            app.popToRoot()
+            app.push(.joinCrew(payload))
 
         case "ride":
             switch await app.joinRideByCode(payload) {

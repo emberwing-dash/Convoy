@@ -160,6 +160,17 @@ enum InboxKind: String, Sendable {
     case newFollower = "new_follower"
     case postLike = "post_like"
     case postComment = "post_comment"
+    case friendAccepted = "friend_accepted"
+    case crewJoined = "crew_joined"
+    case crewLeft = "crew_member_left"
+    case rideInvite = "ride_invite"
+    case rideUpdated = "ride_updated"
+    case rideStarted = "ride_started"
+    case rideCompleted = "ride_completed"
+    case rideCancelled = "ride_cancelled"
+    case sos = "sos"
+    case newPost = "new_post"
+    case achievement = "achievement"
 }
 
 struct InboxItem: Identifiable, Hashable, Sendable {

@@ -22,7 +22,7 @@ struct NotificationView: View {
         case .all: return true
         case .rides: return n.type.isRideRelated
         case .people: return n.type == .friendRequest || n.type.isSocial
-        case .crews: return n.type == .crewInvite
+        case .crews: return n.type.isCrew
         }
     }
 
@@ -95,6 +95,17 @@ struct NotificationView: View {
             }
 
             Spacer()
+
+            Button { app.push(.notificationSettings) } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(CV.text)
+                    .frame(width: 36, height: 36)
+                    .background(CV.surface, in: Circle())
+                    .overlay(Circle().strokeBorder(CV.stroke, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Notification settings")
 
             if pendingCount > 0 {
                 HStack(spacing: 6) {
@@ -356,8 +367,18 @@ struct NotificationView: View {
                     Task { try? await app.social.setFollowing(id, !following) }
                 }
             }
-        case .postLike, .postComment:
+        case .postLike, .postComment, .newPost:
             pillButton("View post", filled: false) { app.popToRoot(); app.tab = .crew }
+        case .rideInvite, .rideUpdated, .rideStarted, .rideCompleted, .sos:
+            if let id = notif.rideId {
+                pillButton(notif.type == .sos ? "Open ride" : notif.type == .rideStarted ? "Open live map" : "Open ride",
+                           filled: notif.type == .sos || notif.type == .rideStarted) {
+                    Task {
+                        await app.refreshRides(force: true)
+                        if app.rides.contains(where: { $0.id == id }) { app.push(.rideDetails(id)) }
+                    }
+                }
+            }
         default:
             EmptyView()
         }
@@ -446,6 +467,28 @@ struct NotificationView: View {
             return "Liked your ride"
         case .postComment:
             return "Commented on your ride"
+        case .friendAccepted:
+            return "Accepted your friend request"
+        case .crewJoined:
+            return "Joined your crew"
+        case .crewLeft:
+            return "Left your crew"
+        case .rideInvite:
+            return "Invited you to ride '\(notif.targetTitle ?? "a ride")'"
+        case .rideUpdated:
+            return notif.subtitle.isEmpty ? "Changed the plan for '\(notif.targetTitle ?? "your ride")'" : notif.subtitle
+        case .rideStarted:
+            return "Started '\(notif.targetTitle ?? "the ride")' — open the live map"
+        case .rideCompleted:
+            return "'\(notif.targetTitle ?? "Your ride")' is complete"
+        case .rideCancelled:
+            return notif.subtitle.isEmpty ? "A ride you were in was cancelled" : notif.subtitle
+        case .sos:
+            return notif.subtitle.isEmpty ? "Needs help on '\(notif.targetTitle ?? "your ride")'" : notif.subtitle
+        case .newPost:
+            return notif.subtitle.isEmpty ? "Shared a new ride" : notif.subtitle
+        case .achievement:
+            return notif.subtitle
         }
     }
 
@@ -474,9 +517,30 @@ struct NotificationView: View {
                     Image(systemName: "heart.fill").font(.system(size: 8))
                 case .postComment:
                     Image(systemName: "bubble.left.fill").font(.system(size: 8))
+                case .friendAccepted:
+                    Image(systemName: "person.2.fill").font(.system(size: 7))
+                case .crewJoined, .crewLeft:
+                    Image(systemName: "person.3.fill").font(.system(size: 6))
+                case .rideInvite:
+                    Image(systemName: "envelope.fill").font(.system(size: 7))
+                case .rideUpdated:
+                    Image(systemName: "pencil").font(.system(size: 8, weight: .bold))
+                case .rideStarted:
+                    Image(systemName: "play.fill").font(.system(size: 7))
+                case .rideCompleted:
+                    Image(systemName: "flag.checkered").font(.system(size: 7))
+                case .rideCancelled:
+                    Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                case .sos:
+                    Image(systemName: "sos").font(.system(size: 6, weight: .black))
+                case .newPost:
+                    Image(systemName: "square.and.pencil").font(.system(size: 7))
+                case .achievement:
+                    Image(systemName: "trophy.fill").font(.system(size: 7))
                 }
             }
-            .foregroundStyle(Color.white)
+            // Dark glyph on light badges (white, green, amber); white on dark ones.
+            .foregroundStyle([.rideJoinDeclined, .crewInvite, .crewLeft, .rideCancelled, .sos].contains(type) ? Color.white : CV.onAccent)
         }
     }
 
@@ -485,12 +549,23 @@ struct NotificationView: View {
             switch type {
             case .rideJoin: return ("TRIP JOIN", CV.accent)
             case .friendRequest: return ("FRIEND", CV.warning)
-            case .crewInvite: return ("CREW", Color(hex: 0xAF52DE))
+            case .crewInvite: return ("CREW", CV.muted)
             case .rideJoinAccepted: return ("ACCEPTED", CV.green)
             case .rideJoinDeclined: return ("DECLINED", CV.muted)
             case .newFollower: return ("FOLLOWER", CV.warning)
             case .postLike: return ("LIKE", CV.accent)
             case .postComment: return ("COMMENT", CV.warning)
+            case .friendAccepted: return ("FRIEND", CV.green)
+            case .crewJoined: return ("CREW", CV.green)
+            case .crewLeft: return ("CREW", CV.muted)
+            case .rideInvite: return ("INVITE", CV.accent)
+            case .rideUpdated: return ("UPDATED", CV.warning)
+            case .rideStarted: return ("LIVE", CV.green)
+            case .rideCompleted: return ("DONE", CV.muted)
+            case .rideCancelled: return ("CANCELLED", CV.danger)
+            case .sos: return ("SOS", CV.danger)
+            case .newPost: return ("POST", CV.accent)
+            case .achievement: return ("AWARD", CV.warning)
             }
         }()
 
@@ -505,11 +580,14 @@ struct NotificationView: View {
         switch type {
         case .rideJoin: return CV.accent
         case .friendRequest: return CV.warning
-        case .crewInvite: return Color(hex: 0xAF52DE)
+        case .crewInvite: return CV.muted
         case .rideJoinAccepted: return CV.green
         case .rideJoinDeclined: return CV.dim
-        case .newFollower, .postComment: return CV.warning
-        case .postLike: return CV.accent
+        case .newFollower, .postComment, .rideUpdated, .achievement: return CV.warning
+        case .postLike, .rideInvite, .newPost: return CV.accent
+        case .friendAccepted, .crewJoined, .rideStarted: return CV.green
+        case .crewLeft, .rideCompleted: return CV.dim
+        case .rideCancelled, .sos: return CV.danger
         }
     }
 

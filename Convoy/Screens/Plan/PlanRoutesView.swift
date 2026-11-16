@@ -8,6 +8,8 @@ struct PlanRoutesView: View {
     @Environment(AppState.self) private var app
     @State private var camera: MapCameraPosition = .automatic
     @State private var mapStyleType: MapStyleType = .standard
+    /// Sheet minimised to its handle so the whole route is visible on the map.
+    @State private var sheetCollapsed = false
 
     private var routes: [RouteStyle: RouteSummary] { app.draft.routes }
     private var loading: Bool {
@@ -99,24 +101,53 @@ struct PlanRoutesView: View {
 
     private var sheet: some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(Color.white.opacity(0.25))
-                .frame(width: 36, height: 5)
-                .padding(.top, 10)
-                .padding(.bottom, 8)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    sheetHeader
-                    sheetBody
+            // Handle: tap or drag down to minimise, drag up / tap to bring the options back.
+            VStack(spacing: 6) {
+                Capsule()
+                    .fill(Color.white.opacity(0.3))
+                    .frame(width: 36, height: 5)
+                if sheetCollapsed {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.up").font(.system(size: 11, weight: .bold))
+                        Text("Show route options").cvText(13, .semibold, inter: true)
+                    }
+                    .foregroundStyle(CV.text)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
             }
-            .scrollIndicators(.hidden)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { sheetCollapsed.toggle() }
+            }
+            .accessibilityLabel(sheetCollapsed ? "Show route options" : "Minimise route options")
+            .accessibilityAddTraits(.isButton)
+
+            if !sheetCollapsed {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        sheetHeader
+                        sheetBody
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 20)
+                }
+                .scrollIndicators(.hidden)
+                .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: sheetHeight)
+        .frame(height: sheetCollapsed ? 64 : sheetHeight)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { v in
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        if v.translation.height > 50 { sheetCollapsed = true }
+                        else if v.translation.height < -50 { sheetCollapsed = false }
+                    }
+                }
+        )
         .background(
             UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
                 .fill(CV.surface)
@@ -222,16 +253,16 @@ struct PlanRoutesView: View {
             ForEach(RouteStyle.allCases.filter { $0 != app.draft.style }) { s in
                 if let r = routes[s] {
                     MapPolyline(coordinates: r.coords.map(\.cl))
-                        .stroke(Color(hex: 0xD9D9D9, opacity: 0.85), lineWidth: 5)
+                        .stroke(CV.route.opacity(0.35), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                 }
             }
             if let r = routes[app.draft.style] {
                 MapPolyline(coordinates: r.coords.map(\.cl))
-                    .stroke(CV.accent, lineWidth: 7)
+                    .stroke(CV.route, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
             }
             if let a = app.draft.startCoord {
                 Annotation("", coordinate: a.cl) {
-                    Circle().fill(CV.accent).frame(width: 18, height: 18)
+                    Circle().fill(CV.route).frame(width: 18, height: 18)
                         .overlay(Circle().strokeBorder(.white, lineWidth: 3))
                 }
             }
@@ -239,7 +270,7 @@ struct PlanRoutesView: View {
                 Annotation("", coordinate: b.cl) {
                     ZStack {
                         Circle().fill(.white.opacity(0.9)).frame(width: 26, height: 26)
-                        Circle().fill(CV.accent).frame(width: 14, height: 14)
+                        Circle().fill(CV.route).frame(width: 14, height: 14)
                         Circle().fill(.white).frame(width: 5, height: 5)
                     }
                 }

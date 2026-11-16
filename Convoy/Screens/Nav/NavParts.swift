@@ -98,7 +98,7 @@ struct MapCallout: View {
     let text: String
     var selected = false
     var body: some View {
-        Text(text).cvText(13, .semibold, color: .white, inter: true)
+        Text(text).cvText(13, .semibold, color: selected ? CV.onAccent : .white, inter: true)
             .padding(.horizontal, 10).frame(height: 28)
             .background(selected ? CV.accent : CV.surface.opacity(0.92), in: Capsule())
     }
@@ -147,49 +147,62 @@ struct AppleMapsTopBanner: View {
     var onBack: (() -> Void)? = nil
 
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Back button — floating above the banner, top-left
             if let onBack {
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(CV.text)
-                        .frame(width: 36, height: 36)
-                        .background(Color.white.opacity(0.12), in: Circle())
-                }.buttonStyle(.plain)
-            }
-            ZStack {
-                Circle().fill(Color.white.opacity(0.1)).frame(width: 44, height: 44)
-                Image(systemName: symbol)
-                    .font(.system(size: 24, weight: .semibold)).foregroundStyle(tint)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                if !distance.isEmpty {
-                    Text(distance).font(.system(size: 24, weight: .bold)).foregroundStyle(CV.text)
-                }
-                Text(instruction).font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(CV.text).lineLimit(1)
-                if let sub = subInstruction, !sub.isEmpty {
-                    Text(sub).font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(CV.text.opacity(0.6)).lineLimit(1)
+                HStack {
+                    Button(action: onBack) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(CV.text)
+                            .frame(width: 40, height: 40)
+                            .background(CV.surface.opacity(0.96), in: Circle())
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                            .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
                 }
             }
-            Spacer()
+
+            // Turn-by-turn banner (unchanged)
+            HStack(alignment: .center, spacing: 14) {
+                ZStack {
+                    Circle().fill(Color.white.opacity(0.1)).frame(width: 44, height: 44)
+                    Image(systemName: symbol)
+                        .font(.system(size: 24, weight: .semibold)).foregroundStyle(tint)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    if !distance.isEmpty {
+                        Text(distance).font(.system(size: 24, weight: .bold)).foregroundStyle(CV.text)
+                    }
+                    Text(instruction).font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(CV.text).lineLimit(1)
+                    if let sub = subInstruction, !sub.isEmpty {
+                        Text(sub).font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(CV.text.opacity(0.6)).lineLimit(1)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(CV.surface.opacity(0.96))
+                    .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    .shadow(color: Color.black.opacity(0.4), radius: 18, y: 4)
+            )
         }
-        .padding(.horizontal, 16).padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(CV.surface.opacity(0.96))
-                .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                .shadow(color: Color.black.opacity(0.4), radius: 18, y: 4)
-        )
-    }
-}
+        .offset(y:-50)
+    }}
 
 struct AppleMapsRightControls: View {
     var isTrackingUser: Bool
     var isVoiceMuted: Bool
+    var hasConvoyRiders: Bool = false
     var onRecentre: () -> Void
+    var onFocusConvoy: (() -> Void)? = nil
     var onToggleVoice: () -> Void
     var onSOS: () -> Void
 
@@ -327,7 +340,7 @@ struct AppleMapsBottomSheet: View {
                     }
 
                     VStack(spacing: 0) {
-                        actionRow(icon: "plus", iconColor: Color(hex: 0x007AFF),
+                        actionRow(icon: "plus", iconColor: CV.text,
                                   title: "Add Stop", action: onAddStop)
                         divider
                         actionRow(icon: "person.3.fill", iconColor: Color(hex: 0xAF52DE),
@@ -410,5 +423,66 @@ struct AppleMapsBottomSheet: View {
             }
             .padding(.horizontal, 14).frame(height: 50).contentShape(Rectangle())
         }.buttonStyle(.plain)
+    }
+}
+
+// MARK: - Convoy Map Marker
+
+struct ConvoyRiderMapMarker: View {
+    let rider: RiderLiveLocation
+    let avatarData: Data?
+
+    var body: some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 4) {
+                Circle().fill(CV.green).frame(width: 6, height: 6)
+                Text(rider.name)
+                    .cvText(11, .bold, color: .white, inter: true)
+                if rider.speedKmh > 0 {
+                    Text("· \(rider.speedKmh) km/h")
+                        .cvText(10, .medium, color: CV.text, inter: true)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(CV.surface.opacity(0.94), in: Capsule())
+            .overlay(Capsule().strokeBorder(CV.text.opacity(0.4), lineWidth: 1))
+            .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
+
+            ZStack {
+                Circle()
+                    .fill(CV.text.opacity(0.25))
+                    .frame(width: 44, height: 44)
+
+                Circle()
+                    .fill(.white)
+                    .frame(width: 30, height: 30)
+                    .shadow(color: .black.opacity(0.4), radius: 4, y: 1)
+
+                Circle()
+                    .fill(Color(hex: 0x0090D0))
+                    .frame(width: 24, height: 24)
+
+                if let avatarData, let uiImage = UIImage(data: avatarData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 24, height: 24)
+                        .clipShape(Circle())
+                } else {
+                    Image(systemName: "figure.outdoor.cycle")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+
+                if rider.heading > 0 {
+                    Image(systemName: "location.north.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .offset(y: -19)
+                        .rotationEffect(.degrees(rider.heading))
+                }
+            }
+        }
     }
 }

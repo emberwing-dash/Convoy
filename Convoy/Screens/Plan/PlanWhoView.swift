@@ -3,6 +3,37 @@ import SwiftUI
 
 struct PlanWhoView: View {
     @Environment(AppState.self) private var app
+    @State private var showInvitees = false
+
+    /// Everyone on the ride: you first (organiser), then the selected crew — including riders
+    /// just invited to that crew — then the selected friends. No duplicates; updates live.
+    private var invitees: [Invitee] {
+        let me = app.backendUserId
+        var out: [Invitee] = [Invitee(id: me ?? UUID(), name: app.displayName, avatarData: app.avatarImageData,
+                                      via: "You · organiser", isYou: true)]
+        var seen: Set<UUID> = me.map { [$0] } ?? []
+        if let crew = app.crews.first(where: { $0.id == app.selectedCrew }) {
+            let roster = app.selectedCrewRoster.isEmpty ? crew.members : app.selectedCrewRoster
+            for m in roster where !seen.contains(m.id) && m.name != app.displayName {
+                seen.insert(m.id)
+                out.append(Invitee(id: m.id, name: m.name, avatarData: m.avatarData,
+                                   via: m.pending ? "\(crew.name) · invited to crew" : crew.name))
+            }
+        }
+        for f in app.friends where app.selectedFriends.contains(f.username) && !seen.contains(f.id) {
+            seen.insert(f.id)
+            out.append(Invitee(id: f.id, name: f.display_name.isEmpty ? "@\(f.username)" : f.display_name,
+                               avatarData: f.avatar_data.flatMap { Data(base64Encoded: $0) }, via: "@\(f.username)"))
+        }
+        return out
+    }
+
+    private func loadRoster() async {
+        guard let id = app.selectedCrew else { app.selectedCrewRoster = []; return }
+        if let roster = try? await SupabaseManager.shared.fetchCrewRoster(crewId: id), app.selectedCrew == id {
+            app.selectedCrewRoster = roster
+        }
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -40,9 +71,17 @@ struct PlanWhoView: View {
         }
         .task {
             await app.loadFriends()
-            await app.loadCrews()
+            // Coming back from "Add crew" (or after inviting people to a crew): pick up the change.
+            await app.loadCrews(force: app.newCrewID != nil)
+            await loadRoster()
+        }
+        .task(id: app.selectedCrew) {
+            app.selectedCrewRoster = []
+            await loadRoster()
         }
         .onAppear {
+            // Warm up GPS so the route's start can default to the rider's current location.
+            LocationService.shared.startTracking()
             // When initiating a custom plan via "Who's riding?", ensure any leftover Discover draft is cleared.
             if app.draft.discoverRoute != nil || !app.draft.routes.isEmpty || !app.draft.name.isEmpty {
                 app.startNewPlan(keepCrew: true)
@@ -51,6 +90,12 @@ struct PlanWhoView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
+        .sheet(isPresented: $showInvitees) {
+            InviteesSheet(invitees: invitees)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(CV.bg2)
+        }
     }
 
     // MARK: - Header helpers
@@ -121,7 +166,7 @@ struct PlanWhoView: View {
                                 if on {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(CV.onAccent)
                                         .frame(width: 22, height: 22)
                                         .background(CV.accent, in: Circle())
                                         .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
@@ -201,7 +246,7 @@ struct PlanWhoView: View {
                     if on {
                         Image(systemName: "checkmark")
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(CV.onAccent)
                             .frame(width: 22, height: 22)
                             .background(CV.accent, in: Circle())
                             .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
@@ -366,7 +411,7 @@ struct PlanWhoView: View {
                                     .frame(width: 26, height: 26)
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(CV.onAccent)
                             } else {
                                 Circle()
                                     .strokeBorder(Color.white.opacity(0.25), lineWidth: 1.5)
@@ -446,10 +491,7 @@ struct PlanWhoView: View {
 
     private var bottomFloatingBar: some View {
         VStack(spacing: 12) {
-            if app.selectedCrew != nil || !app.selectedFriends.isEmpty {
-                summaryRow
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
+            summaryRow
 
             PrimaryButton(title: "Continue") {
                 if app.draft.discoverRoute != nil {
@@ -474,48 +516,100 @@ struct PlanWhoView: View {
         )
     }
 
+    /// Overlapping avatars of everyone who'll be invited, with "See all" for the full list.
     private var summaryRow: some View {
-        let crew = app.crews.first { $0.id == app.selectedCrew }
-        let selectedFriendsList = app.friends.filter { app.selectedFriends.contains($0.username) }
-        let friendsCount = selectedFriendsList.count
-
-        let titleText: String
-        if let c = crew, friendsCount > 0 {
-            titleText = "\(c.name) + \(friendsCount) friend\(friendsCount == 1 ? "" : "s")"
-        } else if let c = crew {
-            titleText = c.name
-        } else if friendsCount == 1 {
-            titleText = selectedFriendsList.first?.display_name ?? "1 friend"
-        } else if friendsCount == 2 {
-            titleText = "\(selectedFriendsList[0].display_name) & \(selectedFriendsList[1].display_name)"
-        } else if friendsCount >= 3 {
-            titleText = "\(selectedFriendsList[0].display_name) + \(friendsCount - 1) friends"
-        } else {
-            titleText = ""
-        }
-
-        return HStack(spacing: 10) {
-            // Overlapping cluster of avatars matching user's image
-            HStack(spacing: -8) {
-                if let c = crew {
-                    CrewAvatar(data: c.avatarData, name: c.name, size: 28)
+        let people = invitees
+        let shown = Array(people.prefix(5))
+        return HStack(spacing: 12) {
+            HStack(spacing: -10) {
+                ForEach(Array(shown.enumerated()), id: \.element.id) { index, p in
+                    AvatarChip(data: p.avatarData, name: p.name, size: 34)
                         .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
-                        .zIndex(10)
+                        .zIndex(Double(shown.count - index))
+                        .transition(.scale.combined(with: .opacity))
                 }
-                ForEach(Array(selectedFriendsList.prefix(crew == nil ? 3 : 2).enumerated()), id: \.element.id) { index, f in
-                    AvatarChip(data: f.avatar_data.flatMap { Data(base64Encoded: $0) }, name: f.display_name, size: 28)
+                if people.count > shown.count {
+                    Text("+\(people.count - shown.count)")
+                        .cvText(12, .bold, color: CV.text, inter: true)
+                        .frame(width: 34, height: 34)
+                        .background(CV.elevated, in: Circle())
                         .overlay(Circle().strokeBorder(CV.bg, lineWidth: 2))
-                        .zIndex(Double(8 - index))
                 }
             }
+            .animation(.snappy(duration: 0.25), value: people.map(\.id))
 
-            Text(titleText)
-                .cvText(15, .semibold, color: CV.text, tracking: -0.2, inter: true)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(people.count == 1 ? "Just you so far" : "\(people.count) riders")
+                    .cvText(15, .semibold, color: CV.text, tracking: -0.2, inter: true)
+                Text(people.count == 1 ? "Pick a crew or friends to invite" : "\(people.count - 1) will get an invite when you create the ride")
+                    .cvText(12, color: CV.muted, inter: true)
+                    .lineLimit(1)
+            }
 
-            Spacer()
+            Spacer(minLength: 4)
+
+            if people.count > 1 {
+                Button { showInvitees = true } label: {
+                    HStack(spacing: 4) {
+                        Text("See all").cvText(14, .semibold, color: CV.text, inter: true)
+                        Image(systemName: "chevron.up").font(.system(size: 11, weight: .bold))
+                    }
+                    .foregroundStyle(CV.text)
+                    .padding(.horizontal, 12).frame(height: 32)
+                    .background(CV.surface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(CV.stroke, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("See all \(people.count) invited riders")
+            }
         }
-        .frame(height: 28)
+    }
+}
+
+/// One rider who will receive the invitation.
+struct Invitee: Identifiable, Hashable {
+    let id: UUID
+    let name: String
+    let avatarData: Data?
+    /// Crew name or @handle — why they're on the list.
+    let via: String
+    var isYou: Bool = false
+}
+
+/// Bottom sheet listing every rider who'll be invited.
+struct InviteesSheet: View {
+    let invitees: [Invitee]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Who's riding")
+                .cvText(20, .bold, color: CV.text, inter: true)
+                .padding(.top, 28)
+            Text("\(invitees.count) rider\(invitees.count == 1 ? "" : "s") · updates as you pick crews and friends")
+                .cvText(13, color: CV.muted, inter: true)
+                .padding(.top, 4)
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(invitees) { p in
+                        HStack(spacing: 12) {
+                            AvatarChip(data: p.avatarData, name: p.name, size: 42)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(p.isYou ? "\(p.name) (you)" : p.name).cvText(16, .semibold, color: CV.text, inter: true).lineLimit(1)
+                                Text(p.via).cvText(12, color: CV.muted, inter: true).lineLimit(1)
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                        if p.id != invitees.last?.id {
+                            Rectangle().fill(CV.separator).frame(height: 0.5).padding(.leading, 54)
+                        }
+                    }
+                }
+                .padding(.top, 16)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .padding(.horizontal, 20)
     }
 }
 
@@ -555,7 +649,7 @@ struct SelectDot: View {
                 Circle().fill(CV.accent)
                 Image(systemName: "checkmark")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(CV.onAccent)
             } else {
                 Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1.5)
             }

@@ -244,7 +244,7 @@ struct CrewInviteView: View {
                         Circle().fill(CV.accent).frame(width: 26, height: 26)
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(CV.onAccent)
                     }
                 }
                 .opacity(isMember || isPending ? 0 : 1)
@@ -328,26 +328,8 @@ struct CrewInviteView: View {
                 .padding(.leading, 4)
 
             if let crew {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(crew.code)
-                            .cvText(24, .bold, color: CV.text, tracking: -0.2, inter: true)
-                        Text("convoy://crew/\(crew.code.lowercased())")
-                            .cvText(12, color: CV.muted, inter: true)
-                    }
-                    Spacer()
-                    ShareLink(item: "Join \(crew.name) on Convoy: convoy://crew/\(crew.code.lowercased())") {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(CV.onAccent)
-                            .frame(width: 44, height: 44)
-                            .background(CV.accent, in: Circle())
-                    }
-                }
-                .padding(16)
-                .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+                CopyLinkRow(value: "convoy://crew/\(crew.code.lowercased())", title: crew.code,
+                            shareText: "Join \(crew.name) on Convoy: convoy://crew/\(crew.code.lowercased())\nOr open Convoy → Crew → Join with code and enter \(crew.code).")
             }
         }
     }

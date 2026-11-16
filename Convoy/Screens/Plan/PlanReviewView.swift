@@ -154,8 +154,9 @@ struct PlanReviewView: View {
                         Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
                             .font(.system(size: 11, weight: .bold))
                         Text("\(app.draft.distanceText(app.draft.style)) · \(app.draft.durationText(app.draft.style))")
-                            .cvText(12, .semibold, color: .white, inter: true)
+                            .cvText(12, .semibold, color: CV.onAccent, inter: true)
                     }
+                    .foregroundStyle(CV.onAccent)
                     .padding(.horizontal, 12)
                     .frame(height: 32)
                     .background(CV.accent, in: Capsule())

@@ -82,7 +82,7 @@ struct PastRideView: View {
         if coords.count > 1 {
             ZStack(alignment: .bottomLeading) {
                 RouteSnapshotView(coords: coords, size: CGSize(width: 353, height: 200), corner: 22,
-                                  lineColor: recorded.count > 1 ? Self.green : UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1))
+                                  lineColor: CV.routeUI)
                     .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
                 Text(recorded.count > 1 ? "Your GPS track" : "Planned route")
                     .cvText(11, .semibold, color: CV.text, inter: true)
@@ -178,9 +178,9 @@ struct PastRideView: View {
             Button { sharing = true } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "person.3.fill")
-                    Text("Share to Crew feed").cvText(16, .bold, color: .white, inter: true)
+                    Text("Share to Crew feed").cvText(16, .bold, color: CV.onAccent, inter: true)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(CV.onAccent)
                 .frame(maxWidth: .infinity).frame(height: 52).background(CV.accent, in: Capsule())
             }.buttonStyle(.plain)
         }

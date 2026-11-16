@@ -15,7 +15,7 @@ struct RouteMapCard: View {
                 MapPolyline(coordinates: pts)
                     .stroke(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
                 MapPolyline(coordinates: pts)
-                    .stroke(CV.accent, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                    .stroke(CV.route, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
             }
             if let a = pts.first {
                 Annotation("Start", coordinate: a, anchor: .center) {
@@ -29,10 +29,10 @@ struct RouteMapCard: View {
                 Annotation("Finish", coordinate: b, anchor: .bottom) {
                     Image(systemName: "flag.checkered")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(CV.onAccent)
                         .frame(width: 28, height: 28)
                         .background(CV.accent, in: Circle())
-                        .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                        .overlay(Circle().strokeBorder(CV.onAccent, lineWidth: 2))
                         .shadow(color: .black.opacity(0.4), radius: 3)
                 }
                 .annotationTitles(.hidden)

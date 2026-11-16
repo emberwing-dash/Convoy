@@ -15,7 +15,7 @@ struct LeaderboardSection: View {
                     ForEach(periods, id: \.self) { p in
                         let on = p == period
                         Button { withAnimation(.snappy(duration: 0.2)) { period = p } } label: {
-                            Text(p.label()).cvText(13, .bold, color: on ? .white : CV.muted, tracking: 0.8, inter: true)
+                            Text(p.label()).cvText(13, .bold, color: on ? CV.onAccent : CV.muted, tracking: 0.8, inter: true)
                                 .padding(.horizontal, 16).frame(height: 40)
                                 .background(on ? CV.accent : Color.white.opacity(0.06), in: Capsule())
                                 .overlay(Capsule().strokeBorder(Color.white.opacity(on ? 0 : 0.12), lineWidth: 1))

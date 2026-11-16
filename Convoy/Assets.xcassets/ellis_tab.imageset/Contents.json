@@ -1,0 +1,9 @@
+{
+  "images" : [
+    { "filename" : "ellis_tab@1x.png", "idiom" : "universal", "scale" : "1x" },
+    { "filename" : "ellis_tab@2x.png", "idiom" : "universal", "scale" : "2x" },
+    { "filename" : "ellis_tab@3x.png", "idiom" : "universal", "scale" : "3x" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 },
+  "properties" : { "template-rendering-intent" : "template" }
+}

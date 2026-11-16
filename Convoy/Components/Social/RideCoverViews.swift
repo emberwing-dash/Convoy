@@ -112,9 +112,9 @@ struct CoverPickerSheet: View {
                     PhotosPicker(selection: $pickerItem, matching: .images) {
                         HStack(spacing: 8) {
                             Image(systemName: "photo.on.rectangle.angled")
-                            Text("Use your own photo").cvText(15, .bold, color: .white, inter: true)
+                            Text("Use your own photo").cvText(15, .bold, color: CV.onAccent, inter: true)
                         }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(CV.onAccent)
                         .frame(maxWidth: .infinity).frame(height: 48)
                         .background(CV.accent, in: Capsule())
                     }
@@ -135,7 +135,7 @@ struct CoverPickerSheet: View {
                                 .cvText(12, color: CV.muted, inter: true)
                         }
                     }
-                    if let error { Text(error).cvText(13, .semibold, color: CV.accent, inter: true) }
+                    if let error { Text(error).cvText(13, .semibold, color: CV.danger, inter: true) }
                     Text("Photos come from Wikimedia Commons under free licences; the photographer is credited on the image.")
                         .cvText(11, color: CV.dim, inter: true)
                 }

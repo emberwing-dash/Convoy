@@ -42,6 +42,8 @@ final class SocialStore {
 
     /// Called after inbox / request changes so AppState can rebuild the notification centre.
     var onNotificationsChanged: (() -> Void)?
+    /// Called when a notification arrives over Realtime (falls back to refreshing the inbox only).
+    var onLiveEvent: (() async -> Void)?
 
     private var userId: UUID?
     private var channel: RealtimeChannelV2?
@@ -64,7 +66,7 @@ final class SocialStore {
             for await _ in inserts {
                 guard let self else { return }
                 self.liveEventCount += 1
-                await self.refreshInboxAndRequests()
+                if let onLiveEvent = self.onLiveEvent { await onLiveEvent() } else { await self.refreshInboxAndRequests() }
             }
         }
         do { try await ch.subscribeWithError() }

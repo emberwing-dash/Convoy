@@ -18,7 +18,7 @@ struct TopoBackground: View {
             if glow {
                 RadialGradient(colors: [CV.accent.opacity(0.07), .clear],
                                center: UnitPoint(x: 0.15, y: 0.0), startRadius: 0, endRadius: 420)
-                RadialGradient(colors: [Color(hex: 0x5E5CE6).opacity(0.04), .clear],
+                RadialGradient(colors: [Color.white.opacity(0.025), .clear],
                                center: UnitPoint(x: 1.0, y: 0.55), startRadius: 0, endRadius: 360)
             }
             ContourLines()

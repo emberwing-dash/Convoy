@@ -78,7 +78,7 @@ struct NewCrewView: View {
                     .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
 
                     if let error = errorMessage {
-                        Text(error).cvText(13, color: CV.accent, inter: true).padding(.top, 12)
+                        Text(error).cvText(13, color: CV.danger, inter: true).padding(.top, 12)
                     }
 
                     Text("You'll be the admin. Invite riders next.")

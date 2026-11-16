@@ -226,13 +226,13 @@ struct TripRidersSection: View {
                             }
                         }.buttonStyle(.plain)
                     }
-                    if let error { Text(error).cvText(12, .semibold, color: CV.accent, inter: true) }
+                    if let error { Text(error).cvText(12, .semibold, color: CV.danger, inter: true) }
                     if let result { Text(result).cvText(12, .semibold, color: CV.green, inter: true) }
                     Button(action: send) {
                         HStack {
-                            if sending { ProgressView().tint(.white) }
+                            if sending { ProgressView().tint(CV.onAccent) }
                             Text(selected.isEmpty ? "Select riders" : "Invite \(selected.count) to \(chosenCrew?.name ?? "crew")")
-                                .cvText(15, .bold, color: .white, inter: true)
+                                .cvText(15, .bold, color: selected.isEmpty ? .white : CV.onAccent, inter: true)
                         }
                         .frame(maxWidth: .infinity).frame(height: 46)
                         .background(selected.isEmpty ? Color.white.opacity(0.1) : CV.accent, in: Capsule())

@@ -645,7 +645,7 @@ struct RideDetailsView: View {
                 }
             } label: {
                 Text(isPosted ? (pending > 0 ? "Requests (\(pending))" : "Manage") : "Post")
-                    .cvText(13, .semibold, color: .white, inter: true)
+                    .cvText(13, .semibold, color: isPosted && pending == 0 ? .white : CV.onAccent, inter: true)
                     .padding(.horizontal, 16)
                     .frame(height: 34)
                     .background(isPosted && pending == 0 ? Color.white.opacity(0.12) : CV.accent, in: Capsule())
@@ -775,7 +775,7 @@ struct RideDetailsView: View {
             text = ride.displayDate
         }
         return Text(text)
-            .cvText(13, .semibold, color: .white, inter: true)
+            .cvText(13, .semibold, color: isRideDay ? CV.onAccent : .white, inter: true)
             .padding(.horizontal, 10)
             .frame(height: 26)
             .background(isRideDay ? CV.accent : Color.white.opacity(0.18), in: Capsule())

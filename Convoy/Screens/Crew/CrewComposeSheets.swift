@@ -103,16 +103,16 @@ struct ShareRideForm: View {
                 Text(log.title).cvText(20, .bold, color: CVSocial.headline, inter: true)
                 if log.path.count > 1 {
                     RouteSnapshotView(coords: log.path, size: CGSize(width: 353, height: 160), corner: 18,
-                                      lineColor: UIColor(red: 0.19, green: 0.82, blue: 0.35, alpha: 1))
+                                      lineColor: CV.routeUI)
                 }
                 StatRow(items: [("\(RideFormat.km(log.distanceKm)) km", "Distance"), (RideFormat.duration(log.movingS), "Ride time"),
                                 (log.avgSpeedKmh > 0 ? "\(Int(log.avgSpeedKmh.rounded())) km/h" : "—", "Avg speed")])
                 NoteField(placeholder: "How was the ride?", text: $caption, limit: 500)
                 Text("Visible to everyone on Convoy. The first and last 400 m of your route are hidden.")
                     .cvText(12, color: CV.muted, inter: true)
-                if let error { Text(error).cvText(13, .semibold, color: CV.accent, inter: true) }
+                if let error { Text(error).cvText(13, .semibold, color: CV.danger, inter: true) }
                 Button(action: post) {
-                    HStack { if posting { ProgressView().tint(.white) }; Text("Share to Crew feed").cvText(16, .bold, color: .white, inter: true) }
+                    HStack { if posting { ProgressView().tint(CV.onAccent) }; Text("Share to Crew feed").cvText(16, .bold, color: CV.onAccent, inter: true) }
                         .frame(maxWidth: .infinity).frame(height: 52).background(CV.accent, in: Capsule())
                 }.buttonStyle(.plain).disabled(posting)
             }
@@ -170,9 +170,9 @@ struct OpenRideForm: View {
                 .padding(14)
                 .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 NoteField(placeholder: "Pace, stops, what riders should know", text: $caption, limit: 500)
-                if let error { Text(error).cvText(13, .semibold, color: CV.accent, inter: true) }
+                if let error { Text(error).cvText(13, .semibold, color: CV.danger, inter: true) }
                 Button(action: post) {
-                    HStack { if posting { ProgressView().tint(.white) }; Text("Post to Crew feed").cvText(16, .bold, color: .white, inter: true) }
+                    HStack { if posting { ProgressView().tint(CV.onAccent) }; Text("Post to Crew feed").cvText(16, .bold, color: CV.onAccent, inter: true) }
                         .frame(maxWidth: .infinity).frame(height: 52).background(CV.accent, in: Capsule())
                 }.buttonStyle(.plain).disabled(posting)
             }

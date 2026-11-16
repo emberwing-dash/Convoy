@@ -8,6 +8,11 @@ enum RiderStatus: String, Codable, Hashable, Sendable {
     case declined
 }
 
+extension Rider {
+    /// A rider's id is their profile / auth user id.
+    var userId: UUID? { id }
+}
+
 struct Rider: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var name: String

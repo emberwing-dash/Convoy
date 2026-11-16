@@ -7,31 +7,22 @@ struct MainShell: View {
     var body: some View {
         @Bindable var app = app
         NavigationStack(path: $app.path) {
-            ZStack(alignment: .bottom) {
-                ZStack {
-                    HomeView()
-                        .opacity(app.tab == .ride ? 1 : 0)
-                        .allowsHitTesting(app.tab == .ride)
-                        .accessibilityHidden(app.tab != .ride)
-
-                    DiscoverView()
-                        .opacity(app.tab == .discover ? 1 : 0)
-                        .allowsHitTesting(app.tab == .discover)
-                        .accessibilityHidden(app.tab != .discover)
-
-                    CrewView()
-                        .opacity(app.tab == .crew ? 1 : 0)
-                        .allowsHitTesting(app.tab == .crew)
-                        .accessibilityHidden(app.tab != .crew)
-                }
-                .transaction { transaction in
-                    transaction.animation = nil
-                }
+            // TabView switches the screens (each keeps its state); the system bar is hidden and
+            // our Liquid Glass bar sits on top so Ellis can live beside it at the same height.
+            TabView(selection: $app.tab) {
+                HomeView().tag(AppTab.ride).toolbar(.hidden, for: .tabBar)
+                DiscoverView().tag(AppTab.discover).toolbar(.hidden, for: .tabBar)
+                CrewView().tag(AppTab.crew).toolbar(.hidden, for: .tabBar)
+            }
+            .overlay(alignment: .bottom) {
                 ConvoyTabBar(selection: $app.tab)
-                    .padding(.bottom, 2)
             }
             .navigationBarBackButtonHidden()
             .toolbar(.hidden, for: .navigationBar)
+            .task { await app.handlePendingNotificationTap() }
+            .onChange(of: app.pendingNotificationTap) { _, _ in
+                Task { await app.handlePendingNotificationTap() }
+            }
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .rideStart:          RideStartingView()
@@ -42,6 +33,8 @@ struct MainShell: View {
                 case .shareCard:          ShareCardView()
                 case .profile:            ProfileView()
                 case .joinCode(let code): JoinCodeView(initialCode: code)
+                case .joinCrew(let code): JoinCrewView(initialCode: code)
+                case .notificationSettings: NotificationSettingsView()
                 case .joinFound:          JoinFoundView()
                 case .myRides:            MyRidesView()
                 case .crewDetail(let id): CrewDetailView(crewID: id)

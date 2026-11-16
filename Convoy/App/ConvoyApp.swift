@@ -2,7 +2,14 @@ import SwiftUI
 
 @main
 struct ConvoyApp: App {
-    @State private var app = AppState()
+    @UIApplicationDelegateAdaptor(ConvoyAppDelegate.self) private var appDelegate
+    @State private var app: AppState
+
+    init() {
+        let state = AppState()
+        _app = State(initialValue: state)
+        AppStateResolver.shared.current = state
+    }
 
     var body: some Scene {
         WindowGroup {

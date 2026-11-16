@@ -2,51 +2,66 @@ import SwiftUI
 
 // MARK: - Convoy design system
 //
-// Dark, graphite surfaces with a single system-blue accent. Every screen reads its colours,
-// radii and spacing from here, so the look can be tuned globally.
+// Monochrome: true-neutral blacks and greys with white as the accent. No hue anywhere except
+// meaning (green = done, amber = needs attention, red = SOS / destructive).
+//
+// Why it works (colour theory, applied):
+// • Tonal hierarchy instead of hue. Five neutral steps (bg → fill) separate screen, cards and
+//   controls; each step is a small, even jump in lightness so the UI reads as layered, not flat.
+// • Neutral, not blue-black. Greys carry no tint, so photos (the only colourful content) look
+//   true and nothing competes with them.
+// • White is the accent. The one primary action per area is a white pill with black text, the
+//   highest-contrast pairing there is (~19:1). Secondary actions are grey pills with white text.
+// • Text uses three greys tuned for contrast on black: text ≈ 18:1, muted ≈ 7:1, dim ≈ 4:1.
+// • Status colours are the only saturated colours left, so when they appear they mean something.
 //
 // Rules of thumb
-// • `accent` (system blue) marks what you can act on or what is selected. Use it sparingly:
-//   one primary action per area, selected tabs/chips, links, live route lines.
-// • Metadata is neutral (`text`, `muted`, `dim`), not coloured.
-// • `success` only for a real completed/positive state, `warning` for pending/attention.
+// • `accent` (white) marks the main action or the selected state. One per area.
+// • Metadata is `muted` / `dim`, never white.
 // • `danger` (red) is reserved for SOS, emergency and destructive actions. Never decorative.
 
 enum CV {
     // Backgrounds and surfaces (lightest last). Separation comes from tone, not borders.
     /// Screen background.
-    static let bg = Color(hex: 0x08090C)
+    static let bg = Color(hex: 0x050505)
     /// Grouped / secondary background (sheets, inset areas, map placeholders).
-    static let bg2 = Color(hex: 0x151B25)
+    static let bg2 = Color(hex: 0x0E0E0E)
     /// Cards and list rows.
-    static let surface = Color(hex: 0x1C2430)
+    static let surface = Color(hex: 0x161616)
     /// Controls placed on a card, popovers, floating map controls.
-    static let elevated = Color(hex: 0x232E3D)
+    static let elevated = Color(hex: 0x202020)
     /// Pressed rows, unselected chips, input fields on cards.
-    static let fill = Color(hex: 0x2B3747)
+    static let fill = Color(hex: 0x2C2C2C)
 
     // Text
-    static let text = Color(hex: 0xF2F5F9)
-    static let muted = Color(hex: 0x98A2B3)
-    static let dim = Color(hex: 0x667185)
+    static let text = Color(hex: 0xF5F5F5)
+    static let muted = Color(hex: 0x9E9E9E)
+    static let dim = Color(hex: 0x6B6B6B)
 
-    // Accent (Safari-style system blue)
-    static let accent = Color(hex: 0x0A84FF)
-    static let accentLight = Color(hex: 0x5AB0FF)
-    /// Tinted background behind accent text/icons (selected chips, info labels).
-    static let accentSoft = Color(hex: 0x0A84FF, opacity: 0.16)
-    /// Text / icons drawn on an accent fill.
-    static let onAccent = Color.white
+    // Accent (white)
+    static let accent = Color.white
+    /// Accent-coloured text and icons on dark surfaces.
+    static let accentLight = Color(hex: 0xF5F5F5)
+    /// Soft fill behind accent text/icons (selected chips, icon tiles).
+    static let accentSoft = Color.white.opacity(0.12)
+    /// Text / icons drawn on an accent (white) fill.
+    static let onAccent = Color(hex: 0x0A0A0A)
 
-    // Status
-    static let success = Color(hex: 0x30D158)
-    static let warning = Color(hex: 0xFF9F0A)
+    // Status — the only saturated colours in the app.
+    static let success = Color(hex: 0x32D74B)
+    static let warning = Color(hex: 0xFFB340)
     /// SOS, emergency and destructive actions only.
     static let danger = Color(hex: 0xFF453A)
 
+    // Maps
+    /// Route lines on every map (planning, previews, past rides, live navigation). Blue reads
+    /// clearly over both light map tiles and satellite imagery, and follows Apple Maps.
+    static let route = Color(hex: 0x0A84FF)
+    static let routeUI = UIColor(red: 10/255, green: 132/255, blue: 1, alpha: 1)
+
     // Lines
-    static let separator = Color.white.opacity(0.07)
-    static let stroke = Color.white.opacity(0.10)
+    static let separator = Color.white.opacity(0.08)
+    static let stroke = Color.white.opacity(0.12)
 
     // Translucent surfaces for content placed over photos and maps.
     static let glassFill = Color.white.opacity(0.07)
@@ -136,7 +151,7 @@ struct CVPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(CV.onAccent)
+            .foregroundStyle(enabled ? CV.onAccent : CV.dim)
             .frame(maxWidth: .infinity).frame(height: height)
             .background(enabled ? CV.accent : CV.fill, in: Capsule())
             .opacity(configuration.isPressed ? 0.82 : (enabled ? 1 : 0.6))

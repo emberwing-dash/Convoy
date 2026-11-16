@@ -319,21 +319,57 @@ final class SupabaseManager {
     }
 
     /// Join a crew by code — inserts self as pending member if not already in crew.
-    func joinCrewByCode(_ code: String, userId: UUID) async throws -> CrewGroup {
-        guard let crew = try await fetchCrewByCode(code) else {
-            throw NSError(domain: "Convoy", code: 404,
-                          userInfo: [NSLocalizedDescriptionKey: "Crew not found"])
+    /// Joins a crew with its share code (server validates the code; works for non-members).
+    func joinCrewByCode(_ code: String) async throws -> CrewJoinResult {
+        nonisolated struct P: Encodable, Sendable { let p_code: String }
+        do {
+            return try await client.rpc("join_crew_by_code", params: P(p_code: code)).execute().value
+        } catch {
+            let text = String(describing: error).lowercased()
+            if text.contains("invalid_code") { throw CrewJoinError.invalidCode }
+            if text.contains("unauthenticated") { throw CrewJoinError.signedOut }
+            throw CrewJoinError.network
         }
-        let existing: [CrewMemberRow] = try await client.from("crew_members")
-            .select().eq("crew_id", value: crew.id).eq("user_id", value: userId)
+    }
+
+    // MARK: - Push notifications
+
+    func registerDeviceToken(_ token: String, environment: String) async throws {
+        nonisolated struct P: Encodable, Sendable { let p_token: String; let p_environment: String }
+        try await client.rpc("register_device_token", params: P(p_token: token, p_environment: environment)).execute()
+    }
+
+    func unregisterDeviceToken(_ token: String) async throws {
+        nonisolated struct P: Encodable, Sendable { let p_token: String }
+        try await client.rpc("unregister_device_token", params: P(p_token: token)).execute()
+    }
+
+    func fetchNotificationPrefs(userId: UUID) async throws -> NotificationPrefs? {
+        let rows: [NotificationPrefs] = try await client.from("notification_prefs")
+            .select().eq("user_id", value: userId).limit(1).execute().value
+        return rows.first
+    }
+
+    func saveNotificationPrefs(_ prefs: NotificationPrefs) async throws {
+        try await client.from("notification_prefs").upsert(prefs, onConflict: "user_id").execute()
+    }
+
+    /// Organiser only: marks the ride as started and tells the riders (no-op for other riders).
+    func markRideStarted(rideId: UUID) async throws {
+        nonisolated struct P: Encodable, Sendable { let p_ride_id: UUID }
+        try await client.rpc("mark_ride_started", params: P(p_ride_id: rideId)).execute()
+    }
+
+    /// Sends an SOS to everyone on the ride (critical push). Returns true when the ride was alerted.
+    @discardableResult
+    func raiseSOS(rideId: UUID?, lat: Double?, lon: Double?, accuracy: Double?) async throws -> Bool {
+        nonisolated struct P: Encodable, Sendable {
+            let p_ride_id: UUID?; let p_lat: Double?; let p_lon: Double?; let p_accuracy: Double?
+        }
+        nonisolated struct R: Decodable, Sendable { let notified: Bool? }
+        let r: R = try await client.rpc("raise_sos", params: P(p_ride_id: rideId, p_lat: lat, p_lon: lon, p_accuracy: accuracy))
             .execute().value
-        if existing.isEmpty {
-            try await client.from("crew_members").insert(CrewMemberInsert(
-                crew_id: crew.id, user_id: userId, role: "member",
-                status: "pending", invited_by: nil
-            )).execute()
-        }
-        return crew
+        return r.notified ?? false
     }
 
     func inviteToCrew(crewId: UUID, receiverUsername: String, invitedBy: UUID) async throws {
@@ -426,6 +462,11 @@ final class SupabaseManager {
             .eq("crew_id", value: crewId)
             .eq("user_id", value: memberId)
             .execute()
+    }
+
+    /// Accepted members plus people invited to the crew who haven't answered yet.
+    func fetchCrewRoster(crewId: UUID) async throws -> [CrewMember] {
+        try await fetchCrewMembers(crewId: crewId).map { $0.toCrewMember() }
     }
 
     func fetchCrewsWithMembers(for userId: UUID) async throws -> [CrewGroup] {
@@ -1152,4 +1193,36 @@ extension RideRow {
         ride.cover = cover
         return ride
     }
+}
+
+
+// MARK: - Crew join & notification payloads
+
+struct CrewJoinResult: Decodable, Sendable {
+    let crew_id: UUID
+    let name: String
+    /// "joined" or "already_member"
+    let status: String
+}
+
+enum CrewJoinError: LocalizedError {
+    case invalidCode, signedOut, network
+    var errorDescription: String? {
+        switch self {
+        case .invalidCode: return "That code doesn't match any crew. Check it with the crew admin."
+        case .signedOut: return "You're signed out. Sign in again and retry."
+        case .network: return "Couldn't reach Convoy. Check your connection and try again."
+        }
+    }
+}
+
+struct NotificationPrefs: Codable, Sendable, Equatable {
+    var user_id: UUID
+    var push_enabled: Bool = true
+    var rides: Bool = true
+    var crews: Bool = true
+    var friends: Bool = true
+    var community: Bool = true
+    var navigation: Bool = true
+    var achievements: Bool = true
 }

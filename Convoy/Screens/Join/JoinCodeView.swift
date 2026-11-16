@@ -40,9 +40,9 @@ struct JoinCodeView: View {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 13))
                             Text(errorMessage)
-                                .cvText(13, color: CV.accent, inter: true)
+                                .cvText(13, color: CV.danger, inter: true)
                         }
-                        .foregroundStyle(CV.accent)
+                        .foregroundStyle(CV.danger)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 14)
                     } else if let successMessage {
@@ -334,7 +334,7 @@ struct JoinCodeView: View {
                     Task { await sendJoinRequest(ride: ride) }
                 } label: {
                     if isSendingRequest {
-                        ProgressView().tint(Color.white)
+                        ProgressView().tint(CV.onAccent)
                             .frame(maxWidth: .infinity).frame(height: 50)
                             .background(CV.accent, in: Capsule())
                     } else {
@@ -342,8 +342,9 @@ struct JoinCodeView: View {
                             Image(systemName: "paperplane.fill")
                                 .font(.system(size: 14))
                             Text("Send Request to Join")
-                                .cvText(15, .bold, color: Color.white, inter: true)
+                                .cvText(15, .bold, color: CV.onAccent, inter: true)
                         }
+                        .foregroundStyle(CV.onAccent)
                         .frame(maxWidth: .infinity).frame(height: 50)
                         .background(CV.accent, in: Capsule())
                     }

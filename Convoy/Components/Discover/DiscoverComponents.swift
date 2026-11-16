@@ -48,11 +48,11 @@ struct BrandedArt: View {
 
     var body: some View {
         let (top, glow, symbol): (UInt32, UInt32, String?) = switch style {
-        case .hero: (0x16243A, 0x0A84FF, nil)
-        case .routes: (0x14202F, 0x3D8BFF, "point.topleft.down.to.point.bottomright.curvepath")
-        case .scenic: (0x0F2119, 0x2FB86A, "mountain.2")
-        case .places: (0x161B26, 0x5E7CE2, "mappin.and.ellipse")
-        case .surprise: (0x231229, 0xB45CE0, "sparkles")
+        case .hero: (0x161616, 0x9E9E9E, nil)
+        case .routes: (0x161616, 0x9E9E9E, "point.topleft.down.to.point.bottomright.curvepath")
+        case .scenic: (0x161616, 0x9E9E9E, "mountain.2")
+        case .places: (0x161616, 0x9E9E9E, "mappin.and.ellipse")
+        case .surprise: (0x161616, 0x9E9E9E, "sparkles")
         }
         ZStack {
             LinearGradient(colors: [Color(hex: top), CV.bg], startPoint: .top, endPoint: .bottom)
@@ -304,7 +304,7 @@ struct DiscoverButton: View {
         .buttonStyle(.plain)
     }
     // Primary is a light pill, so it needs dark text.
-    private var fg: Color { style == .primary ? CV.bg : CV.text }
+    private var fg: Color { style == .secondary ? CV.text : CV.onAccent }
     private var bg: Color { switch style { case .primary: CV.text; case .secondary: CV.surface; case .accent: CV.accent } }
 }
 

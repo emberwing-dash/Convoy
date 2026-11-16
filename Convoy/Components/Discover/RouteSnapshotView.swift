@@ -16,7 +16,7 @@ struct RouteSnapshotView: View {
     @State private var image: UIImage?
 
     init(coords: [Coord], size: CGSize? = nil, height: CGFloat = 120, corner: CGFloat = 0,
-         lineColor: UIColor = UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1), showsEndpoints: Bool = true,
+         lineColor: UIColor = CV.routeUI, showsEndpoints: Bool = true,
          fitPadding: Double = 1.5, lineWidth: CGFloat = 4) {
         self.fitPadding = fitPadding
         self.lineWidth = lineWidth
@@ -116,7 +116,7 @@ struct RouteSnapshotView: View {
             path.stroke()
             if showsEndpoints, let a = pts.first, let b = pts.last {
                 dot(at: snap.point(for: a), fill: .white, r: 6)
-                dot(at: snap.point(for: b), fill: UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1), r: 8, ring: true)
+                dot(at: snap.point(for: b), fill: UIColor(white: 0.08, alpha: 1), r: 8, ring: true)
             }
         }
     }

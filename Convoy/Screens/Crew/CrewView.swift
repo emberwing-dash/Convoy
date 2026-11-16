@@ -30,7 +30,7 @@ struct CrewView: View {
                     .padding(.top, 20)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20).padding(.bottom, 130)
+                .padding(.horizontal, 20).padding(.bottom, 110)
             }
             .scrollIndicators(.hidden)
             .frame(maxWidth: .infinity)
@@ -168,17 +168,30 @@ struct CrewView: View {
                 .padding(.top, 8)
             }
 
-            Button { app.push(.newCrew) } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "plus").font(.system(size: 17, weight: .medium))
-                    Text("Create a crew").cvText(16, .semibold, inter: true)
+            HStack(spacing: 10) {
+                Button { app.push(.newCrew) } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus").font(.system(size: 16, weight: .medium))
+                        Text("Create a crew").cvText(15, .semibold, inter: true)
+                    }
+                    .frame(maxWidth: .infinity).frame(height: 56)
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.25),
+                                      style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
                 }
-                .frame(maxWidth: .infinity).frame(height: 56)
-                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.25),
-                                  style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
+                .buttonStyle(.plain)
+
+                Button { app.push(.joinCrew(nil)) } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "number").font(.system(size: 15, weight: .semibold))
+                        Text("Join with code").cvText(15, .semibold, inter: true)
+                    }
+                    .frame(maxWidth: .infinity).frame(height: 56)
+                    .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(CV.stroke, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             .padding(.top, 12)
         }
     }

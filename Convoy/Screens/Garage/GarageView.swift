@@ -585,9 +585,9 @@ struct GarageView: View {
     // ─────────────────────────────────────────
 
     private static let requiredDocs: [(String, DocType, String, Color)] = [
-        ("Insurance", .insurance, "shield.fill", Color(hex: 0x30D158)),
-        ("PUC certificate", .puc, "leaf.fill", Color(hex: 0x64D2FF)),
-        ("Registration (RC)", .rc, "doc.text.fill", Color(hex: 0x5AB0FF)),
+        ("Insurance", .insurance, "shield.fill", CV.text),
+        ("PUC certificate", .puc, "leaf.fill", CV.text),
+        ("Registration (RC)", .rc, "doc.text.fill", CV.text),
     ]
 
     @ViewBuilder private func docsTab(_ b: GarageBike) -> some View {
@@ -1107,7 +1107,8 @@ struct AddBikeFlowView: View {
                     onAdd(g); dismiss()
                 } label: {
                     HStack(spacing: 8) { Image(systemName: "plus.circle.fill"); Text("Add to Garage") }
-                        .cvText(16, .bold, color: .white, inter: true)
+                        .cvText(16, .bold, color: CV.onAccent, inter: true)
+                        .foregroundStyle(CV.onAccent)
                         .frame(maxWidth: .infinity).frame(height: 56)
                         .background(CV.accent, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
                 }.buttonStyle(.plain)
@@ -1158,7 +1159,7 @@ struct QuickGearAddSheet: View {
                     VStack(alignment: .leading, spacing: 20) {
                         HStack(spacing: 14) {
                             ZStack { Circle().fill(purple).frame(width: 52, height: 52)
-                                Image(systemName: "figure.walk").font(.system(size: 24, weight: .bold)).foregroundStyle(.white)
+                                Image(systemName: "figure.walk").font(.system(size: 24, weight: .bold)).foregroundStyle(CV.onAccent)
                             }
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("Add Riding Gear").cvText(20, .bold, color: CV.text, inter: true)
@@ -1175,7 +1176,7 @@ struct QuickGearAddSheet: View {
                                         Image(systemName: t.sfIcon).font(.system(size: 20))
                                         Text(t.rawValue).cvText(12, .semibold, inter: true)
                                     }
-                                    .foregroundStyle(on ? .white : CV.text.opacity(0.8))
+                                    .foregroundStyle(on ? CV.onAccent : CV.text.opacity(0.8))
                                     .frame(maxWidth: .infinity).frame(height: 72)
                                     .background(on ? purple : CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 }.buttonStyle(.plain)
@@ -1219,7 +1220,7 @@ struct QuickGearAddSheet: View {
                                 Text("Has Warranty").cvText(15, .bold, color: CV.text, inter: true)
                                 Text("Track warranty expiration").cvText(12, color: CV.muted, inter: true)
                             }; Spacer()
-                            Toggle("", isOn: $hasWarranty).labelsHidden().tint(purple)
+                            Toggle("", isOn: $hasWarranty).labelsHidden().tint(CV.success)
                         }.padding(16).background(CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                         Button {
@@ -1347,7 +1348,7 @@ struct UploadDocSheet: View {
                     }.cvText(15, .bold, color: CV.accentLight, inter: true)
                 }.padding(.horizontal, 20).padding(.top, 16)
                 VStack(spacing: 16) {
-                    Toggle("No Expiration Date", isOn: $noExpiry).cvText(15, .semibold, color: CV.text, inter: true).tint(CV.accentLight)
+                    Toggle("No Expiration Date", isOn: $noExpiry).cvText(15, .semibold, color: CV.text, inter: true).tint(CV.success)
                     if !noExpiry { DatePicker("Expiry Date", selection: $expiry, displayedComponents: .date).cvText(15, .semibold, color: CV.text, inter: true) }
                 }.padding(20).background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous)).padding(.horizontal, 20)
                 Spacer()

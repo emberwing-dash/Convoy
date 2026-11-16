@@ -145,18 +145,16 @@ struct ProfileSetupView: View {
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
                                 .cvText(17, tracking: -0.17)
-                                .onChange(of: app.handle) { _, _ in
-                                    // Only mark as custom if the change wasn't from our code
+                                .onChange(of: app.handle) { _, newValue in
+                                    // The "@" prefix is rendered by the HStack, not stored.
+                                    if newValue.hasPrefix("@") {
+                                        app.handle = String(newValue.dropFirst())
+                                        return
+                                    }
                                     if !isUpdatingProgrammatically {
                                         isHandleCustom = true
                                     }
                                 }
-                            
-                            if !app.handle.isEmpty {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .resizable().frame(width: 24, height: 24)
-                                    .foregroundStyle(CV.green)
-                            }
                         }
                         .padding(.horizontal, 18).frame(height: 60)
                         .glassRounded(18)
@@ -254,8 +252,13 @@ struct ProfileSetupView: View {
                 handleSuffix = "\(Int.random(in: 100...999))"
             }
             
+            // Sanitize any legacy handle that was stored with a leading "@".
+            if app.handle.hasPrefix("@") {
+                app.handle = String(app.handle.dropFirst())
+            }
+            
             // Initial sync
-            if app.handle.isEmpty || app.handle.hasPrefix("@rider") {
+            if app.handle.isEmpty || app.handle.hasPrefix("rider") {
                 isHandleCustom = false
                 updateHandleFromName(app.displayName)
             }
@@ -287,13 +290,13 @@ struct ProfileSetupView: View {
         
         let base = clean.isEmpty ? "rider" : String(clean.prefix(12))
         
+        // Store handle WITHOUT "@" — the HStack prefix renders it.
         if base == "rider" {
-            app.handle = "@rider\(handleSuffix)"
+            app.handle = "rider\(handleSuffix)"
         } else {
-            app.handle = "@\(base)\(handleSuffix)"
+            app.handle = "\(base)\(handleSuffix)"
         }
         
-        // Reset the flag slightly later so onChange doesn't trigger
         DispatchQueue.main.async {
             isUpdatingProgrammatically = false
         }

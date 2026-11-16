@@ -25,7 +25,7 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
-                .padding(.bottom, 130)
+                .padding(.bottom, 110)
             }
             .coordinateSpace(name: "homeScroll")
             .scrollBounceBehavior(.basedOnSize)
@@ -294,7 +294,7 @@ private struct HeaderControls: View {
                         if unread > 0 {
                             Text(unread > 9 ? "9+" : "\(unread)")
                                 .font(.system(size: 10, weight: .bold)).monospacedDigit()
-                                .foregroundStyle(.white)
+                                .foregroundStyle(CV.onAccent)
                                 .padding(.horizontal, 4).frame(minWidth: 17, minHeight: 17)
                                 .background(CV.accent, in: Capsule())
                                 .overlay(Capsule().strokeBorder(Color.black.opacity(0.25), lineWidth: 1))
@@ -310,7 +310,7 @@ private struct HeaderControls: View {
                 AvatarChip(data: avatar, name: name, size: 36)
                     .padding(2.5)
                     .overlay(Circle().strokeBorder(
-                        AngularGradient(colors: [CV.accentLight, CV.accent, Color(hex: 0x5E5CE6), CV.accentLight],
+                        AngularGradient(colors: [.white, Color(hex: 0x6B6B6B), .white, Color(hex: 0x6B6B6B), .white],
                                         center: .center), lineWidth: 2))
             }
             .buttonStyle(.plain)
@@ -357,7 +357,7 @@ private struct WeatherChip: View {
 
     private var iconGlow: Color {
         switch weather.kind {
-        case .clear, .partly: return weather.isDay ? Color(hex: 0xFFC83D) : Color(hex: 0x9FB4FF)
+        case .clear, .partly: return weather.isDay ? Color(hex: 0xFFC83D) : Color(hex: 0xC8C8C8)
         case .storm: return Color(hex: 0xFFD60A)
         default: return CV.accentLight
         }
@@ -397,7 +397,7 @@ private struct HowItWorks: View {
                 VStack(spacing: 8) {
                     Image(systemName: step.0)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(i == 0 ? Color.white : CV.accentLight)
+                        .foregroundStyle(i == 0 ? CV.onAccent : CV.accentLight)
                         .frame(width: 48, height: 48)
                         .background(i == 0 ? AnyShapeStyle(CV.accent) : AnyShapeStyle(CV.accentSoft), in: Circle())
                     Text(step.1).cvText(13, .semibold, color: CV.text, inter: true)
@@ -432,13 +432,13 @@ private struct ActionTile: View {
             VStack(alignment: .leading, spacing: 0) {
                 Image(systemName: icon)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(primary ? CV.accent : CV.accentLight)
+                    .foregroundStyle(primary ? Color.white : CV.accentLight)
                     .frame(width: 38, height: 38)
-                    .background(primary ? Color.white : CV.accentSoft, in: Circle())
+                    .background(primary ? CV.onAccent : CV.accentSoft, in: Circle())
                 Spacer(minLength: 12)
-                Text(title).cvText(16, .semibold, color: primary ? .white : CV.text, tracking: -0.2, inter: true)
+                Text(title).cvText(16, .semibold, color: primary ? CV.onAccent : CV.text, tracking: -0.2, inter: true)
                     .lineLimit(1)
-                Text(subtitle).cvText(12, color: primary ? .white.opacity(0.75) : CV.muted, inter: true)
+                Text(subtitle).cvText(12, color: primary ? CV.onAccent.opacity(0.6) : CV.muted, inter: true)
                     .lineLimit(1).padding(.top, 2)
             }
             .padding(14)
@@ -446,7 +446,7 @@ private struct ActionTile: View {
             .frame(height: 124)
             .background {
                 if primary {
-                    LinearGradient(colors: [Color(hex: 0x2A95FF), Color(hex: 0x0A6FE0)],
+                    LinearGradient(colors: [Color.white, Color(hex: 0xE4E4E4)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                 } else {
                     CV.surface.opacity(0.92)
@@ -454,7 +454,7 @@ private struct ActionTile: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(primary ? Color.white.opacity(0.14) : CV.stroke, lineWidth: 1))
+                .strokeBorder(primary ? Color.white.opacity(0.6) : CV.stroke, lineWidth: 1))
         }
         .buttonStyle(PressScaleStyle(scale: 0.97))
     }
@@ -692,12 +692,12 @@ private struct WeekStrip: View {
         return Button { if let r = rides.first { onOpen(r) } } label: {
             VStack(spacing: 6) {
                 Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                    .cvText(10, .semibold, color: isToday ? .white.opacity(0.85) : CV.muted, tracking: 0.4, inter: true)
+                    .cvText(10, .semibold, color: isToday ? CV.onAccent.opacity(0.65) : CV.muted, tracking: 0.4, inter: true)
                 Text(day.formatted(.dateTime.day()))
-                    .cvText(18, .semibold, color: isToday ? .white : CV.text, inter: true)
+                    .cvText(18, .semibold, color: isToday ? CV.onAccent : CV.text, inter: true)
                     .monospacedDigit()
                 Circle()
-                    .fill(has ? (isToday ? Color.white : CV.accent) : Color.clear)
+                    .fill(has ? (isToday ? CV.onAccent : CV.accent) : Color.clear)
                     .frame(width: 6, height: 6)
             }
             .frame(maxWidth: .infinity).frame(height: 70)

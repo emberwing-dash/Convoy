@@ -398,7 +398,7 @@ struct FeedPostCard: View {
                             }
                         }
                         Spacer()
-                        Text("\(ride.pendingRequests) new").cvText(11, .bold, color: .white, inter: true)
+                        Text("\(ride.pendingRequests) new").cvText(11, .bold, color: CV.onAccent, inter: true)
                             .padding(.horizontal, 8).padding(.vertical, 3).background(CV.accent, in: Capsule())
                     }
                     .padding(12)
@@ -452,9 +452,9 @@ struct FeedPostCard: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if let icon { Image(systemName: icon).font(.system(size: 14, weight: .semibold)) }
-                Text(t).cvText(16, .bold, color: .white, inter: true)
+                Text(t).cvText(16, .bold, color: CV.onAccent, inter: true)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(CV.onAccent)
             .frame(maxWidth: .infinity).frame(height: 46)
             .background(CV.accent, in: Capsule())
             .shadow(color: .black.opacity(0.25), radius: 10, y: 5)
@@ -562,9 +562,9 @@ struct FeedMediaCarousel: View {
         case .route:
             if let ride = post.openRide {
                 RouteSnapshotView(coords: ride.preview, size: CGSize(width: width, height: height),
-                                  lineColor: Self.green, showsEndpoints: false)
+                                  lineColor: CV.routeUI, showsEndpoints: false)
             } else if let r = post.recap {
-                RouteSnapshotView(coords: r.path, size: CGSize(width: width, height: height), lineColor: Self.green)
+                RouteSnapshotView(coords: r.path, size: CGSize(width: width, height: height), lineColor: CV.routeUI)
             }
         }
     }
@@ -685,14 +685,14 @@ struct JoinRequestSheet: View {
                     NoteField(placeholder: "Say hello, mention your bike or where you'll join from", text: $note, limit: 200)
                 }
 
-                if let error { Text(error).cvText(13, .semibold, color: CV.accent, inter: true) }
+                if let error { Text(error).cvText(13, .semibold, color: CV.danger, inter: true) }
 
                 Button(action: send) {
                     HStack(spacing: 8) {
-                        if sending { ProgressView().tint(.white) } else { Image(systemName: "paperplane.fill") }
-                        Text("Send request to admin").cvText(17, .bold, color: .white, inter: true)
+                        if sending { ProgressView().tint(CV.onAccent) } else { Image(systemName: "paperplane.fill") }
+                        Text("Send request to admin").cvText(17, .bold, color: CV.onAccent, inter: true)
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(CV.onAccent)
                     .frame(maxWidth: .infinity).frame(height: 54)
                     .background(CV.accent, in: Capsule())
                 }
@@ -776,14 +776,14 @@ struct CommentsSheet: View {
                 }
                 .padding(20)
             }
-            if let error { Text(error).cvText(12, .semibold, color: CV.accent, inter: true).padding(.bottom, 6) }
+            if let error { Text(error).cvText(12, .semibold, color: CV.danger, inter: true).padding(.bottom, 6) }
             HStack(spacing: 10) {
                 TextField("", text: $draft, prompt: Text("Add a comment").foregroundColor(CV.text.opacity(0.35)), axis: .vertical)
                     .font(.system(size: 15)).foregroundStyle(CV.text).tint(CV.accent).lineLimit(1...4)
                     .onChange(of: draft) { _, v in if v.count > 500 { draft = String(v.prefix(500)) } }
                 Button(action: send) {
                     Image(systemName: sending ? "ellipsis" : "arrow.up")
-                        .font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                        .font(.system(size: 15, weight: .bold)).foregroundStyle(canSend ? CV.onAccent : CV.dim)
                         .frame(width: 36, height: 36).background(canSend ? CV.accent : Color.white.opacity(0.1), in: Circle())
                 }
                 .buttonStyle(.plain).disabled(!canSend)

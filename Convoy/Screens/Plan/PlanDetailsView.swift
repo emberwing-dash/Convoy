@@ -79,6 +79,17 @@ struct PlanDetailsView: View {
             )
         }
         .task {
+            // The start defaults to where the rider is now; they can change it on the route map.
+            if app.draft.from.trimmingCharacters(in: .whitespaces).isEmpty && app.draft.startCoord == nil {
+                let loc = LocationService.shared
+                loc.startTracking()
+                for _ in 0..<15 where loc.currentLocation == nil { try? await Task.sleep(for: .milliseconds(200)) }
+                if let c = loc.currentLocation?.coordinate,
+                   app.draft.from.isEmpty, app.draft.startCoord == nil {
+                    app.draft.from = "Current Location"
+                    app.draft.startCoord = Coord(c)
+                }
+            }
             if app.draft.selected == nil && (!app.draft.from.isEmpty || app.draft.startCoord != nil) && (!app.draft.to.isEmpty || app.draft.endCoord != nil) {
                 await app.findRoutes()
             }

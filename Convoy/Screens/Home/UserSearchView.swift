@@ -54,7 +54,7 @@ struct UserSearchView: View {
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
 
                     if let error = errorMessage {
-                        Text(error).cvText(13, color: CV.accent, inter: true)
+                        Text(error).cvText(13, color: CV.danger, inter: true)
                     }
 
                     if let user = foundUser {
@@ -87,12 +87,7 @@ struct UserSearchView: View {
                         Text("Share your invite link via WhatsApp or message.")
                             .cvText(14, color: CV.muted, inter: true)
                         let link = inviteLink
-                        ShareLink(item: "Join me on Convoy: \(link)") {
-                            Text("Share Invite Link")
-                                .cvText(15, .semibold, color: CV.onAccent, inter: true)
-                                .frame(maxWidth: .infinity).frame(height: 50)
-                                .background(CV.accent, in: Capsule())
-                        }
+                        CopyLinkRow(value: link, shareText: "Join me on Convoy: \(link)")
                     }
                     .padding(20)
                     .background(CV.glassFill, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -108,6 +103,14 @@ struct UserSearchView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .navigationBarBackButtonHidden().toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            // Opened from a convoy://friend/<handle> link: search that rider straight away.
+            if let pending = app.pendingUserSearch, !pending.isEmpty {
+                app.pendingUserSearch = nil
+                searchText = pending
+                search()
+            }
+        }
         .background(SwipeBackEnabler())
     }
 

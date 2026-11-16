@@ -26,6 +26,10 @@ struct PlanMapView: View {
     @State private var toSearchTask: Task<Void, Never>?
     @State private var stopSearchTasks: [Int: Task<Void, Never>] = [:]
     @State private var noResults = false
+    /// Text we set ourselves (picked suggestion / current location). The field's onChange must not
+    /// treat it as typing — that re-ran the search and reopened the suggestions sheet.
+    @State private var programmaticFrom: String? = nil
+    @State private var programmaticTo: String? = nil
 
     @FocusState private var focus: FocusedField?
     enum FocusedField: Hashable { case from, to, stop(Int) }
@@ -208,7 +212,7 @@ struct PlanMapView: View {
             if let c = fromCoord {
                 Annotation("Start", coordinate: c) {
                     ZStack {
-                        Circle().fill(CV.accent).frame(width: 20, height: 20)
+                        Circle().fill(CV.route).frame(width: 20, height: 20)
                         Circle().strokeBorder(.white, lineWidth: 3).frame(width: 20, height: 20)
                         Image(systemName: "location.fill")
                             .font(.system(size: 9, weight: .bold))
@@ -233,7 +237,7 @@ struct PlanMapView: View {
             if let c = toCoord {
                 Annotation("Destination", coordinate: c) {
                     ZStack {
-                        Circle().fill(CV.accent).frame(width: 34, height: 34)
+                        Circle().fill(CV.route).frame(width: 34, height: 34)
                         Circle().strokeBorder(.white, lineWidth: 2.5).frame(width: 34, height: 34)
                         Image(systemName: "flag.checkered")
                             .font(.system(size: 14, weight: .bold))
@@ -243,7 +247,7 @@ struct PlanMapView: View {
             }
             if routeLine.count > 1 {
                 MapPolyline(coordinates: routeLine)
-                    .stroke(CV.accent, lineWidth: 7)
+                    .stroke(CV.route, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
                 MapPolyline(coordinates: routeLine)
                     .stroke(Color.white.opacity(0.35), lineWidth: 2)
             }
@@ -266,6 +270,7 @@ struct PlanMapView: View {
                     .tint(CV.accent)
                     .cvText(16, .semibold, inter: true)
                     .onChange(of: fromText) { _, v in
+                        if v == programmaticFrom { programmaticFrom = nil; return }
                         if v == "Current Location" { return }
                         fromCoord = nil
                         activeStopIndex = nil
@@ -280,6 +285,7 @@ struct PlanMapView: View {
                             try? await Task.sleep(for: .milliseconds(300))
                             guard !Task.isCancelled else { return }
                             completer.search(v) { r in
+                                guard self.focus == .from else { return }  // field closed or a suggestion was picked
                                 self.fromResults = r
                                 self.showFromDropdown = !r.isEmpty
                                 self.noResults = r.isEmpty
@@ -292,6 +298,7 @@ struct PlanMapView: View {
                         activeStopIndex = nil
                         if !fromText.isEmpty, fromText != "Current Location" {
                             completer.search(fromText) { r in
+                                guard self.focus == .from else { return }  // field closed or a suggestion was picked
                                 self.fromResults = r
                                 self.showFromDropdown = !r.isEmpty
                             }
@@ -378,6 +385,7 @@ struct PlanMapView: View {
                     .tint(CV.accent)
                     .cvText(16, .semibold, inter: true)
                     .onChange(of: toText) { _, v in
+                        if v == programmaticTo { programmaticTo = nil; return }
                         toCoord = nil
                         activeStopIndex = nil
                         noResults = false
@@ -391,6 +399,7 @@ struct PlanMapView: View {
                             try? await Task.sleep(for: .milliseconds(300))
                             guard !Task.isCancelled else { return }
                             completer.search(v) { r in
+                                guard self.focus == .to else { return }
                                 self.toResults = r
                                 self.showToDropdown = !r.isEmpty
                                 self.noResults = r.isEmpty
@@ -403,6 +412,7 @@ struct PlanMapView: View {
                         activeStopIndex = nil
                         if !toText.isEmpty {
                             completer.search(toText) { r in
+                                guard self.focus == .to else { return }
                                 self.toResults = r
                                 self.showToDropdown = !r.isEmpty
                             }
@@ -479,7 +489,9 @@ struct PlanMapView: View {
 
     private var swapButton: some View {
         Button {
-            let t = fromText; fromText = toText; toText = t
+            let t = fromText
+            programmaticFrom = toText; programmaticTo = t
+            fromText = toText; toText = t
             let c = fromCoord; fromCoord = toCoord; toCoord = c
             scheduleRoute()
         } label: {
@@ -585,11 +597,11 @@ struct PlanMapView: View {
                     Spacer()
                     Button { confirm() } label: {
                         HStack(spacing: 6) {
-                            Text("See routes").cvText(15, .bold, inter: true)
+                            Text("See routes").cvText(15, .bold, color: CV.onAccent, inter: true)
                             Image(systemName: "arrow.right")
                                 .font(.system(size: 13, weight: .bold))
                         }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(CV.onAccent)
                         .padding(.horizontal, 20)
                         .frame(height: 46)
                         .background(CV.accent, in: Capsule())
@@ -640,6 +652,8 @@ struct PlanMapView: View {
     // MARK: - Draft hydration / confirmation
 
     private func hydrateFromDraft() {
+        programmaticFrom = app.draft.from
+        programmaticTo = app.draft.to
         fromText = app.draft.from
         toText   = app.draft.to
         fromCoord = app.draft.startCoord?.cl
@@ -722,19 +736,25 @@ struct PlanMapView: View {
         focus = nil
         noResults = false
         
+        fromSearchTask?.cancel(); toSearchTask?.cancel()
         if showFromDropdown {
+            programmaticFrom = full
             fromText = full
             showFromDropdown = false
+            fromResults = []
             geocode(full) { c in fromCoord = c; scheduleRoute() }
         } else if let idx = activeStopIndex {
             ensureStopCapacity(idx)
+            stopSearchTasks[idx]?.cancel()
             stopTexts[idx] = full
             stopResults[idx] = []
             activeStopIndex = nil
             geocode(full) { c in stopCoords[idx] = c; scheduleRoute() }
         } else if showToDropdown {
+            programmaticTo = full
             toText = full
             showToDropdown = false
+            toResults = []
             geocode(full) { c in toCoord = c; scheduleRoute() }
         }
     }
