@@ -604,16 +604,15 @@ final class AppState {
     }
 
     // MARK: - Edit ride
-    /// Opens the planner prefilled with an existing ride for editing.
     func beginEditingRide(_ rideID: UUID) {
         guard let ride = rides.first(where: { $0.id == rideID }) else { return }
-        guard ride.organiser == "you" || ride.organiser == "host" || true else { return }
         editingRideID = rideID
         draft = ride.plan
         rideDay = false
         selectedCrew = nil
         selectedFriends = []
         push(.planDetails)
+        push(.planReview)
     }
 
     private func finishEditingRide(id: UUID) -> UUID? {

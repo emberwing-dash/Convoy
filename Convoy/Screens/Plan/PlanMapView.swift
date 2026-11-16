@@ -29,6 +29,7 @@ struct PlanMapView: View {
 
     @FocusState private var focus: FocusedField?
     enum FocusedField: Hashable { case from, to, stop(Int) }
+    @State private var isSelectingProgrammatically = false
 
     @State private var fromCoord: CLLocationCoordinate2D? = nil
     @State private var toCoord:   CLLocationCoordinate2D? = nil
@@ -266,6 +267,7 @@ struct PlanMapView: View {
                     .tint(CV.red)
                     .cvText(16, .semibold, inter: true)
                     .onChange(of: fromText) { _, v in
+                        if isSelectingProgrammatically { return }
                         if v == "Current Location" { return }
                         fromCoord = nil
                         activeStopIndex = nil
@@ -328,6 +330,7 @@ struct PlanMapView: View {
                     TextField("Search checkpoint…", text: Binding(
                         get: { idx < stopTexts.count ? stopTexts[idx] : "" },
                         set: { newVal in
+                            if isSelectingProgrammatically { return }
                             ensureStopCapacity(idx)
                             stopTexts[idx] = newVal
                             stopCoords[idx] = nil
@@ -378,6 +381,7 @@ struct PlanMapView: View {
                     .tint(CV.red)
                     .cvText(16, .semibold, inter: true)
                     .onChange(of: toText) { _, v in
+                        if isSelectingProgrammatically { return }
                         toCoord = nil
                         activeStopIndex = nil
                         noResults = false
@@ -721,22 +725,30 @@ struct PlanMapView: View {
         let full = result.title + (result.subtitle.isEmpty ? "" : ", \(result.subtitle)")
         focus = nil
         noResults = false
-        
+        isSelectingProgrammatically = true
+
         if showFromDropdown {
             fromText = full
-            showFromDropdown = false
             geocode(full) { c in fromCoord = c; scheduleRoute() }
         } else if let idx = activeStopIndex {
             ensureStopCapacity(idx)
             stopTexts[idx] = full
-            stopResults[idx] = []
-            activeStopIndex = nil
             geocode(full) { c in stopCoords[idx] = c; scheduleRoute() }
         } else if showToDropdown {
             toText = full
-            showToDropdown = false
             geocode(full) { c in toCoord = c; scheduleRoute() }
         }
+
+        // Immediately close every dropdown so it doesn't linger after selection.
+        fromResults = []
+        toResults = []
+        stopResults = []
+        showFromDropdown = false
+        showToDropdown = false
+        activeStopIndex = nil
+
+        // Reset flag once the runloop drains so user edits resume searching.
+        DispatchQueue.main.async { isSelectingProgrammatically = false }
     }
 
     private func geocode(_ query: String,

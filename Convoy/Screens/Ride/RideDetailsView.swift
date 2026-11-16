@@ -20,7 +20,7 @@ struct RideDetailsView: View {
         let solo = ride.isSolo
         let invited: Bool = { if case .invited = ride.rsvp { return true } else { return false } }()
         let organisedByYou = ride.organiserId == app.backendUserId || ride.organiser == "you"
-        let canEdit = organisedByYou && !isRideDay && !isOngoing
+        let canEdit = organisedByYou
 
         return ZStack(alignment: .top) {
             CV.bg.ignoresSafeArea()
