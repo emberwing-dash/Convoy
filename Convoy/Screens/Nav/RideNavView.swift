@@ -98,25 +98,6 @@ struct RideNavView: View {
             VStack(spacing: 0) {
                 topTurnBanner.padding(.top, 54).padding(.horizontal, 16)
 
-                if !liveLocationManager.otherRidersLocations.isEmpty && phase != .arrived {
-                    Button { focusOnConvoy() } label: {
-                        HStack(spacing: 6) {
-                            Circle().fill(CV.green).frame(width: 8, height: 8)
-                            Text("\(liveLocationManager.otherRidersLocations.count) rider\(liveLocationManager.otherRidersLocations.count == 1 ? "" : "s") live in Convoy")
-                                .cvText(12, .semibold, color: .white, inter: true)
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(Color(hex: 0x00D2FF))
-                        }
-                        .padding(.horizontal, 14).frame(height: 32)
-                        .background(Color(hex: 0x1A1A1D).opacity(0.92), in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color(hex: 0x00D2FF).opacity(0.4), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 6)
-                }
-
                 // MARK: - Rally warning banner (#13)
                 if let banner = RallyCoordinator.shared.activeBanner, phase == .riding {
                     RallyBannerView(warning: banner) {

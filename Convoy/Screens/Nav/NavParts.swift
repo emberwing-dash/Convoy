@@ -147,44 +147,55 @@ struct AppleMapsTopBanner: View {
     var onBack: (() -> Void)? = nil
 
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Back button — floating above the banner, top-left
             if let onBack {
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(CV.cream)
-                        .frame(width: 36, height: 36)
-                        .background(Color.white.opacity(0.12), in: Circle())
-                }.buttonStyle(.plain)
-            }
-            ZStack {
-                Circle().fill(Color.white.opacity(0.1)).frame(width: 44, height: 44)
-                Image(systemName: symbol)
-                    .font(.system(size: 24, weight: .semibold)).foregroundStyle(tint)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                if !distance.isEmpty {
-                    Text(distance).font(.system(size: 24, weight: .bold)).foregroundStyle(CV.cream)
-                }
-                Text(instruction).font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(CV.cream).lineLimit(1)
-                if let sub = subInstruction, !sub.isEmpty {
-                    Text(sub).font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(CV.cream.opacity(0.6)).lineLimit(1)
+                HStack {
+                    Button(action: onBack) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(CV.cream)
+                            .frame(width: 40, height: 40)
+                            .background(Color(hex: 0x1A1A1D).opacity(0.96), in: Circle())
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                            .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
                 }
             }
-            Spacer()
+
+            // Turn-by-turn banner (unchanged)
+            HStack(alignment: .center, spacing: 14) {
+                ZStack {
+                    Circle().fill(Color.white.opacity(0.1)).frame(width: 44, height: 44)
+                    Image(systemName: symbol)
+                        .font(.system(size: 24, weight: .semibold)).foregroundStyle(tint)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    if !distance.isEmpty {
+                        Text(distance).font(.system(size: 24, weight: .bold)).foregroundStyle(CV.cream)
+                    }
+                    Text(instruction).font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(CV.cream).lineLimit(1)
+                    if let sub = subInstruction, !sub.isEmpty {
+                        Text(sub).font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(CV.cream.opacity(0.6)).lineLimit(1)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(Color(hex: 0x1A1A1D).opacity(0.96))
+                    .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    .shadow(color: Color.black.opacity(0.4), radius: 18, y: 4)
+            )
         }
-        .padding(.horizontal, 16).padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Color(hex: 0x1A1A1D).opacity(0.96))
-                .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                .shadow(color: Color.black.opacity(0.4), radius: 18, y: 4)
-        )
-    }
-}
+        .offset(y:-50)
+    }}
 
 struct AppleMapsRightControls: View {
     var isTrackingUser: Bool
@@ -197,17 +208,6 @@ struct AppleMapsRightControls: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            if hasConvoyRiders, let onFocusConvoy {
-                Button(action: onFocusConvoy) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0x00D2FF))
-                        .frame(width: 48, height: 48)
-                        .background(Color(hex: 0x1A1A1D, opacity: 0.92), in: Circle())
-                        .overlay(Circle().strokeBorder(Color(hex: 0x00D2FF).opacity(0.5), lineWidth: 1.5))
-                }.buttonStyle(.plain)
-            }
-
             Button(action: onRecentre) {
                 Image(systemName: isTrackingUser ? "location.fill" : "location")
                     .font(.system(size: 18, weight: .semibold))
