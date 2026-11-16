@@ -40,7 +40,7 @@ struct ConvoyTabBar: View {
                 Image(systemName: symbol)
                     .font(.system(size: 20, weight: .semibold))
                 Text(title)
-                    .cvText(13, .semibold, color: on ? CV.ink : CV.cream.opacity(0.75), inter: true)
+                    .cvText(13, .medium, color: on ? CV.ink : CV.cream.opacity(0.75), inter: true)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }

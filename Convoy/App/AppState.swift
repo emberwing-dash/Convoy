@@ -85,9 +85,14 @@ enum RideJoinOutcome {
 @Observable
 final class AppState {
     enum Phase { case onboarding, main }
+    enum Appearance: String { case dark, light }
 
     var phase: Phase = .onboarding
+    var appearance: Appearance = Appearance(rawValue: UserDefaults.standard.string(forKey: "app.appearance") ?? "dark") ?? .dark {
+        didSet { UserDefaults.standard.set(appearance.rawValue, forKey: "app.appearance") }
+    }
     var hasCompletedPermissions: Bool = UserDefaults.standard.bool(forKey: "hasCompletedPermissionPrompt")
+    
     var activeRideMedia: [RideMediaItem] = []
 
     // Profile
@@ -173,7 +178,8 @@ final class AppState {
         if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
             self.phase = .main
             self.displayName = profile.displayName.isEmpty ? "Rider" : profile.displayName
-            self.handle = profile.handle.isEmpty ? "@rider" : profile.handle
+            let stored = profile.handle.isEmpty ? "rider" : profile.handle
+            self.handle = stored.replacingOccurrences(of: "@", with: "")
             self.avatarImageData = profile.avatarImageData
         }
 
@@ -530,7 +536,7 @@ final class AppState {
             .replacingOccurrences(of: " ", with: "")
             .filter { $0.isLetter || $0.isNumber }
         let safeBase = clean.isEmpty ? "rider" : String(clean.prefix(12))
-        return "@\(safeBase)\(Int.random(in: 100...999))"
+        return "\(safeBase)\(Int.random(in: 100...999))"
     }
 
     func completeOnboarding(name: String, handle: String, imageData: Data? = nil) {

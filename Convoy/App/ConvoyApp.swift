@@ -8,7 +8,7 @@ struct ConvoyApp: App {
         WindowGroup {
             RootView()
                 .environment(app)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(app.appearance == .light ? .light : .dark)
                 .background(CV.bg)
         }
     }

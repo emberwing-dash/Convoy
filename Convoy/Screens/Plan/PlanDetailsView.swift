@@ -12,7 +12,6 @@ struct PlanDetailsView: View {
 
         DesignCanvas(background: ContourBackdrop()) {
             RoundIconButton(symbol: "chevron.left") { app.pop() }.at(20, 58)
-            Text("New ride").cvText(17, .semibold, tracking: -0.204, inter: true).frame(width: 393).at(0, 69)
             Text("What’s the plan?").cvText(32, .bold, tracking: -0.64, inter: true).at(20, 118)
             Text("Name your ride and set the route.")
                 .cvText(16, color: CV.cream.opacity(0.65), inter: true).at(20, 160)

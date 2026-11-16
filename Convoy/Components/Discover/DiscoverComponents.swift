@@ -136,17 +136,17 @@ struct MapThumb: View {
         guard let snap = try? await MKMapSnapshotter(options: opts).start() else { return }
         let out = UIGraphicsImageRenderer(size: size).image { ctx in
             snap.image.draw(at: .zero)
-            let red = UIColor(CV.red)
+            let routeBlue = UIColor(red: 0.04, green: 0.52, blue: 1.0, alpha: 1)
             if pts.count > 1 {
                 let line = UIBezierPath()
                 for (i, c) in pts.enumerated() { i == 0 ? line.move(to: snap.point(for: c)) : line.addLine(to: snap.point(for: c)) }
-                red.setStroke(); line.lineWidth = 3; line.lineJoinStyle = .round; line.stroke()
+                routeBlue.setStroke(); line.lineWidth = 3; line.lineJoinStyle = .round; line.stroke()
             }
             if pin {
                 let p = snap.point(for: pts.count > 1 ? pts[pts.count - 1] : first)
                 let r = CGRect(x: p.x - 7, y: p.y - 7, width: 14, height: 14)
                 UIColor.white.setFill(); ctx.cgContext.fillEllipse(in: r.insetBy(dx: -2, dy: -2))
-                red.setFill(); ctx.cgContext.fillEllipse(in: r)
+                routeBlue.setFill(); ctx.cgContext.fillEllipse(in: r)
             }
         }
         Self.cache.setObject(out, forKey: key(size) as NSString)

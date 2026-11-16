@@ -34,7 +34,7 @@ struct ChatbotView: View {
             CircleBackButton { app.pop() }
             Spacer()
             VStack(spacing: 1) {
-                Text("Convoy Assistant").cvText(16, .semibold, inter: true)
+                Text("Ellis").cvText(16, .semibold, inter: true)
                 Text(rateLabel).cvText(11, color: rateColor, inter: true)
             }
             Spacer()
@@ -122,7 +122,7 @@ struct ChatbotView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
                 assistantAvatar
-                Text("Hey \(app.displayName), what can I do for you?")
+                Text("Hey \(app.displayName), I’m Ellis. How can I help you today?")
                     .cvText(15, lineHeight: 21, inter: true)
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -273,11 +273,12 @@ struct ChatbotView: View {
     }
 
     private var assistantAvatar: some View {
-        Image(systemName: "sparkles")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(CV.ink)
+        Image("chatbot_logo")
+            .resizable()
+            .scaledToFit()
             .frame(width: 34, height: 34)
-            .background(CV.red, in: Circle())
+            .clipShape(Circle())
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.15), lineWidth: 1))
     }
 
     private var inputBar: some View {
@@ -286,7 +287,7 @@ struct ChatbotView: View {
                 TextField("",
                           text: $input,
                           prompt: Text(engine.promptsRemaining > 0
-                                       ? "Ask anything about rides, places, crews…"
+                                       ? "Ask Ellis anything…"
                                        : "Daily limit reached")
                                     .foregroundColor(CV.cream.opacity(0.35)),
                           axis: .vertical)

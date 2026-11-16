@@ -8,6 +8,7 @@ struct PlanRoutesView: View {
     @Environment(AppState.self) private var app
     @State private var camera: MapCameraPosition = .automatic
     @State private var mapStyleType: MapStyleType = .standard
+    @State private var sheetCollapsed = false
 
     private var routes: [RouteStyle: RouteSummary] { app.draft.routes }
     private var loading: Bool {
@@ -99,24 +100,34 @@ struct PlanRoutesView: View {
 
     private var sheet: some View {
         VStack(spacing: 0) {
+            // Drag handle — tap to toggle, or drag up/down to expand/collapse.
             Capsule()
                 .fill(Color.white.opacity(0.25))
                 .frame(width: 36, height: 5)
                 .padding(.top, 10)
                 .padding(.bottom, 8)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    sheetHeader
-                    sheetBody
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        sheetCollapsed.toggle()
+                    }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+
+            if !sheetCollapsed {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        sheetHeader
+                        sheetBody
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 20)
+                }
+                .scrollIndicators(.hidden)
             }
-            .scrollIndicators(.hidden)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: sheetHeight)
+        .frame(height: sheetCollapsed ? 44 : sheetHeight)
         .background(
             UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
                 .fill(Color(hex: 0x1A1A1D))
@@ -125,6 +136,16 @@ struct PlanRoutesView: View {
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                 )
                 .ignoresSafeArea(edges: .bottom)
+        )
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: sheetCollapsed)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 30)
+                .onEnded { v in
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        if v.translation.height > 60 { sheetCollapsed = true }
+                        else if v.translation.height < -60 { sheetCollapsed = false }
+                    }
+                }
         )
     }
 

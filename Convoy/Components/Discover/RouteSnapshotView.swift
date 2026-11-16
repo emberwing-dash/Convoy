@@ -41,11 +41,12 @@ struct RouteSnapshotView: View {
                 i == 0 ? path.move(to: p) : path.addLine(to: p)
             }
             path.lineJoinStyle = .round; path.lineCapStyle = .round
+            let routeBlue = UIColor(red: 0.04, green: 0.52, blue: 1.0, alpha: 1)
             UIColor.black.withAlphaComponent(0.35).setStroke(); path.lineWidth = 7; path.stroke()
-            UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1).setStroke(); path.lineWidth = 4; path.stroke()
+            routeBlue.setStroke(); path.lineWidth = 4; path.stroke()
             if let a = pts.first, let b = pts.last {
                 dot(at: snap.point(for: a), fill: .white, r: 6)
-                dot(at: snap.point(for: b), fill: UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1), r: 8, ring: true)
+                dot(at: snap.point(for: b), fill: routeBlue, r: 8, ring: true)
             }
         }
     }
