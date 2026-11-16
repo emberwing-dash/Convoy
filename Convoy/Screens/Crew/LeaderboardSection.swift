@@ -24,7 +24,7 @@ struct LeaderboardSection: View {
                     }
                 }
             }
-            .scrollClipDisabled()
+            .frame(maxWidth: .infinity)
 
             HStack(spacing: 8) {
                 Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 13)).foregroundStyle(CV.muted)

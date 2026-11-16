@@ -15,7 +15,7 @@ import SwiftUI
 enum CV {
     // Backgrounds and surfaces (lightest last). Separation comes from tone, not borders.
     /// Screen background.
-    static let bg = Color(hex: 0x10141C)
+    static let bg = Color(hex: 0x08090C)
     /// Grouped / secondary background (sheets, inset areas, map placeholders).
     static let bg2 = Color(hex: 0x151B25)
     /// Cards and list rows.
@@ -54,6 +54,9 @@ enum CV {
 
     // Compatibility aliases for older call sites.
     static let green = success
+    static let red = Color(hex: 0xFF3B30)
+    static let cream = Color(hex: 0xF3EEE3)
+    static let ink = Color(hex: 0x0D0D0F)
 
     enum Radius {
         static let small: CGFloat = 10

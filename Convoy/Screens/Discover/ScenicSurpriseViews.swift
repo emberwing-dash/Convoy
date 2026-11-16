@@ -71,6 +71,7 @@ struct ScenicView: View {
                     }
                     .padding(.horizontal, 20)
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, -20)
             }
         }

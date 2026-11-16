@@ -98,8 +98,7 @@ final class SocialStore {
             feedState = .loaded
             feedLoadedAt = .now
         } catch {
-            let e = SocialError.from(error)
-            if !e.isCancellation { feedState = .failed(e.message) } else if feed.isEmpty { feedState = .idle }
+            feedState = .failed(SocialError.from(error).message)
         }
     }
 
@@ -244,8 +243,7 @@ final class SocialStore {
             suggestions = fetched.shuffled()
             suggestionsState = .loaded
         } catch {
-            let e = SocialError.from(error)
-            if !e.isCancellation { suggestionsState = .failed(e.message) } else if suggestions.isEmpty { suggestionsState = .idle }
+            suggestionsState = .failed(SocialError.from(error).message)
         }
     }
 

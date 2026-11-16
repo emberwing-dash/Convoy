@@ -13,6 +13,7 @@ struct CrewFeedSection: View {
             suggestions
             posts
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task {
             async let f: () = app.social.loadFeed()
             async let s: () = app.social.loadSuggestions()
@@ -33,7 +34,7 @@ struct CrewFeedSection: View {
         Button { app.push(.userSearch(.friends)) } label: {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass").font(.system(size: 16)).foregroundStyle(CV.muted)
-                Text("Search riders by name or @username").cvText(15, color: CV.muted, inter: true)
+                Text("Search riders by name or @username").cvText(15, color: CV.muted, inter: true).lineLimit(1)
                 Spacer()
             }
             .padding(.horizontal, 16).frame(height: 48)
@@ -59,7 +60,7 @@ struct CrewFeedSection: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) { ForEach(0..<3, id: \.self) { _ in Skeleton(corner: 22).frame(width: 148, height: 214) } }
                     }
-                    .scrollDisabled(true)
+                    .frame(maxWidth: .infinity)
                 case .failed(let m):
                     Text(m).cvText(13, color: CV.muted, inter: true)
                 case .loaded:
@@ -78,7 +79,7 @@ struct CrewFeedSection: View {
                     }
                     .padding(.trailing, 20)
                 }
-                .scrollClipDisabled()
+                .frame(maxWidth: .infinity)
             }
         }
         .onAppear {

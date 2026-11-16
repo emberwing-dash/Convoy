@@ -26,11 +26,14 @@ struct CrewView: View {
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 20)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20).padding(.bottom, 130)
             }
             .scrollIndicators(.hidden)
+            .frame(maxWidth: .infinity)
             .refreshable { await refresh() }
             .task {
                 await app.loadCrews()

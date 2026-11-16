@@ -1,13 +1,81 @@
 import SwiftUI
 
-/// Standard screen background: flat graphite, edge to edge.
+/// Standard screen background: near-black with a topographic contour map and a soft blue glow.
 struct ScreenBackground: View {
     var body: some View {
-        CV.bg
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
+        TopoBackground()
     }
 }
+
+/// Black base, faint white contour lines like a topo map, and a quiet blue glow up top.
+/// Drawn in code so it's sharp on every screen size; rendered once and cached by the GPU.
+struct TopoBackground: View {
+    var glow: Bool = true
+
+    var body: some View {
+        ZStack {
+            CV.bg
+            if glow {
+                RadialGradient(colors: [CV.accent.opacity(0.07), .clear],
+                               center: UnitPoint(x: 0.15, y: 0.0), startRadius: 0, endRadius: 420)
+                RadialGradient(colors: [Color(hex: 0x5E5CE6).opacity(0.04), .clear],
+                               center: UnitPoint(x: 1.0, y: 0.55), startRadius: 0, endRadius: 360)
+            }
+            ContourLines()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Rings of wobbly closed curves around a few "peaks", like the contour lines on a map.
+struct ContourLines: View {
+    var opacity: Double = 0.07
+
+    /// Peaks in unit space: x, y, base radius (fraction of width), ring count, wobble phase.
+    private static let peaks: [(CGFloat, CGFloat, CGFloat, Int, Double)] = [
+        (0.12, 0.10, 0.10, 9, 0.4),
+        (0.88, 0.30, 0.08, 11, 1.7),
+        (0.30, 0.62, 0.07, 10, 2.9),
+        (0.95, 0.85, 0.09, 8, 4.1),
+        (0.05, 0.95, 0.06, 7, 5.3),
+    ]
+
+    var body: some View {
+        Canvas { ctx, size in
+            let w = size.width
+            for (i, peak) in Self.peaks.enumerated() {
+                let c = CGPoint(x: peak.0 * w, y: peak.1 * size.height)
+                for ring in 1...peak.3 {
+                    let r = w * peak.2 * CGFloat(ring) * 0.62
+                    var path = Path()
+                    let steps = 96
+                    for k in 0...steps {
+                        let t = Double(k) / Double(steps) * 2 * .pi
+                        // Two harmonics + a drift per ring give organic, non-repeating shapes.
+                        let wobble = 1
+                            + 0.16 * sin(3 * t + peak.4 + Double(ring) * 0.35)
+                            + 0.08 * sin(5 * t - peak.4 * 1.3 + Double(ring) * 0.2)
+                            + 0.05 * sin(2 * t + Double(i))
+                        let p = CGPoint(x: c.x + CGFloat(cos(t) * wobble) * r,
+                                        y: c.y + CGFloat(sin(t) * wobble) * r * 0.82)
+                        k == 0 ? path.move(to: p) : path.addLine(to: p)
+                    }
+                    path.closeSubpath()
+                    // Every fifth line is an "index contour", a little brighter, like real topo maps.
+                    let index = ring % 5 == 0
+                    ctx.stroke(path, with: .color(.white.opacity(index ? opacity * 1.8 : opacity)),
+                               lineWidth: index ? 1.1 : 0.7)
+                }
+            }
+        }
+        .drawingGroup()
+    }
+}
+
+typealias ContourBackdrop = ScreenBackground
 
 /// Glass surface: 6% white fill + 12% white hairline.
 struct GlassBackground<S: InsettableShape>: View {

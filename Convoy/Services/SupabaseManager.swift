@@ -263,6 +263,19 @@ final class SupabaseManager {
             let p_creator_id: UUID
             let p_avatar_data: String?
             let p_member_ids: [UUID]
+
+            enum CodingKeys: String, CodingKey { case p_name, p_code, p_creator_id, p_avatar_data, p_member_ids }
+
+            // Always send p_avatar_data (as null when there's no photo). The live function has no default
+            // for it, and leaving the key out makes PostgREST look for a different signature (PGRST202).
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: CodingKeys.self)
+                try c.encode(p_name, forKey: .p_name)
+                try c.encode(p_code, forKey: .p_code)
+                try c.encode(p_creator_id, forKey: .p_creator_id)
+                try c.encode(p_avatar_data, forKey: .p_avatar_data)
+                try c.encode(p_member_ids, forKey: .p_member_ids)
+            }
         }
 
         var currentCode = code

@@ -4,8 +4,6 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppState.self) private var app
     @State private var scrollY: CGFloat = 0
-    /// Colours pulled from the next ride's photo; tints the background behind the hero card.
-    @State private var palettes: [UUID: ImagePalette] = [:]
     private var weather: WeatherService { .shared }
 
     var body: some View {
@@ -24,6 +22,7 @@ struct HomeView: View {
                     if sorted.isEmpty && app.pendingRideJoinsByMe.isEmpty { newUserContent }
                     else { ridesContent(sorted) }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 130)
@@ -31,6 +30,7 @@ struct HomeView: View {
             .coordinateSpace(name: "homeScroll")
             .scrollBounceBehavior(.basedOnSize)
             .scrollIndicators(.hidden)
+            .frame(maxWidth: .infinity)
 
             // Frosted strip behind the status bar once content scrolls under it.
             Color.clear.frame(height: 0)
@@ -41,12 +41,9 @@ struct HomeView: View {
                 .animation(.easeOut(duration: 0.2), value: scrollY < -24)
                 .allowsHitTesting(false)
         }
-        // As a background it can't change the screen's layout, however tall the wash is.
-        .background(alignment: .top) {
-            HomeAmbientBackground(ride: sorted.first,
-                                  palette: sorted.first.flatMap { palettes[$0.id] ?? ImagePalette.cached($0.id.uuidString) },
-                                  scrollY: scrollY)
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Matte black with faint contour lines; it doesn't change with the ride photo.
+        .background { TopoBackground(glow: false) }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .task(id: sorted.first?.id) {
@@ -132,9 +129,13 @@ struct HomeView: View {
     private var newUserContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
-                Image("no_upcomming_rides")
-                    .resizable().scaledToFill()
-                    .frame(height: 400).frame(maxWidth: .infinity)
+                // The photo fills the card but never decides its width: a fill-scaled landscape
+                // image is wider than the screen, which pushed the whole Home tab sideways.
+                Color.clear
+                    .frame(maxWidth: .infinity).frame(height: 400)
+                    .overlay {
+                        Image("no_upcomming_rides").resizable().scaledToFill()
+                    }
                     .clipped()
                     .allowsHitTesting(false)
                 LinearGradient(stops: [
@@ -150,6 +151,7 @@ struct HomeView: View {
                 }
                 .padding(22)
             }
+            .frame(maxWidth: .infinity)
             .frame(height: 400)
             .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 32, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
@@ -160,6 +162,7 @@ struct HomeView: View {
 
             HowItWorks().padding(.top, 28)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: With rides
@@ -171,10 +174,7 @@ struct HomeView: View {
             if let next {
                 sectionTitle(next.departs > .now ? "Up next" : "Ready to roll")
                     .padding(.top, 26)
-                HeroRideCard(ride: next, onImage: { img in
-                    guard let p = ImagePalette.from(img, key: next.id.uuidString), palettes[next.id] != p else { return }
-                    withAnimation(.easeInOut(duration: 0.6)) { palettes[next.id] = p }
-                }) { app.push(.rideDetails(next.id)) }
+                HeroRideCard(ride: next) { app.push(.rideDetails(next.id)) }
                     .padding(.top, 12)
             }
 
@@ -222,6 +222,7 @@ struct HomeView: View {
                 .scrollTargetBehavior(.viewAligned)
                 .contentMargins(.horizontal, 20, for: .scrollContent)
                 .scrollIndicators(.hidden)
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, -20)
                 .padding(.top, 12)
             } else if !sorted.isEmpty {
@@ -267,67 +268,6 @@ struct HomeView: View {
         }
         .padding(12)
         .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-}
-
-// MARK: - Ambient background
-
-/// A wash of colour behind Home taken from the next ride's photo: the sky tone at the top
-/// flowing into the ground tone behind the card, so every destination gives Home its own
-/// mood. Without a ride it falls back to a quiet blue glow.
-private struct HomeAmbientBackground: View {
-    let ride: Ride?
-    let palette: ImagePalette?
-    let scrollY: CGFloat
-
-    var body: some View {
-        let pulled = min(0, scrollY)
-        ZStack(alignment: .top) {
-            CV.bg
-            Group {
-                if let palette {
-                    ZStack(alignment: .top) {
-                        LinearGradient(stops: [
-                            .init(color: palette.top, location: 0),
-                            .init(color: palette.top.opacity(0.85), location: 0.22),
-                            .init(color: palette.bottom.opacity(0.75), location: 0.55),
-                            .init(color: palette.bottom.opacity(0), location: 1)
-                        ], startPoint: .top, endPoint: .bottom)
-                        // Soft glow that sits right behind the hero card.
-                        RadialGradient(colors: [palette.bottom.opacity(0.9), palette.bottom.opacity(0)],
-                                       center: UnitPoint(x: 0.5, y: 0.55), startRadius: 20, endRadius: 360)
-                        if let ride {
-                            RideCoverImage(cover: RideCoverService.shared.cover(for: ride),
-                                           destination: ride.plan.endCoord, height: 900,
-                                           placeName: RideCoverService.destinationName(ride))
-                                .scaleEffect(1.4)
-                                .blur(radius: 80)
-                                .opacity(0.22)
-                                .blendMode(.softLight)
-                        }
-                    }
-                    .frame(height: 900)
-                    .transition(.opacity)
-                } else {
-                    ZStack {
-                        RadialGradient(colors: [CV.accent.opacity(0.38), .clear],
-                                       center: UnitPoint(x: 0.12, y: 0.08), startRadius: 0, endRadius: 380)
-                        RadialGradient(colors: [Color(hex: 0x5E5CE6).opacity(0.26), .clear],
-                                       center: UnitPoint(x: 0.95, y: 0.4), startRadius: 0, endRadius: 340)
-                    }
-                    .frame(height: 760)
-                }
-            }
-            .offset(y: pulled * 0.4)
-            .opacity(Double(max(0.3, 1 + pulled / 600)))
-
-            // Keeps the status bar and header legible over bright tones.
-            LinearGradient(colors: [Color.black.opacity(0.28), .clear], startPoint: .top, endPoint: .bottom)
-                .frame(height: 200)
-        }
-        .animation(.easeInOut(duration: 0.6), value: palette)
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
     }
 }
 
@@ -660,6 +600,7 @@ struct RideCountdownPanel: View {
             Text(String(format: "%02d", v))
                 .cvText(28, .bold, color: accent ? CV.accentLight : .white.opacity(dim ? 0.35 : 1), tracking: -0.6, inter: true)
                 .monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.7)
                 .contentTransition(.numericText(countsDown: true))
             Text(label).cvText(11, .medium, color: .white.opacity(0.5), inter: true)
         }
