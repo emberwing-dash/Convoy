@@ -25,6 +25,7 @@ final class POIResults {
 struct RideNavView: View {
     @Environment(AppState.self) private var app
     private let locationService = LocationService.shared
+    @StateObject private var watchConnectivity = PhoneWatchConnectivityManager.shared
 
     enum Alert: Equatable {
         case none
@@ -372,6 +373,25 @@ struct RideNavView: View {
                                 .foregroundStyle(.white)
                                 .rotationEffect(.degrees(h.trueHeading))
                         }
+                    }
+                }
+            }
+
+            // Live Apple Watch paired location annotation
+            if let watchLoc = watchConnectivity.lastWatchLocation {
+                Annotation("Apple Watch", coordinate: watchLoc.coordinate) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(hex: 0x007AFF).opacity(0.25))
+                            .frame(width: 52, height: 52)
+                        Circle()
+                            .fill(Color(hex: 0x007AFF))
+                            .frame(width: 26, height: 26)
+                            .shadow(color: Color(hex: 0x007AFF).opacity(0.6), radius: 5)
+                            .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                        Image(systemName: "applewatch")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
                     }
                 }
             }

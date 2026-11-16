@@ -46,7 +46,7 @@ struct RouteSummary: Hashable, Sendable {
     var rawTime: Double = 0
 }
 
-func durationText(_ minutes: Int) -> String {
+func formatDuration(_ minutes: Int) -> String {
     if minutes <= 0 { return "-- min" }
     if minutes >= 24 * 60 {
         let d = Int((Double(minutes) / 1440).rounded())
@@ -127,7 +127,7 @@ struct PlanDraft: Hashable {
 
     func durationText(_ s: RouteStyle) -> String {
         if let m = routes[s]?.minutes, m > 0 {
-            return Convoy.durationText(m)
+            return formatDuration(m)
         }
         return "-- min"
     }

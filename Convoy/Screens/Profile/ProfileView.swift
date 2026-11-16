@@ -4,6 +4,8 @@ import SwiftUI
 struct ProfileView: View {
     @Environment(AppState.self) private var app
     @State private var showSignOutConfirm = false
+    @State private var showWatchSheet = false
+    @ObservedObject private var watchManager = PhoneWatchConnectivityManager.shared
 
     private var totalRides: Int { app.completedRides.count }
     private var totalKm: String {
@@ -111,11 +113,15 @@ struct ProfileView: View {
 
                     sectionTitle("SETTINGS").padding(.top, 24)
                     VStack(spacing: 0) {
+                        rowLink("applewatch",
+                                "Apple Watch",
+                                trailing: watchManager.isReachable ? "Connected" : (watchManager.isWatchPaired ? "Paired" : "Not Paired"),
+                                action: { showWatchSheet = true },
+                                first: true)
                         rowLink("point.topleft.down.to.point.bottomright.curvepath",
                                 "Saved routes",
                                 trailing: "\(app.savedRoutes.count)",
-                                action: { app.push(.discoverSaved) },
-                                first: true)
+                                action: { app.push(.discoverSaved) })
                         rowLink("bell",
                                 "Notifications",
                                 trailing: app.notifications.isEmpty ? nil : "\(app.notifications.count)",
@@ -169,6 +175,9 @@ struct ProfileView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Your local data will be cleared from this device.")
+        }
+        .fullScreenCover(isPresented: $showWatchSheet) {
+            WatchPairingSheet()
         }
         .onAppear {
             app.completedRides = StorageService.shared.loadCompletedRides()

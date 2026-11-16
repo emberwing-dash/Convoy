@@ -44,13 +44,13 @@ struct GarageView: View {
     @Environment(AppState.self) private var app
     @State private var store = GarageStore.shared
 
-    @State private var topTab: GarageTopTab = .bike
+    @State private var topTab: GarageTopTab = .gear
     @State private var subTab: GarageSubTab = .info
     @State private var selectedBikeIndex = 0
 
     // sheets / alerts
     @State private var showAddBike   = false
-    @State private var showAddGear   = false
+    @State private var showAddGear   = true
     @State private var showAddAccessory = false
     @State private var showEditBike  = false
     @State private var showUploadDoc: DocType? = nil
@@ -102,9 +102,8 @@ struct GarageView: View {
         .sheet(isPresented: $showAddBike) {
             AddBikeFlowView { b in store.addBike(b); selectedBikeIndex = 0 }
         }
-        .sheet(isPresented: $showAddGear) {
+        .fullScreenCover(isPresented: $showAddGear) {
             QuickGearAddSheet { g in store.addGear(g) }
-                .presentationDragIndicator(.hidden)
         }
         .sheet(isPresented: $showAddAccessory) {
             if let b = bike {
@@ -984,14 +983,23 @@ struct QuickGearAddSheet: View {
     private let purple = Color(hex: 0xD027EF)
 
     var body: some View {
-        Color(hex: 0x161218).ignoresSafeArea()
-            .overlay(alignment: .top) {
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [Color(hex: 0x360808), Color(hex: 0x1A0507), CV.bg],
+                           startPoint: .top, endPoint: .center)
+                .ignoresSafeArea()
+
             VStack(spacing: 0) {
-                HStack {
-                    Button("Cancel") { dismiss() }.cvText(16, .semibold, color: amber, inter: true)
-                    Spacer(); Text("Quick Gear Add").cvText(17, .bold, color: CV.cream, inter: true); Spacer()
-                    Color.clear.frame(width: 50)
-                }.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 10)
+                // Garage-style header with back button
+                ZStack {
+                    Text("Quick Gear Add").cvText(17, .semibold, color: CV.cream, inter: true)
+                    HStack {
+                        CircleBackButton { dismiss() }
+                        Spacer()
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 14)
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
@@ -1003,7 +1011,7 @@ struct QuickGearAddSheet: View {
                                 Text("Add Riding Gear").cvText(20, .bold, color: CV.cream, inter: true)
                                 Text("Add to your gear collection").cvText(13, color: CV.muted, inter: true)
                             }
-                        }.padding(.top, 8)
+                        }.padding(.top, 4)
 
                         Text("Gear Type").cvText(14, .bold, color: CV.cream, inter: true)
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
@@ -1080,8 +1088,9 @@ struct QuickGearAddSheet: View {
                         }.buttonStyle(.plain).padding(.top, 8).padding(.bottom, 30)
                     }.padding(.horizontal, 20)
                 }.scrollIndicators(.hidden)
-            } // VStack
-        } // overlay
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
     }
 
     private func gearField(_ label: String, _ ph: String, _ text: Binding<String>, kbd: UIKeyboardType = .default) -> some View {
