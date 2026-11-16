@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		5630D71F3080DA1000A64306 /* ConvoyWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 5630D71E3080DA1000A64306 /* ConvoyWatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AA0000033080DA0F00A64306 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000023080DA0F00A64306 /* WhisperKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -49,6 +50,7 @@
 		5630D71B3080DA1000A64306 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				AA0000033080DA0F00A64306 /* WhisperKit in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -105,6 +107,9 @@
 				5630D7223080DA1000A64306 /* ConvoyWatch Watch App */,
 			);
 			name = "ConvoyWatch Watch App";
+			packageProductDependencies = (
+				AA0000023080DA0F00A64306 /* WhisperKit */,
+			);
 			productName = "ConvoyWatch Watch App";
 			productReference = 5630D71E3080DA1000A64306 /* ConvoyWatch Watch App.app */;
 			productType = "com.apple.product-type.application";
@@ -136,6 +141,9 @@
 			);
 			mainGroup = 5630D7113080DA0F00A64306;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AA0000013080DA0F00A64306 /* XCLocalSwiftPackageReference "../ref/argmax-oss-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5630D7193080DA0F00A64306 /* Products */;
 			projectDirPath = "";
@@ -300,10 +308,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ZC8GP86N5T;
+				DEVELOPMENT_TEAM = 7XVL7L68YT;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = ConvoyWatch;
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Convoy tracks your watch location during rides to keep your convoy pack in sync.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Convoy uses your Apple Watch location to share live convoy telemetry and rider position with your iPhone.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Convoy needs microphone access to record voice replies and commands while riding.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Convoy uses voice recognition so you can reply to riders hands-free while driving.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -324,7 +334,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 27.0;
+				WATCHOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_WATCHOS_DEPLOYMENT_TARGET)";
 			};
 			name = Debug;
 		};
@@ -335,10 +345,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ZC8GP86N5T;
+				DEVELOPMENT_TEAM = 7XVL7L68YT;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = ConvoyWatch;
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Convoy tracks your watch location during rides to keep your convoy pack in sync.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Convoy uses your Apple Watch location to share live convoy telemetry and rider position with your iPhone.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Convoy needs microphone access to record voice replies and commands while riding.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Convoy uses voice recognition so you can reply to riders hands-free while driving.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -360,7 +372,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 27.0;
+				WATCHOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_WATCHOS_DEPLOYMENT_TARGET)";
 			};
 			name = Release;
 		};
@@ -429,6 +441,21 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		AA0000013080DA0F00A64306 /* XCLocalSwiftPackageReference "../ref/argmax-oss-swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../ref/argmax-oss-swift";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA0000023080DA0F00A64306 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000013080DA0F00A64306 /* XCLocalSwiftPackageReference "../ref/argmax-oss-swift" */;
+			productName = WhisperKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 5630D7123080DA0F00A64306 /* Project object */;
 	validationLevel = 1;

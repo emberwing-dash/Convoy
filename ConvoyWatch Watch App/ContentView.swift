@@ -17,11 +17,14 @@ import SwiftUI
 public struct ContentView: View {
     @StateObject private var rideManager = RideManager.shared
     @StateObject private var connectivity = WatchConnectivityManager.shared
+    @StateObject private var whisper = ConvoyWhisperService.shared
     
     // Shows the blank screen with ONLY the 3 reason options
     @State private var showingReasonScreen: Bool = false
     // Shows the user profile sheet
     @State private var showingProfile: Bool = false
+    // Shows the WhisperKit voice control sheet
+    @State private var showingWhisperSheet: Bool = false
     
     // Focus state for hardware Digital Crown / rotary knob
     @FocusState private var isCrownFocused: Bool
@@ -113,6 +116,9 @@ public struct ContentView: View {
         .sheet(isPresented: $showingProfile) {
             UserProfileView()
         }
+        .sheet(isPresented: $showingWhisperSheet) {
+            WhisperVoiceSheet()
+        }
         .animation(.easeInOut(duration: 0.22), value: showingReasonScreen)
         .animation(.easeInOut(duration: 0.25), value: rideManager.hasConnectedToRide)
         .animation(.easeInOut(duration: 0.3), value: rideManager.showSyncPairingScreen)
@@ -198,6 +204,23 @@ public struct ContentView: View {
                 
                 Spacer()
                 
+                // Whisper Voice Sheet Button (top bar)
+                Button {
+                    rideManager.playHaptic(.click)
+                    showingWhisperSheet = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(whisper.isRecording ? W.red.opacity(0.3) : Color(white: 0.16))
+                            .frame(width: 24, height: 24)
+                        
+                        Image(systemName: whisper.isRecording ? "waveform" : "mic.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(whisper.isRecording ? W.red : (whisper.isModelLoaded ? W.cyan : W.secondary))
+                    }
+                }
+                .buttonStyle(.plain)
+                
                 PulsingDot(color: W.green, size: 5)
                 
                 // Profile button (top right)
@@ -257,29 +280,73 @@ public struct ContentView: View {
                 .buttonStyle(.plain)
             }
             
+            // Live Whisper Voice Activity Badge
+            if whisper.isRecording || !whisper.lastConfirmedCommand.isEmpty {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(whisper.isRecording ? W.red : W.green)
+                        .frame(width: 6, height: 6)
+                        .scaleEffect(whisper.isRecording ? 1.0 + CGFloat(whisper.currentEnergy * 0.4) : 1.0)
+                    Text(whisper.isRecording ? (whisper.currentText.isEmpty ? "LISTENING (tiny.en)..." : whisper.currentText) : whisper.lastConfirmedCommand)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(whisper.isRecording ? W.red : W.green)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color(white: 0.12), in: Capsule())
+                .transition(.opacity)
+            }
+            
             Spacer()
             
-            // Prominent Tap Reason Button (Opens dedicated blank screen)
-            Button {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    showingReasonScreen = true
+            // Bottom Action Controls: Whisper Voice + Tap Reason
+            HStack(spacing: 6) {
+                // Whisper Voice Button (Primary)
+                Button {
+                    if whisper.isModelLoaded {
+                        whisper.toggleListening()
+                    } else {
+                        showingWhisperSheet = true
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: whisper.isRecording ? "stop.fill" : "waveform.badge.mic")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(whisper.isRecording ? W.red : W.cyan)
+                        
+                        Text(whisper.isRecording ? "Stop" : "Whisper")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(whisper.isRecording ? Color(red: 0.3, green: 0.05, blue: 0.05) : W.card, in: Capsule())
+                    .overlay(Capsule().strokeBorder(whisper.isRecording ? W.red.opacity(0.8) : W.cyan.opacity(0.4), lineWidth: 1))
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "hand.tap.fill")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(W.amber)
-                    
-                    Text("Tap Reason")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
+                .buttonStyle(.plain)
+                
+                // Tap Reason Button (Secondary)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        showingReasonScreen = true
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "hand.tap.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(W.amber)
+                        Text("Reason")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 38)
+                    .background(W.card, in: Capsule())
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 38)
-                .background(W.card, in: Capsule())
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 6)
             .padding(.bottom, 6)
         }
         .padding(.horizontal, 4)
