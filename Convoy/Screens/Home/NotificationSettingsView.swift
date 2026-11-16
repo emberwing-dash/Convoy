@@ -37,7 +37,7 @@ struct NotificationSettingsView: View {
                             divider
                             row("Crews", "person.3", binding.crews, note: "Crew invites and members joining or leaving")
                             divider
-                            row("Friends", "person.2", binding.friends, note: "Friend requests and new followers")
+                            row("Friends", "person.2", binding.friends, note: "Friend requests and accepted requests")
                             divider
                             row("Community", "bubble.left.and.bubble.right", binding.community, note: "Likes, comments and new posts")
                             divider

@@ -272,7 +272,7 @@ final class SocialRepository {
     func leaderboard(_ metric: LeaderboardMetric, period: LeaderboardPeriod, limit: Int = 10) async throws -> LeaderboardBoard {
         nonisolated struct P: Encodable, Sendable { let p_metric: String; let p_from: String?; let p_to: String?; let p_limit: Int }
         let b = period.bounds()
-        let rows: [BoardRow] = try await call("leaderboard", P(p_metric: metric.rawValue, p_from: b.from.map(Self.iso),
+        let rows: [BoardRow] = try await call("leaderboard_v2", P(p_metric: metric.rawValue, p_from: b.from.map(Self.iso),
                                                                p_to: b.to.map(Self.iso), p_limit: limit))
         return LeaderboardBoard(entries: rows.map { $0.model }, ridersRanked: rows.first?.riders_ranked ?? 0,
                                 total: rows.first?.period_total ?? 0)
@@ -392,9 +392,16 @@ nonisolated private struct ProfileStatsRow: Decodable, Sendable {
 nonisolated private struct BoardRow: Decodable, Sendable {
     let rank: Int; let user_id: UUID; let display_name: String?; let username: String?; let avatar_data: String?
     let value: Double; let rides: Int; let level: Int; let is_me: Bool; let riders_ranked: Int; let period_total: Double
+    let score: Int?; let distance_km: Double?; let longest_km: Double?; let best_streak: Int?; let current_streak: Int?
+    let group_rides: Int?; let pts_distance: Int?; let pts_rides: Int?; let pts_longest: Int?; let pts_streak: Int?; let pts_group: Int?
     var model: LeaderboardEntry {
-        LeaderboardEntry(rank: rank, rider: RiderRef(id: user_id, name: display_name, username: username, avatarBase64: avatar_data),
-                         value: value, rides: rides, level: level, isMe: is_me)
+        let stats = RiderBoardStats(
+            score: score ?? 0, distanceKm: distance_km ?? 0, rides: rides, longestKm: longest_km ?? 0,
+            bestStreak: best_streak ?? 0, currentStreak: current_streak ?? 0, groupRides: group_rides ?? 0,
+            points: RideScore.Breakdown(distance: pts_distance ?? 0, rides: pts_rides ?? 0, longest: pts_longest ?? 0,
+                                        streak: pts_streak ?? 0, group: pts_group ?? 0))
+        return LeaderboardEntry(rank: rank, rider: RiderRef(id: user_id, name: display_name, username: username, avatarBase64: avatar_data),
+                                value: value, rides: rides, level: level, isMe: is_me, stats: stats)
     }
 }
 

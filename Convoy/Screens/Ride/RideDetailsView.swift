@@ -2,429 +2,6 @@
 import SwiftUI
 import MapKit
 
-// MARK: - Edit Ride Pop Window
-
-struct RideEditSheet: View {
-    @Environment(AppState.self) private var app
-    let ride: Ride
-    var onDismiss: () -> Void
-
-    @State private var name: String
-    @State private var fromText: String
-    @State private var toText: String
-    @State private var stops: [String]
-    @State private var date: Date
-    @State private var startNow: Bool = false
-    @State private var showFullMap: Bool = false
-    @State private var newStopText: String = ""
-    @State private var addingStop: Bool = false
-
-    init(ride: Ride, onDismiss: @escaping () -> Void) {
-        self.ride = ride
-        self.onDismiss = onDismiss
-        _name     = State(initialValue: ride.title)
-        _fromText = State(initialValue: ride.plan.from)
-        _toText   = State(initialValue: ride.plan.to)
-        _stops    = State(initialValue: ride.plan.stops)
-        _date     = State(initialValue: ride.departs)
-    }
-
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            Color.black.opacity(0.65)
-                .ignoresSafeArea()
-                .onTapGesture { onDismiss() }
-
-            VStack(spacing: 0) {
-                // Top handle
-                Capsule()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(width: 36, height: 4)
-                    .padding(.top, 12)
-                    .padding(.bottom, 16)
-
-                // Header
-                HStack {
-                    Text("Edit Ride")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(Color.white)
-                    Spacer()
-                    Button { onDismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(Color.white.opacity(0.4))
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 14)
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-
-                        // ── 1. Name ──────────────────────────────────────────
-                        sectionContainer(title: "RIDE NAME") {
-                            TextField("", text: $name,
-                                      prompt: Text("Ride title").foregroundColor(Color.white.opacity(0.3)))
-                                .foregroundStyle(Color.white)
-                                .font(.system(size: 15, weight: .medium))
-                                .padding(.horizontal, 14)
-                                .frame(height: 48)
-                                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-                        }
-
-                        // ── 2. Location & Checkpoints ────────────────────────
-                        sectionContainer(title: "LOCATIONS & CHECKPOINTS") {
-                            VStack(spacing: 8) {
-                                // Start
-                                HStack(spacing: 10) {
-                                    Circle().fill(CV.success).frame(width: 8, height: 8)
-                                    TextField("", text: $fromText, prompt: Text("Start location").foregroundColor(Color.white.opacity(0.35)))
-                                        .foregroundStyle(Color.white)
-                                        .font(.system(size: 14))
-                                }
-                                .padding(.horizontal, 14)
-                                .frame(height: 48)
-                                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-
-                                // Existing Checkpoints
-                                ForEach(Array(stops.enumerated()), id: \.offset) { idx, stopName in
-                                    HStack(spacing: 10) {
-                                        Image(systemName: "flag.fill")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(CV.accent)
-
-                                        Text(stopName)
-                                            .font(.system(size: 14))
-                                            .foregroundStyle(Color.white)
-                                            .lineLimit(1)
-
-                                        Spacer()
-
-                                        Button {
-                                            withAnimation(.snappy) {
-                                                stops.remove(at: idx)
-                                            }
-                                        } label: {
-                                            Image(systemName: "xmark")
-                                                .font(.system(size: 11, weight: .bold))
-                                                .foregroundStyle(Color.white.opacity(0.4))
-                                                .frame(width: 24, height: 24)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding(.horizontal, 14)
-                                    .frame(height: 44)
-                                    .background(CV.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(CV.accent.opacity(0.2), lineWidth: 1))
-                                }
-
-                                // Add new checkpoint field
-                                if addingStop {
-                                    HStack(spacing: 10) {
-                                        Image(systemName: "flag")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(CV.accent)
-
-                                        TextField("", text: $newStopText, prompt: Text("Checkpoint name").foregroundColor(Color.white.opacity(0.35)))
-                                            .foregroundStyle(Color.white)
-                                            .font(.system(size: 14))
-
-                                        Button("Add") {
-                                            let trimmed = newStopText.trimmingCharacters(in: .whitespaces)
-                                            if !trimmed.isEmpty {
-                                                withAnimation(.snappy) {
-                                                    stops.append(trimmed)
-                                                }
-                                                newStopText = ""
-                                            }
-                                            addingStop = false
-                                        }
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundStyle(CV.accent)
-                                    }
-                                    .padding(.horizontal, 14)
-                                    .frame(height: 48)
-                                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(CV.accent.opacity(0.35), lineWidth: 1))
-                                } else {
-                                    Button {
-                                        withAnimation(.snappy) {
-                                            addingStop = true
-                                        }
-                                    } label: {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "plus.circle.fill")
-                                                .font(.system(size: 13))
-                                            Text("Add Checkpoint")
-                                                .font(.system(size: 13, weight: .semibold))
-                                        }
-                                        .foregroundStyle(CV.accent)
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 42)
-                                        .background(CV.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .strokeBorder(CV.accent.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-
-                                // Destination
-                                HStack(spacing: 10) {
-                                    Circle().fill(CV.accent).frame(width: 8, height: 8)
-                                    TextField("", text: $toText, prompt: Text("Destination").foregroundColor(Color.white.opacity(0.35)))
-                                        .foregroundStyle(Color.white)
-                                        .font(.system(size: 14))
-                                }
-                                .padding(.horizontal, 14)
-                                .frame(height: 48)
-                                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-                            }
-                        }
-
-                        // ── 3. Interactive Route Map Preview ─────────────────
-                        sectionContainer(title: "ROUTE MAP") {
-                            Button {
-                                showFullMap = true
-                            } label: {
-                                ZStack(alignment: .bottomTrailing) {
-                                    if let r = ride.plan.selected {
-                                        RouteSnapshotView(coords: r.coords, size: CGSize(width: UIScreen.main.bounds.width - 40, height: 140))
-                                    } else {
-                                        Rectangle()
-                                            .fill(CV.surface)
-                                            .frame(height: 140)
-                                    }
-
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "map.fill")
-                                            .font(.system(size: 11))
-                                        Text("Tap to view checkpoints")
-                                            .font(.system(size: 11, weight: .semibold))
-                                    }
-                                    .foregroundStyle(Color.white)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.black.opacity(0.75), in: Capsule())
-                                    .padding(8)
-                                }
-                                .frame(height: 140)
-                                .frame(maxWidth: .infinity)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        // ── 4. Date & Time with "Start Now" ───────────────────
-                        sectionContainer(title: "DATE & TIME") {
-                            VStack(spacing: 8) {
-                                // "Start Now" Quick Option
-                                Button {
-                                    withAnimation(.snappy) {
-                                        startNow.toggle()
-                                        if startNow { date = Date() }
-                                    }
-                                } label: {
-                                    HStack {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "bolt.fill")
-                                                .font(.system(size: 13, weight: .bold))
-                                                .foregroundStyle(startNow ? CV.onAccent : CV.accent)
-                                            Text("Start now")
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .foregroundStyle(startNow ? CV.onAccent : Color.white)
-                                        }
-
-                                        Spacer()
-
-                                        if startNow {
-                                            Text("Selected")
-                                                .font(.system(size: 11, weight: .bold))
-                                                .foregroundStyle(CV.onAccent)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 3)
-                                                .background(Color.white.opacity(0.35), in: Capsule())
-                                        }
-                                    }
-                                    .padding(.horizontal, 14)
-                                    .frame(height: 48)
-                                    .background(startNow ? CV.accent : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .strokeBorder(startNow ? CV.accent : Color.white.opacity(0.08), lineWidth: 1)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-
-                                if !startNow {
-                                    // Date Row: "Date" clearly labeled on left, Picker on right
-                                    HStack {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "calendar")
-                                                .font(.system(size: 14))
-                                                .foregroundStyle(CV.accent)
-                                            Text("Date")
-                                                .font(.system(size: 14, weight: .medium))
-                                                .foregroundStyle(Color.white)
-                                        }
-
-                                        Spacer()
-
-                                        DatePicker("", selection: $date, in: Date()..., displayedComponents: .date)
-                                            .datePickerStyle(.compact)
-                                            .labelsHidden()
-                                            .colorScheme(.dark)
-                                            .tint(CV.accent)
-                                    }
-                                    .padding(.horizontal, 14)
-                                    .frame(height: 48)
-                                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-
-                                    // Time Row: "Time" clearly labeled on left, Picker on right
-                                    HStack {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "clock")
-                                                .font(.system(size: 14))
-                                                .foregroundStyle(CV.accent)
-                                            Text("Time")
-                                                .font(.system(size: 14, weight: .medium))
-                                                .foregroundStyle(Color.white)
-                                        }
-
-                                        Spacer()
-
-                                        DatePicker("", selection: $date, displayedComponents: .hourAndMinute)
-                                            .datePickerStyle(.compact)
-                                            .labelsHidden()
-                                            .colorScheme(.dark)
-                                            .tint(CV.accent)
-                                    }
-                                    .padding(.horizontal, 14)
-                                    .frame(height: 48)
-                                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-                                }
-                            }
-                        }
-
-                        // ── 5. Save Button ────────────────────────────────────
-                        Button {
-                            saveChanges()
-                        } label: {
-                            Text("Save")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(CV.bg)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 52)
-                                .background(CV.accent, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 6)
-                        .padding(.bottom, 36)
-                    }
-                    .padding(.horizontal, 20)
-                }
-            }
-            .frame(maxHeight: UIScreen.main.bounds.height * 0.88)
-            .background(
-                CV.bg2
-                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                    .ignoresSafeArea(edges: .bottom)
-            )
-        }
-        .sheet(isPresented: $showFullMap) {
-            mapInspectionSheet
-        }
-    }
-
-    @ViewBuilder
-    private func sectionContainer<C: View>(title: String, @ViewBuilder content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11, weight: .bold))
-                .tracking(1.0)
-                .foregroundStyle(Color.white.opacity(0.4))
-            content()
-        }
-    }
-
-    private var mapInspectionSheet: some View {
-        NavigationStack {
-            ZStack {
-                if let r = ride.plan.selected {
-                    RouteSnapshotView(coords: r.coords, size: CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height))
-                } else {
-                    CV.bg2.ignoresSafeArea()
-                }
-
-                VStack {
-                    Spacer()
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Circle().fill(CV.success).frame(width: 8, height: 8)
-                            Text("Start: \(fromText)").font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
-                        }
-                        ForEach(stops, id: \.self) { s in
-                            HStack {
-                                Image(systemName: "flag.fill").font(.system(size: 11)).foregroundStyle(CV.accent)
-                                Text("Checkpoint: \(s)").font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
-                            }
-                        }
-                        HStack {
-                            Circle().fill(CV.accent).frame(width: 8, height: 8)
-                            Text("End: \(toText)").font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
-                        }
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(CV.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 20)
-                }
-            }
-            .navigationTitle("Route & Checkpoints")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showFullMap = false }
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(CV.accent)
-                }
-            }
-            .preferredColorScheme(.dark)
-        }
-    }
-
-    private func saveChanges() {
-        guard let idx = app.rides.firstIndex(where: { $0.id == ride.id }) else { onDismiss(); return }
-        let effectiveTitle = name.trimmingCharacters(in: .whitespaces).isEmpty ? ride.title : name
-        app.rides[idx].title = effectiveTitle
-        let chosenDate = startNow ? Date() : date
-        app.rides[idx].departs = chosenDate
-        app.rides[idx].displayDate = chosenDate.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
-        app.rides[idx].displayTime = chosenDate.formatted(.dateTime.hour().minute())
-        app.rides[idx].lockText = "Start ride opens \(chosenDate.formatted(.dateTime.hour().minute()))"
-
-        // Update location and checkpoints
-        app.rides[idx].plan.from = fromText
-        app.rides[idx].plan.to = toText
-        app.rides[idx].plan.stops = stops
-        app.rides[idx].plan.starts = chosenDate
-
-        // Save locally and to backend
-        StorageService.shared.saveRide(app.rides[idx])
-        if let userId = app.backendUserId {
-            let updated = app.rides[idx]
-            Task { try? await SupabaseManager.shared.updateRide(updated, userId: userId) }
-        }
-        onDismiss()
-    }
-}
-
 // MARK: - Ride Countdown Timer Component
 
 struct RideCountdownView: View {
@@ -481,6 +58,8 @@ struct RideDetailsView: View {
     @State private var rideToDelete: Ride? = nil
     @State private var openingToCrew = false
     @State private var changingCover = false
+    /// Glass "Invite riders" sheet.
+    @State private var showInvite = false
     /// Hero's offset inside the scroll view; drives the top bar's backdrop.
     @State private var heroMinY: CGFloat = 0
 
@@ -514,7 +93,7 @@ struct RideDetailsView: View {
 
                     VStack(spacing: 16) {
                         stats(ride: ride)
-                        if organisedByYou && !ride.isCompleted && !ride.isPast {
+                        if organisedByYou && !app.isFinished(ride) {
                             crewFeedCard(ride: ride)
                         }
                         routeSection(ride: ride)
@@ -567,18 +146,12 @@ struct RideDetailsView: View {
             topButtons(ride: ride, canEdit: organisedByYou)
 
             // Edit pop window overlay
-            if showEditSheet {
-                RideEditSheet(ride: ride) {
-                    showEditSheet = false
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(99)
-            }
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
-        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: showEditSheet)
+        .sheet(isPresented: $showInvite) { InviteRidersSheet(ride: ride) }
+        .sheet(isPresented: $showEditSheet) { RideEditSheet(ride: ride) { showEditSheet = false } }
         .sheet(isPresented: $openingToCrew) {
             NavigationStack {
                 OpenRideForm(ride: ride) {
@@ -591,14 +164,15 @@ struct RideDetailsView: View {
         .confirmationDialog("Delete this ride?",
                             isPresented: Binding(get: { rideToDelete != nil }, set: { if !$0 { rideToDelete = nil } }),
                             titleVisibility: .visible) {
-            Button("Delete ride", role: .destructive) {
+            Button(organisedByYou ? "Delete ride" : "Remove ride", role: .destructive) {
                 if let id = rideToDelete?.id {
-                    Task { await app.deleteRide(id) }
+                    Task { organisedByYou ? await app.deleteRide(id) : app.hideRide(id) }
                 }
             }
             Button("Cancel", role: .cancel) { rideToDelete = nil }
         } message: {
-            Text("This will permanently cancel the ride for everyone.")
+            Text(organisedByYou ? "This permanently deletes the ride for everyone on it."
+                                : "It disappears from your rides on this phone. The ride itself isn't changed.")
         }
     }
 
@@ -731,17 +305,16 @@ struct RideDetailsView: View {
                 .accessibilityLabel("Change cover photo")
             }
 
-            if canEdit {
-                Menu {
-                    Button {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            showEditSheet = true
-                        }
-                    } label: { Label("Edit ride", systemImage: "pencil") }
+            // Ride options: always available. The organiser deletes the ride for everyone;
+            // a rider removes it from their own list. (Editing lives in the bottom bar.)
+            Menu {
+                if canEdit {
                     Button(role: .destructive) { rideToDelete = ride } label: { Label("Delete ride", systemImage: "trash") }
-                } label: { topCircle("ellipsis", weight: .semibold) }
-                .accessibilityLabel("Ride options")
-            }
+                } else {
+                    Button(role: .destructive) { rideToDelete = ride } label: { Label("Remove from my rides", systemImage: "trash") }
+                }
+            } label: { topCircle("ellipsis", weight: .semibold) }
+            .accessibilityLabel("Ride options")
 
             ShareLink(item: "Join my ride on Convoy: convoy://ride/\(ride.code)") {
                 topCircle("square.and.arrow.up")
@@ -884,7 +457,7 @@ struct RideDetailsView: View {
             Spacer()
             
             // ✅ Always Invite
-            Button { app.push(.inviteCode(ride.id)) } label: {
+            Button { showInvite = true } label: {
                 Text("Invite")
                     .cvText(13, .semibold, inter: true)
                     .padding(.horizontal, 14)
@@ -905,7 +478,7 @@ struct RideDetailsView: View {
 
     @ViewBuilder
     private func cta(ride: Ride, isRideDay: Bool, invited: Bool, organisedByYou: Bool) -> some View {
-        if ride.isCompleted || ride.isPast {
+        if app.isFinished(ride) {
             HStack(spacing: 10) {
                 Image(systemName: "flag.checkered").font(.system(size: 16, weight: .medium))
                 Text("Ride Completed")

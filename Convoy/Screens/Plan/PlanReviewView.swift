@@ -25,8 +25,11 @@ struct PlanReviewView: View {
                     HStack {
                         RoundIconButton(symbol: "chevron.left") { app.pop() }
                         Spacer()
-                        Text("Trip Summary")
+                        // The ride's own name, live as you type it below.
+                        Text(headerName)
                             .cvText(16, .semibold, color: CV.text.opacity(0.9), tracking: -0.2, inter: true)
+                            .lineLimit(1)
+                            .contentTransition(.opacity)
                         Spacer()
                         Color.clear.frame(width: 40, height: 40)
                     }
@@ -34,10 +37,10 @@ struct PlanReviewView: View {
 
                     // Header
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Ride Confirmation")
-                            .cvText(28, .bold, tracking: -0.6, inter: true)
-                        Text("Review your details before initiating the ride.")
-                            .cvText(15, color: CV.text.opacity(0.65), inter: true)
+                        Text("Ride confirmation")
+                            .cvText(22, .medium, tracking: -0.3, inter: true)
+                        Text("Check the route and time, then start now or save it for later.")
+                            .cvText(14, color: CV.muted, inter: true)
                     }
                     .padding(.top, 4)
 
@@ -57,7 +60,7 @@ struct PlanReviewView: View {
                             .glassRounded(18)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .strokeBorder(showNameError ? CV.accent : Color.white.opacity(0.08), lineWidth: 1.5)
+                                    .strokeBorder(showNameError ? CV.danger : Color.white.opacity(0.08), lineWidth: 1.5)
                             )
                             .onChange(of: app.draft.name) { _, _ in
                                 if showNameError && !app.draft.name.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -66,7 +69,7 @@ struct PlanReviewView: View {
                             }
                         if showNameError {
                             Text("Please enter a name for your ride")
-                                .cvText(13, color: CV.accent, inter: true)
+                                .cvText(13, color: CV.danger, inter: true)
                                 .padding(.leading, 16)
                                 .transition(.move(edge: .top).combined(with: .opacity))
                         }
@@ -95,16 +98,34 @@ struct PlanReviewView: View {
         .sheet(isPresented: $showingDatePicker) { dateSheet }
         .sheet(isPresented: $showingTimePicker) { timeSheet }
         .safeAreaInset(edge: .bottom) {
-            PrimaryButton(title: "Initiate plan") {
-                focused = false
-                let name = app.draft.name.trimmingCharacters(in: .whitespaces)
-                if name.isEmpty {
-                    withAnimation { showNameError = true }
-                } else {
-                    app.push(.planCreated)
+            HStack(spacing: 10) {
+                // Leave right away: the ride starts now.
+                Button { confirm(startNow: true) } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bolt.fill").font(.system(size: 14, weight: .bold))
+                        Text("Start now").font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundStyle(CV.text)
+                    .frame(maxWidth: .infinity).frame(height: 56)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
                 }
+                .buttonStyle(PressScale())
+                // Save it for the date and time above.
+                Button { confirm(startNow: false) } label: {
+                    HStack(spacing: 8) {
+                        Text("Initiate plan").font(.system(size: 16, weight: .semibold))
+                        Image(systemName: "arrow.right").font(.system(size: 13, weight: .bold))
+                    }
+                    .foregroundStyle(CV.onAccent)
+                    .frame(maxWidth: .infinity).frame(height: 56)
+                    .background(Color.white, in: Capsule())
+                }
+                .buttonStyle(PressScale())
             }
+            .environment(\.colorScheme, .dark)
             .padding(.horizontal, 20)
+            .padding(.top, 10)
             .padding(.bottom, 8)
             .background(
                 LinearGradient(colors: [CV.bg.opacity(0), CV.bg],
@@ -312,7 +333,7 @@ struct PlanReviewView: View {
         let geocoded = await LocationService.shared.reverseGeocode(coordinate: coord)
         let clean = geocoded.trimmingCharacters(in: .whitespaces)
         if !clean.isEmpty && !clean.contains("0.0000") {
-            let primaryName = clean.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? clean
+            let primaryName = primaryPlaceName(clean)
             if !primaryName.isEmpty {
                 startPlaceDisplayName = primaryName
                 app.draft.from = primaryName
@@ -327,6 +348,22 @@ struct PlanReviewView: View {
 
     private func shortPlace(_ s: String) -> String {
         s.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? s
+    }
+
+    private var headerName: String {
+        let n = app.draft.name.trimmingCharacters(in: .whitespaces)
+        if !n.isEmpty { return n }
+        return app.draft.to.isEmpty ? "New ride" : "Ride to \(shortPlace(app.draft.to))"
+    }
+
+    private func confirm(startNow: Bool) {
+        focused = false
+        guard !app.draft.name.trimmingCharacters(in: .whitespaces).isEmpty else {
+            withAnimation { showNameError = true }
+            return
+        }
+        if startNow { app.draft.starts = Date() }
+        app.push(.planCreated)
     }
 
     // MARK: - When card
@@ -378,41 +415,6 @@ struct PlanReviewView: View {
                 .buttonStyle(.plain)
             }
 
-            // Row 2: Start now pushed below
-            Button {
-                focused = false
-                withAnimation(.snappy) {
-                    app.draft.starts = Date()
-                }
-            } label: {
-                let isNow = abs(app.draft.starts.timeIntervalSinceNow) < 60
-                HStack(spacing: 8) {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(isNow ? CV.onAccent : CV.accent)
-                    Text("Start now")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(isNow ? CV.onAccent : Color.white)
-                    Spacer()
-                    if isNow {
-                        Text("Active")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(CV.onAccent)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color.white.opacity(0.35), in: Capsule())
-                    }
-                }
-                .padding(.horizontal, 16)
-                .frame(maxWidth: .infinity)
-                .frame(height: 48)
-                .background(isNow ? CV.accent : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(isNow ? CV.accent : Color.white.opacity(0.08), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
         }
     }
 

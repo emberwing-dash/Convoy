@@ -4,6 +4,7 @@ import SwiftUI
 struct PlanWhoView: View {
     @Environment(AppState.self) private var app
     @State private var showInvitees = false
+    @State private var showInviteFriends = false
 
     /// Everyone on the ride: you first (organiser), then the selected crew — including riders
     /// just invited to that crew — then the selected friends. No duplicates; updates live.
@@ -90,6 +91,7 @@ struct PlanWhoView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
+        .sheet(isPresented: $showInviteFriends) { InviteFriendsSheet() }
         .sheet(isPresented: $showInvitees) {
             InviteesSheet(invitees: invitees)
                 .presentationDetents([.medium, .large])
@@ -351,7 +353,7 @@ struct PlanWhoView: View {
 
     private var inviteFriendsButton: some View {
         Button {
-            app.push(.inviteFriends)
+            showInviteFriends = true
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "person.badge.plus")
@@ -470,7 +472,7 @@ struct PlanWhoView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 4)
 
-            Button { app.push(.inviteFriends) } label: {
+            Button { showInviteFriends = true } label: {
                 Text("Invite friends")
                     .cvText(14, .semibold, color: CV.accentLight, inter: true)
                     .padding(.horizontal, 30)

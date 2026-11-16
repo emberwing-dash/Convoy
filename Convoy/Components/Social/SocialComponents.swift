@@ -80,39 +80,56 @@ struct SectionTitleRow: View {
     }
 }
 
-struct FollowButton: View {
+/// The one relationship button: Add friend → Requested → Friends (or Accept when they asked you).
+struct FriendButton: View {
     @Environment(AppState.self) private var app
     let riderId: UUID
     var compact = false
     @State private var error: String?
 
     var body: some View {
-        let on = app.social.isFollowing(riderId)
-        let busy = app.social.followBusy.contains(riderId)
+        let state = app.friendState(riderId)
+        let busy = app.friendBusy.contains(riderId)
+        let (title, icon, filled): (String, String, Bool) = {
+            switch state {
+            case .none: return ("Add friend", "person.badge.plus", true)
+            case .incoming: return ("Accept", "checkmark", true)
+            case .requested: return ("Requested", "clock", false)
+            case .friends: return ("Friends", "person.2.fill", false)
+            }
+        }()
         Button {
+            guard state == .none || { if case .incoming = state { return true } else { return false } }() else { return }
             Task {
-                do { try await app.social.setFollowing(riderId, !on) }
-                catch { self.error = SocialError.from(error).message }
+                do { try await app.addFriend(riderId) }
+                catch { self.error = (error as NSError).localizedDescription }
             }
         } label: {
             ZStack {
-                if busy { ProgressView().tint(on ? CV.text : CV.onAccent) }
+                if busy { ProgressView().tint(filled ? CV.onAccent : CV.text) }
                 else {
-                    Text(on ? "Following" : "Follow")
-                        .cvText(compact ? 14 : 15, .bold, color: on ? CV.text : CV.onAccent, inter: true)
+                    HStack(spacing: 6) {
+                        Image(systemName: icon).font(.system(size: compact ? 12 : 13, weight: .semibold))
+                        Text(title).font(.system(size: compact ? 14 : 15, weight: .semibold))
+                    }
+                    .foregroundStyle(filled ? CV.onAccent : CV.text)
                 }
             }
             .frame(maxWidth: .infinity).frame(height: compact ? 36 : 40)
-            .background(on ? Color.white.opacity(0.08) : CV.accent, in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.white.opacity(on ? 0.14 : 0), lineWidth: 1))
+            .background(filled ? Color.white : Color.white.opacity(0.08), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(filled ? 0 : 0.14), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .disabled(busy)
-        .alert("Couldn't update", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+        .accessibilityLabel(title)
+        .alert("Couldn't send request", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(error ?? "") }
     }
 }
+
+/// Kept so older call sites compile; it's the friend button now.
+typealias FollowButton = FriendButton
 
 /// Value over a small label, separated by hairlines when used in a row.
 struct StatColumn: View {

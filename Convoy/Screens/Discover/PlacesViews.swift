@@ -23,22 +23,23 @@ struct PlacesBrowseView: View {
             ChipBar(items: ["Near me", "Popular", "Famous"], selection: $scope) { $0 }.padding(.top, 16)
             OfflineBanner().padding(.top, 14)
 
-            Text("Browse by type").cvText(19, .semibold, inter: true).padding(.top, 24).padding(.bottom, 12)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
-                ForEach(PlaceCategory.browseable) { c in TypeTile(category: c) { app.push(.placeCategory(c)) } }
+            Text("Browse by type").cvText(19, .semibold, inter: true).padding(.top, 26).padding(.bottom, 12)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(PlaceCategory.browseable) { c in
+                        TypeTile(category: c) { app.push(.placeCategory(c)) }.frame(width: 86)
+                    }
+                }
+                .padding(.horizontal, 20)
             }
+            .padding(.horizontal, -20)
 
             let list = listed
             if store.phase == .loading {
                 LazyVGrid(columns: twoCols, spacing: 10) { ForEach(0..<4, id: \.self) { _ in Skeleton().frame(height: 220) } }.padding(.top, 28)
             } else if !list.items.isEmpty {
                 SectionHeader(title: list.title, subtitle: list.subtitle).padding(.top, 28).padding(.bottom, 12)
-                LazyVGrid(columns: twoCols, spacing: 10) {
-                    ForEach(list.items) { p in
-                        PlaceCard(place: p, rideLine: store.rideLine(p), width: nil, height: 220,
-                                  saved: app.isSaved(p), onSave: { app.toggleSaved(p) }) { app.push(.placeDetail(p.id)) }
-                    }
-                }
+                balancedGrid(list.items)
             }
             if scope != "Famous" && !store.famous.isEmpty {
                 SectionHeader(title: "Famous across India", subtitle: "Ranked by real interest · Wikipedia & riders").padding(.top, 28).padding(.bottom, 12)
@@ -57,6 +58,25 @@ struct PlacesBrowseView: View {
         }
         .originPicker(isPresented: $pickingOrigin)
         .tripBar()
+    }
+
+    /// First place as a wide feature card, the rest two-up; a leftover single card goes full
+    /// width so the grid never ends with a gap.
+    @ViewBuilder private func balancedGrid(_ items: [DiscoverPlace]) -> some View {
+        let rest = Array(items.dropFirst())
+        let paired = rest.count.isMultiple(of: 2) ? rest : Array(rest.dropLast())
+        VStack(spacing: 10) {
+            if let first = items.first { card(first, height: 240) }
+            LazyVGrid(columns: twoCols, spacing: 10) {
+                ForEach(paired) { p in card(p, height: 210) }
+            }
+            if !rest.count.isMultiple(of: 2), let last = rest.last { card(last, height: 200) }
+        }
+    }
+
+    private func card(_ p: DiscoverPlace, height: CGFloat) -> some View {
+        PlaceCard(place: p, rideLine: store.rideLine(p), width: nil, height: height,
+                  saved: app.isSaved(p), onSave: { app.toggleSaved(p) }) { app.push(.placeDetail(p.id)) }
     }
 
     private var listed: (title: String, subtitle: String, items: [DiscoverPlace]) {
@@ -225,7 +245,7 @@ struct PlaceDetailView: View {
             .padding(.bottom, store.trip.isEmpty ? 40 : 110)
         }
         .scrollIndicators(.hidden)
-        .background(CV.bg.ignoresSafeArea())
+        .background { TopoBackground(glow: false) }
         .ignoresSafeArea(edges: .top)
         .toolbar(.hidden, for: .navigationBar)
         .originPicker(isPresented: $pickingOrigin)

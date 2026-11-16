@@ -9,7 +9,6 @@ struct CrewFeedSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            searchBar
             suggestions
             posts
         }
@@ -28,21 +27,6 @@ struct CrewFeedSection: View {
         } message: { Text(actionError ?? "") }
     }
 
-    // MARK: Search
-
-    private var searchBar: some View {
-        Button { app.push(.userSearch(.friends)) } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass").font(.system(size: 16)).foregroundStyle(CV.muted)
-                Text("Search riders by name or @username").cvText(15, color: CV.muted, inter: true).lineLimit(1)
-                Spacer()
-            }
-            .padding(.horizontal, 16).frame(height: 48)
-            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
 
     // MARK: Suggested for you
 
@@ -127,32 +111,147 @@ struct SuggestedRiderCard: View {
     @Environment(AppState.self) private var app
     let rider: SuggestedRider
 
-    var body: some View {
-        VStack(spacing: 6) {
-            Button { app.push(.riderProfile(rider.id)) } label: {
-                VStack(spacing: 6) {
-                    AvatarChip(data: rider.rider.avatarData, name: rider.rider.name, size: 64).padding(.bottom, 4)
-                    Text(rider.rider.name).cvText(16, .bold, color: CV.text, inter: true).lineLimit(1)
-                    Text(statsLine).cvText(12, color: CV.muted, inter: true).lineLimit(1)
-                }
-            }
-            .buttonStyle(.plain)
-            Text(rider.reason)
-                .cvText(11, .medium, color: CV.muted, inter: true)
-                .lineLimit(2).multilineTextAlignment(.center)
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(CV.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .frame(minHeight: 34)
-            FollowButton(riderId: rider.id).padding(.top, 2)
-        }
-        .padding(.horizontal, 12).padding(.top, 16).padding(.bottom, 14)
-        .frame(width: 148)
-        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+    /// A rider's own colour: muted, premium tones, always the same for the same person.
+    struct Palette { let deep: Color; let mid: Color; let glow: Color }
+    static let palettes: [Palette] = [
+        Palette(deep: Color(hex: 0x10332A), mid: Color(hex: 0x2E7D62), glow: Color(hex: 0x8FE3BF)),   // emerald
+        Palette(deep: Color(hex: 0x1C1F4A), mid: Color(hex: 0x4A52B8), glow: Color(hex: 0xA9B2FF)),   // indigo
+        Palette(deep: Color(hex: 0x3A1730), mid: Color(hex: 0x8E3E73), glow: Color(hex: 0xF4A9D2)),   // plum
+        Palette(deep: Color(hex: 0x3D2408), mid: Color(hex: 0xA8661C), glow: Color(hex: 0xFFC982)),   // amber
+        Palette(deep: Color(hex: 0x0D2C40), mid: Color(hex: 0x2378A8), glow: Color(hex: 0x86D2FA)),   // ocean
+        Palette(deep: Color(hex: 0x3B1712), mid: Color(hex: 0x9C4434), glow: Color(hex: 0xFFAD9A)),   // terracotta
+    ]
+    private var palette: Palette {
+        let h = rider.id.uuidString.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0x7fffffff }
+        return Self.palettes[h % Self.palettes.count]
     }
 
-    private var statsLine: String {
-        rider.rides == 0 ? "@\(rider.rider.username)" : "\(RideFormat.km(rider.totalKm)) km · \(rider.rides) ride\(rider.rides == 1 ? "" : "s")"
+    /// Why this rider is suggested — hidden when it's just the generic filler.
+    private var reason: String? {
+        let r = rider.reason.trimmingCharacters(in: .whitespaces)
+        return r.isEmpty || r == "Rider on Convoy" ? nil : r
+    }
+
+    var body: some View {
+        let p = palette
+        VStack(spacing: 0) {
+            // Banner: the rider's colour with a soft winding-road line.
+            ZStack(alignment: .topTrailing) {
+                LinearGradient(colors: [p.mid, p.deep], startPoint: .topLeading, endPoint: .bottomTrailing)
+                RadialGradient(colors: [p.glow.opacity(0.55), .clear], center: .topTrailing, startRadius: 2, endRadius: 110)
+                RoadSwoosh()
+                    .stroke(Color.white.opacity(0.18), style: StrokeStyle(lineWidth: 1.4, lineCap: .round, dash: [6, 5]))
+                    .padding(.horizontal, -10)
+                if let reason {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles").font(.system(size: 8, weight: .bold))
+                        Text(reason).lineLimit(1)
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8).frame(height: 20)
+                    .background(.black.opacity(0.28), in: Capsule())
+                    .padding(8)
+                    .frame(maxWidth: 150, alignment: .trailing)
+                }
+            }
+            .frame(height: 78)
+            .clipped()
+
+            VStack(spacing: 0) {
+            // Avatar overlapping the banner.
+            Button { app.push(.riderProfile(rider.id)) } label: {
+                VStack(spacing: 8) {
+                    avatar
+                        .padding(4)
+                        .background(Color(hex: 0x121212), in: Circle())
+                        .overlay(Circle().strokeBorder(
+                            AngularGradient(colors: [p.glow, p.mid, p.glow.opacity(0.4), p.glow], center: .center),
+                            lineWidth: 2))
+                        .shadow(color: p.mid.opacity(0.55), radius: 12, y: 4)
+                        .padding(.top, -40)
+                    VStack(spacing: 2) {
+                        Text(rider.rider.name)
+                            .font(.system(size: 16, weight: .semibold)).foregroundStyle(CV.text).lineLimit(1)
+                        Text("@\(rider.rider.username)")
+                            .font(.system(size: 12, weight: .medium)).foregroundStyle(CV.muted).lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Their riding, at a glance (or a welcome if they haven't ridden yet).
+            Group {
+                if rider.rides > 0 {
+                    HStack(spacing: 0) {
+                        stat(RideFormat.km(rider.totalKm), "km")
+                        Rectangle().fill(Color.white.opacity(0.1)).frame(width: 1, height: 22)
+                        stat("\(rider.rides)", rider.rides == 1 ? "ride" : "rides")
+                    }
+                } else {
+                    HStack(spacing: 6) {
+                        Image(systemName: "hand.wave.fill").font(.system(size: 12))
+                            .foregroundStyle(p.glow)
+                        Text("New on Convoy").font(.system(size: 13, weight: .semibold)).foregroundStyle(CV.text)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 40)
+            .background(p.mid.opacity(0.16), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.top, 12)
+
+            FriendButton(riderId: rider.id, compact: true)
+                .padding(.top, 10)
+            }
+            .padding(.horizontal, 12).padding(.bottom, 12)
+        }
+        .background(alignment: .top) {
+            ZStack {
+                Color(hex: 0x121212)
+                LinearGradient(colors: [p.deep.opacity(0.0), p.deep.opacity(0.55)], startPoint: .top, endPoint: .bottom)
+            }
+        }
+        .frame(width: 168)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
+            .strokeBorder(LinearGradient(colors: [p.glow.opacity(0.45), Color.white.opacity(0.06)],
+                                         startPoint: .top, endPoint: .bottom), lineWidth: 1))
+        .shadow(color: .black.opacity(0.35), radius: 14, y: 8)
+    }
+
+    @ViewBuilder private var avatar: some View {
+        if let data = rider.rider.avatarData, let img = UIImage(data: data) {
+            Image(uiImage: img).resizable().scaledToFill().frame(width: 62, height: 62).clipShape(Circle())
+        } else {
+            Text(String(rider.rider.name.prefix(1)).uppercased())
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 62, height: 62)
+                .background(LinearGradient(colors: [palette.mid, palette.deep], startPoint: .top, endPoint: .bottom), in: Circle())
+        }
+    }
+
+    private func stat(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 0) {
+            Text(value).font(.system(size: 15, weight: .bold)).monospacedDigit().foregroundStyle(CV.text).lineLimit(1).minimumScaleFactor(0.7)
+            Text(label).font(.system(size: 10, weight: .medium)).foregroundStyle(CV.muted)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// A gentle S-curve like a road across the card banner.
+private struct RoadSwoosh: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX, y: r.maxY * 0.82))
+        p.addCurve(to: CGPoint(x: r.maxX, y: r.minY + r.height * 0.25),
+                   control1: CGPoint(x: r.width * 0.35, y: r.maxY * 0.15),
+                   control2: CGPoint(x: r.width * 0.6, y: r.maxY * 1.05))
+        return p
     }
 }
 

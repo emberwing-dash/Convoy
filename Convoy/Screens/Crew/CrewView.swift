@@ -5,6 +5,7 @@ struct CrewView: View {
     @Environment(AppState.self) private var app
     @State private var search = ""
     @State private var composing = false
+    @State private var showInviteFriends = false
     @Namespace private var sectionNS
 
     var body: some View {
@@ -44,6 +45,7 @@ struct CrewView: View {
             }
         }
         .sheet(isPresented: $composing) { CrewComposeSheet() }
+        .sheet(isPresented: $showInviteFriends) { InviteFriendsSheet() }
     }
 
     private func refresh() async {
@@ -101,17 +103,15 @@ struct CrewView: View {
         return Button {
             withAnimation(.snappy(duration: 0.22)) { app.crewSection = section }
         } label: {
-            VStack(alignment: .leading, spacing: 7) {
-                Text(title).cvText(20, .bold, color: on ? CV.text : CV.muted, inter: true)
-                ZStack {
+            // The underline takes the word's own width, so it sits fully under every tab.
+            Text(title).cvText(20, .bold, color: on ? CV.text : CV.muted, inter: true)
+                .padding(.bottom, 10)
+                .overlay(alignment: .bottom) {
                     if on {
-                        Capsule().fill(CV.accent).frame(width: 30, height: 3)
+                        Capsule().fill(CV.accent).frame(height: 3)
                             .matchedGeometryEffect(id: "crew-section", in: sectionNS)
-                    } else {
-                        Color.clear.frame(width: 30, height: 3)
                     }
                 }
-            }
         }
         .buttonStyle(.plain)
     }
@@ -263,7 +263,7 @@ struct CrewView: View {
     private func crewCard(_ c: CrewGroup) -> some View {
         Button { app.push(.crewDetail(c.id)) } label: {
             HStack(spacing: 0) {
-                Rectangle().fill(c.accent).frame(width: 4)
+                Rectangle().fill(Color.white.opacity(0.55)).frame(width: 3)
 
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 12) {
@@ -351,7 +351,8 @@ struct CrewView: View {
                 .padding(.top, 8)
             }
 
-            Button { app.push(.inviteFriends) } label: {
+            if !app.friends.isEmpty {
+            Button { showInviteFriends = true } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "person.badge.plus").font(.system(size: 17, weight: .medium))
                     Text("Add or invite friends").cvText(16, .semibold, inter: true)
@@ -363,6 +364,7 @@ struct CrewView: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 12)
+            }
         }
     }
 
@@ -381,7 +383,7 @@ struct CrewView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 36).padding(.top, 8)
 
-            Button { app.push(.inviteFriends) } label: {
+            Button { showInviteFriends = true } label: {
                 Text("Invite friends")
                     .cvText(15, .semibold, color: CV.onAccent, inter: true)
                     .padding(.horizontal, 36).frame(height: 44)

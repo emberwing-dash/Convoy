@@ -48,6 +48,11 @@ final class SocialStore {
     private var userId: UUID?
     private var channel: RealtimeChannelV2?
     private var listenTask: Task<Void, Never>?
+    private var boardChannel: RealtimeChannelV2?
+    private var boardListenTask: Task<Void, Never>?
+    private var boardReloadTask: Task<Void, Never>?
+    /// Bumped whenever any rider's ride lands on the server, so open boards can animate in fresh numbers.
+    private(set) var boardsVersion = 0
 
     var unreadCount: Int { incoming.count + inbox.filter { !$0.isRead }.count }
 
@@ -71,12 +76,27 @@ final class SocialStore {
         }
         do { try await ch.subscribeWithError() }
         catch { print("[Social] realtime subscribe failed: \(error) — falling back to refresh on open") }
+
+        // Leaderboards: the server broadcasts "ride_logged" on the public "leaderboard" topic each time
+        // any rider's ride is recorded, so every open board re-ranks within a second or two.
+        let bc = client.channel("leaderboard")
+        let rides = bc.broadcastStream(event: "ride_logged")
+        boardChannel = bc
+        boardListenTask = Task { [weak self] in
+            for await _ in rides { self?.scheduleBoardRefresh() }
+        }
+        do { try await bc.subscribeWithError() }
+        catch { print("[Social] leaderboard realtime subscribe failed: \(error)") }
     }
 
     func stop() async {
         listenTask?.cancel(); listenTask = nil
         if let channel { await SupabaseManager.shared.client.removeChannel(channel) }
         channel = nil
+        boardListenTask?.cancel(); boardListenTask = nil
+        boardReloadTask?.cancel(); boardReloadTask = nil
+        if let boardChannel { await SupabaseManager.shared.client.removeChannel(boardChannel) }
+        boardChannel = nil
         userId = nil
     }
 
@@ -291,20 +311,47 @@ final class SocialStore {
             boards[key] = try await repo.leaderboard(metric, period: period, limit: limit)
             boardState[key] = .loaded
         } catch {
-            boardState[key] = .failed(SocialError.from(error).message)
+            let e = SocialError.from(error)
+            if !e.isCancellation, boards[key] == nil { boardState[key] = .failed(e.message) }
         }
+    }
+
+    /// Re-fetches every board already loaded on this device. Bursts (a whole convoy finishing at
+    /// once) are coalesced into one refresh.
+    func scheduleBoardRefresh(after delay: Duration = .milliseconds(800)) {
+        boardReloadTask?.cancel()
+        boardReloadTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled else { return }
+            await self.refreshLoadedBoards()
+        }
+    }
+
+    func refreshLoadedBoards() async {
+        let keys = Array(boards.keys)
+        guard !keys.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { group in
+            for key in keys {
+                let limit = max(boards[key]?.entries.count ?? 10, 10)
+                group.addTask { await self.loadBoard(key.metric, key.period, limit: limit) }
+            }
+        }
+        boardsVersion += 1
     }
 
     // MARK: Recorded rides
 
     /// Uploads every recorded ride the server hasn't confirmed yet. Safe to call repeatedly.
     func uploadPendingRideLogs() async {
+        var uploaded = false
+        defer { if uploaded { scheduleBoardRefresh(after: .milliseconds(200)) } }
         for log in recorder.logs where log.needsUpload {
             do {
                 let r = try await repo.record(log)
                 var l = log
                 l.serverId = r.serverId; l.points = r.points; l.riderCount = r.riders; l.isHost = r.isHost
                 recorder.update(l)
+                uploaded = true
             } catch let e as SocialError where e.message.contains("wasn't counted") || e.message.contains("too old") {
                 // The server rejected the data itself; keep it on the device but stop retrying.
                 var l = log; l.rejectedReason = e.message; recorder.update(l)

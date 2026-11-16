@@ -133,7 +133,7 @@ struct MapThumb: View {
         guard let snap = try? await MKMapSnapshotter(options: opts).start() else { return }
         let out = UIGraphicsImageRenderer(size: size).image { ctx in
             snap.image.draw(at: .zero)
-            let red = UIColor(CV.accent)
+            let red = CV.routeUI
             if pts.count > 1 {
                 let line = UIBezierPath()
                 for (i, c) in pts.enumerated() { i == 0 ? line.move(to: snap.point(for: c)) : line.addLine(to: snap.point(for: c)) }
@@ -352,12 +352,14 @@ struct PlaceCard: View {
     var width: CGFloat? = 140
     var height: CGFloat = 196
     var saved = false
+    /// Show the map instead of the photo (used when the same photo is already on screen).
+    var showMap = false
     var onSave: () -> Void = {}
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            DiscoverImage(photo: place.photos.first, coord: place.coord)
+            DiscoverImage(photo: showMap ? nil : place.photos.first, coord: place.coord)
                 .frame(width: width, height: height)
                 .frame(maxWidth: width == nil ? .infinity : nil)
                 .overlay(LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .center, endPoint: .bottom))
@@ -387,13 +389,15 @@ struct RouteCard: View {
     var width: CGFloat? = 260
     var photoHeight: CGFloat = 130
     var saved = false
+    /// Show the route map instead of the photo (used when the same photo is already on screen).
+    var showMap = false
     var onSave: () -> Void = {}
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 0) {
-                DiscoverImage(photo: route.photos.first, coord: route.end.coord, path: route.geometry)
+                DiscoverImage(photo: showMap ? nil : route.photos.first, coord: route.end.coord, path: route.geometry)
                     .frame(height: photoHeight).frame(maxWidth: .infinity)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(route.title).cvText(16, .semibold, inter: true).lineLimit(1)
@@ -442,7 +446,8 @@ extension DiscoverRoute {
     }
 }
 
-/// Compact row: thumbnail, title, subtitle, detail line, chevron.
+/// List row for a route: a large rounded photo, the title (two lines), from → to, and the
+/// real road numbers as quiet pills. Calm and scannable, like an iOS list card.
 struct RouteRow: View {
     let title: String
     let subtitle: String
@@ -452,21 +457,34 @@ struct RouteRow: View {
     var action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 DiscoverImage(photo: photo, coord: coord)
-                    .frame(width: 56, height: 56)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).cvText(15, .semibold, inter: true).lineLimit(1)
+                    .frame(width: 92, height: 92)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CV.hairline, lineWidth: 1))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).cvText(16, .semibold, inter: true).lineLimit(2).multilineTextAlignment(.leading)
                     Text(subtitle).cvText(12, color: CV.muted, inter: true).lineLimit(1)
-                    if let detail { Text(detail).cvText(12, .medium, inter: true).lineLimit(1) }
+                    if let detail {
+                        HStack(spacing: 6) {
+                            ForEach(Array(detail.components(separatedBy: " · ").prefix(3).enumerated()), id: \.offset) { _, part in
+                                Text(part)
+                                    .cvText(11, .semibold, color: CV.text, inter: true)
+                                    .padding(.horizontal, 8).frame(height: 22)
+                                    .background(Color.white.opacity(0.08), in: Capsule())
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(CV.dim)
             }
             .padding(10)
-            .background(CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(CV.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(CV.stroke, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .buttonStyle(PressScale())
     }
@@ -738,7 +756,7 @@ struct DiscoverScroll<Content: View>: View {
                 .padding(.bottom, bottomInset)
         }
         .scrollIndicators(.hidden)
-        .background(CV.bg.ignoresSafeArea())
+        .background { TopoBackground(glow: false) }
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden()
     }

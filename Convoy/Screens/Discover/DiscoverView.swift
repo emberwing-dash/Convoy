@@ -32,15 +32,15 @@ struct DiscoverView: View {
                         if !store.isOnline {
                             Text("Saving still works offline and syncs when you reconnect.").cvText(11, color: CV.dim, inter: true)
                         }
+                        RideQuoteCard(offset: 4).padding(.top, 8)
                     }
                 }
-                .padding(.horizontal, 20).padding(.top, 16)
+                .padding(.horizontal, 20).padding(.top, 22)
             }
             .padding(.bottom, store.trip.isEmpty ? 120 : 190)
         }
         .scrollIndicators(.hidden)
-        .background(TopoBackground(glow: false))
-        .ignoresSafeArea(edges: .top)
+        .background { TopoBackground(glow: false) }
         .originPicker(isPresented: $pickingOrigin)
         .tripBar(bottom: 86)
         .task { await store.loadIfNeeded(); app.retryPendingSavedSync() }
@@ -54,40 +54,36 @@ struct DiscoverView: View {
                           primary: ("Plan a ride", { app.tab = .ride }))
     }
 
-    // MARK: Hero (bundled image — never waits on the network)
+    // MARK: Header — minimal, on the app's contour background (no stock-looking hero photo)
 
     private var hero: some View {
-        ZStack(alignment: .bottomLeading) {
-            LandingArt(assets: ["discover_hero", "dm_hero"], fallback: .hero)
-                .frame(height: 470)
-            LinearGradient(colors: [.black.opacity(0.35), .clear, CV.bg.opacity(0.9), CV.bg], startPoint: .top, endPoint: .bottom)
-            VStack(alignment: .leading, spacing: 10) {
-                Eyebrow(text: "Discover", color: CV.accent)
-                Text("Find your\nnext ride.").cvText(40, .bold, tracking: -1, inter: true).lineSpacing(-4)
-                Text("Roads, viewpoints and places riders love — with real motorcycle distances from where you start.")
-                    .cvText(14, color: CV.text.opacity(0.8), inter: true).frame(maxWidth: 300, alignment: .leading)
-                OriginPill(title: store.origin == nil ? "Choose where you ride from" : "From \(store.originName)") { pickingOrigin = true }
-                    .padding(.top, 4)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center) {
+                Text("Discover").cvText(34, .bold, tracking: -0.8, inter: true)
+                Spacer()
+                HStack(spacing: 10) {
+                    RoundIconButton(symbol: "map", size: 40) { app.push(.discoverMap) }.accessibilityLabel("Explore on map")
+                    RoundIconButton(symbol: "bookmark", size: 40) { app.push(.discoverSaved) }.accessibilityLabel("Saved")
+                }
             }
-            .padding(.horizontal, 20).padding(.bottom, 8)
+            Text("Roads, viewpoints and places riders love — with real motorcycle distances.")
+                .cvText(15, color: CV.muted, lineHeight: 20, inter: true)
+                .padding(.top, 6)
+                .fixedSize(horizontal: false, vertical: true)
+            OriginPill(title: store.origin == nil ? "Choose where you ride from" : "From \(store.originName)") { pickingOrigin = true }
+                .padding(.top, 16)
         }
-        .frame(height: 470)
-        .overlay(alignment: .topTrailing) {
-            HStack(spacing: 10) {
-                RoundIconButton(symbol: "map", size: 40) { app.push(.discoverMap) }.accessibilityLabel("Explore on map")
-                RoundIconButton(symbol: "bookmark", size: 40) { app.push(.discoverSaved) }.accessibilityLabel("Saved")
-            }
-            .padding(.trailing, 20).safeAreaPadding(.top).padding(.top, 54)
-        }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
     }
 
     private var tiles: some View {
         let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
         return LazyVGrid(columns: cols, spacing: 10) {
             CategoryTile(title: "Routes", subtitle: "Journeys worth riding", symbol: "point.topleft.down.to.point.bottomright.curvepath",
-                         art: LandingArt(assets: ["discover_routes", "dm_ecr"], fallback: .routes)) { app.push(.discoverRoutes(nil)) }
+                         art: LandingArt(assets: ["dm_kolli", "discover_routes"], fallback: .routes)) { app.push(.discoverRoutes(nil)) }
             CategoryTile(title: "Scenic", subtitle: "Views, lakes and forest roads", symbol: "mountain.2",
-                         art: LandingArt(assets: ["discover_scenic", "dm_forest"], fallback: .scenic)) { app.push(.scenic) }
+                         art: LandingArt(assets: ["dm_munnar", "discover_scenic"], fallback: .scenic)) { app.push(.scenic) }
             CategoryTile(title: "Places", subtitle: "Destinations near and far", symbol: "mappin.circle",
                          art: LandingArt(assets: ["discover_places", "dm_shore"], fallback: .places)) { app.push(.discoverPlaces) }
             CategoryTile(title: "Surprise me", subtitle: "Swipe to find somewhere new", symbol: "sparkles",

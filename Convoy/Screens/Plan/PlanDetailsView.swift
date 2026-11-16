@@ -213,7 +213,7 @@ struct PlanDetailsView: View {
         let geocoded = await LocationService.shared.reverseGeocode(coordinate: targetCoord)
         let clean = geocoded.trimmingCharacters(in: .whitespaces)
         if !clean.isEmpty && !clean.contains("0.0000") {
-            let primaryName = clean.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? clean
+            let primaryName = primaryPlaceName(clean)
             if !primaryName.isEmpty {
                 startLocationName = primaryName
             }

@@ -57,15 +57,11 @@ struct RiderProfileView: View {
                 if !p.rider.username.isEmpty { Text("@\(p.rider.username)").cvText(14, color: CV.muted, inter: true) }
                 Text("Lv \(p.level)").cvText(12, .bold, color: CVSocial.amber, inter: true)
                     .padding(.horizontal, 8).padding(.vertical, 2).background(CVSocial.amber.opacity(0.18), in: RoundedRectangle(cornerRadius: 8))
-                if p.followsMe { Text("Follows you").cvText(12, .semibold, color: CV.muted, inter: true) }
             }
-            HStack(spacing: 24) {
-                count(p.followers + (app.social.isFollowing(riderID) != p.iFollow ? (app.social.isFollowing(riderID) ? 1 : -1) : 0), "Followers")
-                count(p.following, "Following")
-                if p.sharedCrews > 0 { count(p.sharedCrews, "Shared crews") }
+            if p.sharedCrews > 0 {
+                HStack(spacing: 24) { count(p.sharedCrews, "Shared crews") }.padding(.top, 4)
             }
-            .padding(.top, 4)
-            if !isMe { FollowButton(riderId: riderID).frame(width: 180).padding(.top, 6) }
+            if !isMe { FriendButton(riderId: riderID).frame(width: 180).padding(.top, 6) }
         }
         .frame(maxWidth: .infinity)
     }

@@ -194,6 +194,10 @@ final class AppState {
     var pendingFriendRequests: [FriendshipWithProfile] = []
     var incomingCrewInvites: [CrewInviteWithDetails] = []
     var pendingRideJoinRequests: Set<UUID> = []
+    /// People I've sent a friend request to that they haven't answered yet.
+    var outgoingFriendIds: Set<UUID> = []
+    /// Friend buttons currently waiting on the server.
+    var friendBusy: Set<UUID> = []
 
     // Cache timestamps
     var notificationsLoadedAt: Date? = nil
@@ -263,6 +267,20 @@ final class AppState {
         rides.sorted { $0.departs != $1.departs ? $0.departs < $1.departs : $0.id.uuidString < $1.id.uuidString }
     }
     var hasUnreadNotifications: Bool { unreadNotificationCount > 0 }
+
+    /// One rule for "this ride is over", shared by Home and Ride Details: completed on the server,
+    /// finished on this phone, or well past its start (start + riding time + 12 h grace).
+    /// The ride you're currently navigating is never treated as over.
+    func isFinished(_ r: Ride) -> Bool {
+        if r.id == activeRideID { return false }
+        if r.isCompleted { return true }
+        if completedRides.contains(where: { $0.id == r.id }) { return true }
+        let ridingTime = max(r.plan.selected?.rawTime ?? 0, 3600)
+        return r.departs.addingTimeInterval(ridingTime + 12 * 3600) < .now
+    }
+
+    /// Rides still ahead of you (or happening now), soonest first — what Home shows.
+    var openRides: [Ride] { sortedRides.filter { !isFinished($0) } }
 
     /// A notification the rider tapped; `MainShell` opens the right screen once the app is ready.
     var pendingNotificationTap: NotificationTap? = nil
@@ -487,7 +505,8 @@ final class AppState {
                 let fetchedIds = Set(fetched.map { $0.id })
                 // Keep local rides the server hasn't seen yet (offline-created or local test rides)
                 let localOnly = self.rides.filter { !fetchedIds.contains($0.id) }
-                self.rides = (fetched + localOnly).sorted { $0.departs < $1.departs }
+                let hidden = self.hiddenRideIDs
+                self.rides = (fetched + localOnly).filter { !hidden.contains($0.id.uuidString) }.sorted { $0.departs < $1.departs }
                 self.ridesLoadedAt = Date()
                 for r in fetched { StorageService.shared.saveRide(r) }
             }
@@ -741,12 +760,42 @@ final class AppState {
            Date().timeIntervalSince(loadedAt) < friendsStaleness { return }
         do {
             let fetched = try await SupabaseManager.shared.fetchFriends(for: userId)
+            let outgoing = (try? await SupabaseManager.shared.fetchOutgoingPendingFriendRequestUserIds(for: userId)) ?? []
+            let incoming = (try? await SupabaseManager.shared.fetchPendingFriendRequests(for: userId)) ?? pendingFriendRequests
             await MainActor.run {
                 self.friends = fetched
+                self.outgoingFriendIds = Set(outgoing)
+                self.pendingFriendRequests = incoming
                 self.friendsLoadedAt = Date()
                 StorageService.shared.saveFriends(fetched)
             }
         } catch { print("Error loading friends: \(error)") }
+    }
+
+    // MARK: - Friends (one relationship: request → accept)
+
+    enum FriendState: Equatable { case none, requested, incoming(requestId: UUID), friends }
+
+    func friendState(_ id: UUID) -> FriendState {
+        if friends.contains(where: { $0.id == id }) { return .friends }
+        if let req = pendingFriendRequests.first(where: { $0.sender_id == id }) { return .incoming(requestId: req.id) }
+        if outgoingFriendIds.contains(id) { return .requested }
+        return .none
+    }
+
+    /// Sends a friend request (or accepts theirs if they already asked you).
+    func addFriend(_ id: UUID) async throws {
+        guard let me = await resolvedUserId(), id != me else { return }
+        friendBusy.insert(id); defer { friendBusy.remove(id) }
+        if case .incoming(let reqId) = friendState(id) {
+            try await SupabaseManager.shared.acceptFriendRequest(requestId: reqId)
+            pendingFriendRequests.removeAll { $0.id == reqId }
+            await loadFriends(force: true)
+            rebuildNotifications()
+            return
+        }
+        try await SupabaseManager.shared.sendFriendRequest(senderId: me, receiverId: id)
+        outgoingFriendIds.insert(id)
     }
 
     func loadCrews(force: Bool = false) async {
@@ -1498,6 +1547,19 @@ final class AppState {
         }
     }
     
+    /// Rides the rider removed from their own list (not organiser). Kept on this phone.
+    private var hiddenRideIDs: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "hiddenRideIDs") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "hiddenRideIDs") }
+    }
+
+    func hideRide(_ id: UUID) {
+        hiddenRideIDs.insert(id.uuidString)
+        rides.removeAll { $0.id == id }
+        StorageService.shared.removeRide(id: id)
+        popToRoot()
+    }
+
     func deleteRide(_ id: UUID) async {
         do {
             try await SupabaseManager.shared.deleteRide(id: id)

@@ -89,7 +89,7 @@ struct RouteSummaryCard: View {
         let geocoded = await LocationService.shared.reverseGeocode(coordinate: targetCoord)
         let clean = geocoded.trimmingCharacters(in: .whitespaces)
         if !clean.isEmpty && !clean.contains("0.0000") {
-            let primaryName = clean.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? clean
+            let primaryName = primaryPlaceName(clean)
             if !primaryName.isEmpty {
                 resolvedStart = primaryName
             }
@@ -103,4 +103,11 @@ struct RouteSummaryCard: View {
         case .end:   ZStack { Circle().fill(CV.accent); Circle().fill(.white).frame(width: 4, height: 4) }
         }
     }
+}
+
+/// First meaningful part of a reverse-geocoded address: skips house numbers and plot codes
+/// ("141, Anna Salai, Kattankulathur" → "Anna Salai").
+func primaryPlaceName(_ address: String) -> String {
+    let parts = address.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    return parts.first { part in part.contains(where: \.isLetter) && part.filter(\.isLetter).count >= 3 } ?? parts.first ?? address
 }

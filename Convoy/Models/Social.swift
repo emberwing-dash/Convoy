@@ -77,7 +77,52 @@ struct SuggestedRider: Identifiable, Hashable, Sendable {
     var monthKm: Double
 }
 
-enum LeaderboardMetric: String, CaseIterable, Sendable { case score, distance }
+/// The five boards. All are computed live on the server from GPS-recorded rides (see leaderboard_v2).
+enum LeaderboardMetric: String, CaseIterable, Sendable {
+    case score, distance, rides, longest, streak
+
+    var title: String {
+        switch self {
+        case .score: "Ride Score"; case .distance: "Distance"; case .rides: "Rides"
+        case .longest: "Longest Ride"; case .streak: "Streak"
+        }
+    }
+    var short: String {
+        switch self {
+        case .score: "Score"; case .distance: "Distance"; case .rides: "Rides"
+        case .longest: "Longest"; case .streak: "Streak"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .score: "bolt.fill"; case .distance: "point.topleft.down.to.point.bottomright.curvepath"
+        case .rides: "figure.outdoor.cycle"; case .longest: "road.lanes"; case .streak: "flame.fill"
+        }
+    }
+    /// Unit shown after a value ("pts", "km", "rides", "days").
+    func unit(_ v: Double) -> String {
+        switch self {
+        case .score: "pts"; case .distance, .longest: "km"
+        case .rides: v == 1 ? "ride" : "rides"; case .streak: v == 1 ? "day" : "days"
+        }
+    }
+    func format(_ v: Double) -> String {
+        switch self {
+        case .distance, .longest: RideFormat.km(v)
+        default: Int(v.rounded()).formatted()
+        }
+    }
+    /// One line on how the board is ranked.
+    var rule: String {
+        switch self {
+        case .score: "Distance, rides, longest ride, streak and group riding combined."
+        case .distance: "Total kilometres recorded with GPS."
+        case .rides: "Number of recorded rides of 1 km or more."
+        case .longest: "Your single longest recorded ride."
+        case .streak: "Most consecutive days with a ride of 5 km or more."
+        }
+    }
+}
 
 /// A leaderboard window. `.allTime` has no start; months are calendar months in the device time zone.
 enum LeaderboardPeriod: Hashable, Sendable {
@@ -125,6 +170,19 @@ struct LeaderboardEntry: Identifiable, Hashable, Sendable {
     var rides: Int
     var level: Int
     var isMe: Bool
+    var stats: RiderBoardStats = .init()
+}
+
+/// Everything the server knows about a rider in the chosen period, plus the score breakdown.
+struct RiderBoardStats: Hashable, Sendable {
+    var score = 0
+    var distanceKm = 0.0
+    var rides = 0
+    var longestKm = 0.0
+    var bestStreak = 0
+    var currentStreak = 0
+    var groupRides = 0
+    var points = RideScore.Breakdown()
 }
 
 struct LeaderboardBoard: Hashable, Sendable {

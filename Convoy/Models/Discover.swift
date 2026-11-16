@@ -28,7 +28,7 @@ nonisolated enum PlaceCategory: String, Codable, CaseIterable, Identifiable, Has
         case .historical: "Historical"
         case .hillRoad: "Hill roads"
         case .hillStation: "Hill stations"
-        default: label + "s"
+        default: label.hasSuffix("ch") || label.hasSuffix("sh") ? label + "es" : label + "s"
         }
     }
     var symbol: String {

@@ -155,7 +155,7 @@ struct ProfileView: View {
             divider
             stat(totalKm, "Kilometres")
             divider
-            stat("\(stats?.followers ?? 0)", "Followers")
+            stat("\(app.friends.count)", "Friends")
         }
         .padding(.vertical, 16)
         .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))

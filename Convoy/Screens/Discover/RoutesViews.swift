@@ -65,9 +65,12 @@ struct RoutesBrowseView: View {
                 .padding(.top, 18)
                 if list.count > 1 {
                     Text("More \(collection.rawValue.lowercased()) routes").cvText(19, .semibold, inter: true).padding(.top, 26).padding(.bottom, 12)
-                    VStack(spacing: 8) {
-                        ForEach(list.dropFirst()) { r in
-                            RouteRow(title: r.title, subtitle: r.fromTo, detail: r.rowLine, photo: r.photos.first, coord: r.end.coord) {
+                    VStack(spacing: 10) {
+                        // Each photo once per list; a route reusing another's photo shows its map instead.
+                        let rows = Self.uniquePhotos(list)
+                        ForEach(rows.dropFirst(), id: \.route.id) { row in
+                            let r = row.route
+                            RouteRow(title: r.title, subtitle: r.fromTo, detail: r.rowLine, photo: row.photo, coord: r.end.coord) {
                                 app.push(.routeDetail(r.id))
                             }
                         }
@@ -83,6 +86,16 @@ struct RoutesBrowseView: View {
         }
         .sheet(isPresented: $showFilters) { RouteFiltersSheet(filters: $filters, base: store.routes(in: collection)) }
         .originPicker(isPresented: $pickingOrigin)
+    }
+}
+
+extension RoutesBrowseView {
+    static func uniquePhotos(_ routes: [DiscoverRoute]) -> [(route: DiscoverRoute, photo: PhotoRef?)] {
+        var seen: Set<PhotoRef.Source> = []
+        return routes.map { r in
+            guard let p = r.photos.first else { return (r, nil) }
+            return seen.insert(p.source).inserted ? (r, p) : (r, nil)
+        }
     }
 }
 
@@ -123,7 +136,7 @@ struct RouteFiltersSheet: View {
                     Text("Ridden end-to-end by Convoy riders").cvText(12, color: CV.muted, inter: true)
                 }
             }
-            .tint(CV.accent).padding(.top, 22)
+            .tint(CV.success).padding(.top, 22)
             Spacer(minLength: 20)
             DiscoverButton(title: count == 0 ? "No routes match" : "Show \(count) \(count == 1 ? "route" : "routes")") {
                 filters = draft; dismiss()
@@ -225,7 +238,7 @@ struct DiscoverSearchView: View {
             }
             .scrollDismissesKeyboard(.immediately)
         }
-        .background(CV.bg.ignoresSafeArea())
+        .background { TopoBackground(glow: false) }
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { focused = true }
     }
@@ -504,7 +517,7 @@ struct RouteDetailView: View {
             .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
-        .background(CV.bg.ignoresSafeArea())
+        .background { TopoBackground(glow: false) }
         .ignoresSafeArea(edges: .top)
         .toolbar(.hidden, for: .navigationBar)
     }

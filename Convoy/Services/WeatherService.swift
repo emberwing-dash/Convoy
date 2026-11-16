@@ -7,6 +7,25 @@ struct LiveWeather: Equatable {
     let temperature: Double
     let code: Int
     let isDay: Bool
+    // Extra readings for the Home weather card (nil when the service didn't return them).
+    var feelsLike: Double? = nil
+    var windKmh: Double? = nil
+    var rainChance: Int? = nil
+    var high: Double? = nil
+    var low: Double? = nil
+
+    /// Simple go / careful / wait verdict for riding, from the readings only.
+    enum Verdict { case go, care, wait }
+    var verdict: Verdict {
+        switch kind {
+        case .storm, .snow: return .wait
+        case .rain, .drizzle, .fog: return .care
+        default:
+            if (windKmh ?? 0) >= 40 || temperature >= 38 || temperature <= 3 { return .care }
+            if (rainChance ?? 0) >= 60 { return .care }
+            return .go
+        }
+    }
 
     enum Kind { case clear, partly, cloudy, fog, drizzle, rain, snow, storm }
 
@@ -99,7 +118,9 @@ final class WeatherService {
         comps.queryItems = [
             .init(name: "latitude", value: String(lat)),
             .init(name: "longitude", value: String(lon)),
-            .init(name: "current", value: "temperature_2m,weather_code,is_day"),
+            .init(name: "current", value: "temperature_2m,weather_code,is_day,apparent_temperature,wind_speed_10m"),
+            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max"),
+            .init(name: "forecast_days", value: "1"),
             .init(name: "timezone", value: "auto"),
         ]
         guard let url = comps.url,
@@ -108,7 +129,12 @@ final class WeatherService {
               let decoded = try? JSONDecoder().decode(Response.self, from: data) else { return }
         current = LiveWeather(temperature: decoded.current.temperature_2m,
                               code: decoded.current.weather_code,
-                              isDay: decoded.current.is_day == 1)
+                              isDay: decoded.current.is_day == 1,
+                              feelsLike: decoded.current.apparent_temperature,
+                              windKmh: decoded.current.wind_speed_10m,
+                              rainChance: decoded.daily?.precipitation_probability_max?.first.flatMap { $0 },
+                              high: decoded.daily?.temperature_2m_max?.first.flatMap { $0 },
+                              low: decoded.daily?.temperature_2m_min?.first.flatMap { $0 })
         lastFetch = .now
         lastCoord = coord
 
@@ -123,7 +149,15 @@ final class WeatherService {
             let temperature_2m: Double
             let weather_code: Int
             let is_day: Int
+            let apparent_temperature: Double?
+            let wind_speed_10m: Double?
+        }
+        struct Daily: Decodable {
+            let temperature_2m_max: [Double?]?
+            let temperature_2m_min: [Double?]?
+            let precipitation_probability_max: [Int?]?
         }
         let current: Current
+        let daily: Daily?
     }
 }

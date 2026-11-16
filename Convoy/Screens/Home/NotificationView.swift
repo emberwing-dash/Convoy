@@ -362,9 +362,11 @@ struct NotificationView: View {
             }
         case .newFollower:
             if let id = notif.actorId {
-                let following = app.social.isFollowing(id)
-                pillButton(following ? "Following" : "Follow back", filled: !following) {
-                    Task { try? await app.social.setFollowing(id, !following) }
+                // Old "new follower" items: offer to become friends instead of following back.
+                let state = app.friendState(id)
+                pillButton(state == .friends ? "Friends" : state == .requested ? "Requested" : "Add friend",
+                           filled: state == .none) {
+                    if state == .none { Task { try? await app.addFriend(id) } }
                 }
             }
         case .postLike, .postComment, .newPost:

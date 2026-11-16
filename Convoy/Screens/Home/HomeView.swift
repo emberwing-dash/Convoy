@@ -7,7 +7,7 @@ struct HomeView: View {
     private var weather: WeatherService { .shared }
 
     var body: some View {
-        let sorted = app.sortedRides
+        let sorted = app.openRides
         ZStack(alignment: .top) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -64,14 +64,6 @@ struct HomeView: View {
 
     // MARK: Header
 
-    private var greeting: String {
-        switch Calendar.current.component(.hour, from: .now) {
-        case 5..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        default: return "Good evening"
-        }
-    }
-
     private func refreshWeather(force: Bool) async {
         // Prefer where the phone is; otherwise where the next ride starts.
         let rides = app.sortedRides
@@ -83,16 +75,12 @@ struct HomeView: View {
         await weather.refresh(near: c, force: force)
     }
 
+    private var firstName: String { app.displayName.components(separatedBy: " ").first ?? app.displayName }
+
     private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)).uppercased())
-                        .cvText(12, .semibold, color: CV.text.opacity(0.6), tracking: 0.6, inter: true)
-                    Text("\(greeting), \(app.displayName.components(separatedBy: " ").first ?? app.displayName)")
-                        .cvText(26, .bold, tracking: -0.5, inter: true)
-                        .lineLimit(1).minimumScaleFactor(0.7)
-                }
+                RiderGreeting(name: firstName)
                 Spacer(minLength: 0)
                 HeaderControls(avatar: app.avatarImageData, name: app.displayName,
                                unread: app.unreadNotificationCount,
@@ -100,28 +88,15 @@ struct HomeView: View {
                                onProfile: { app.push(.profile) })
             }
             if let w = weather.current {
-                WeatherChip(weather: w, place: weather.place)
+                WeatherCard(weather: w, place: weather.place)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
+            HomeQuickActions(onPlan: { app.startNewPlan(); app.push(.planWho) },
+                             onJoin: { app.push(.joinCode(nil)) })
         }
+        .padding(.top, 6)
         .animation(.easeOut(duration: 0.35), value: weather.current)
         .environment(\.colorScheme, .dark)
-    }
-
-    // MARK: Quick actions
-
-    private var actionTiles: some View {
-        HStack(spacing: 12) {
-            ActionTile(icon: "point.topleft.down.to.point.bottomright.curvepath.fill",
-                       title: "Plan a ride", subtitle: "Route, stops & crew", primary: true) {
-                app.startNewPlan()
-                app.push(.planWho)
-            }
-            ActionTile(icon: "qrcode.viewfinder",
-                       title: "Join with code", subtitle: "Hop into a friend's ride", primary: false) {
-                app.push(.joinCode(nil))
-            }
-        }
     }
 
     // MARK: First-run
@@ -156,11 +131,11 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 32, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
             .shadow(color: .black.opacity(0.35), radius: 24, y: 14)
-            .padding(.top, 22)
+            .padding(.top, 26)
 
-            actionTiles.padding(.top, 14)
+            HowItWorks().padding(.top, 20)
 
-            HowItWorks().padding(.top, 28)
+            RideQuoteCard().padding(.top, 36)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -178,8 +153,6 @@ struct HomeView: View {
                     .padding(.top, 12)
             }
 
-            actionTiles.padding(.top, 14)
-
             if !app.pendingRideJoinsByMe.isEmpty {
                 sectionTitle("Waiting for approval", trailing: "\(app.pendingRideJoinsByMe.count)")
                     .padding(.top, 30)
@@ -188,9 +161,6 @@ struct HomeView: View {
                 }
                 .padding(.top, 12)
             }
-
-            WeekStrip(rides: sorted) { app.push(.rideDetails($0.id)) }
-                .padding(.top, 30)
 
             if !later.isEmpty {
                 HStack(alignment: .firstTextBaseline) {
@@ -239,6 +209,14 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .padding(.top, 24)
             }
+
+            MonthSummaryCard(logs: RideRecorder.shared.logs.filter { $0.rejectedReason == nil }) {
+                app.crewSection = .leaderboard
+                app.tab = .crew
+            }
+            .padding(.top, 34)
+
+            RideQuoteCard().padding(.top, 36)
         }
     }
 
@@ -322,66 +300,6 @@ private struct HeaderControls: View {
     }
 }
 
-// MARK: - Weather chip
-
-/// Live weather where you are: an animated symbol (a slowly turning sun by day,
-/// twinkling stars at night, falling rain…), the temperature and a riding hint.
-private struct WeatherChip: View {
-    let weather: LiveWeather
-    let place: String?
-    @State private var spin = false
-
-    var body: some View {
-        HStack(spacing: 10) {
-            icon
-                .frame(width: 34, height: 34)
-                .background(iconGlow.opacity(0.22), in: Circle())
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 5) {
-                    Text("\(Int(weather.temperature.rounded()))°")
-                        .cvText(16, .bold, color: .white, inter: true).monospacedDigit()
-                    Text(weather.condition).cvText(14, .semibold, color: .white.opacity(0.9), inter: true)
-                    if let place {
-                        Text("· \(place)").cvText(14, .medium, color: .white.opacity(0.6), inter: true)
-                    }
-                }
-                .lineLimit(1)
-                Text(weather.ridingNote).cvText(12, .medium, color: .white.opacity(0.6), inter: true).lineLimit(1)
-            }
-        }
-        .padding(.leading, 5).padding(.trailing, 14).padding(.vertical, 5)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-        .accessibilityElement(children: .combine)
-    }
-
-    private var iconGlow: Color {
-        switch weather.kind {
-        case .clear, .partly: return weather.isDay ? Color(hex: 0xFFC83D) : Color(hex: 0xC8C8C8)
-        case .storm: return Color(hex: 0xFFD60A)
-        default: return CV.accentLight
-        }
-    }
-
-    @ViewBuilder private var icon: some View {
-        let base = Image(systemName: weather.symbol)
-            .font(.system(size: 17, weight: .semibold))
-            .symbolRenderingMode(.multicolor)
-        switch weather.kind {
-        case .clear where weather.isDay:
-            base
-                .rotationEffect(.degrees(spin ? 360 : 0))
-                .onAppear { withAnimation(.linear(duration: 18).repeatForever(autoreverses: false)) { spin = true } }
-        case .clear, .partly:
-            base.symbolEffect(.pulse, options: .repeating.speed(0.4))
-        case .drizzle, .rain, .snow, .storm:
-            base.symbolEffect(.variableColor.iterative, options: .repeating.speed(0.6))
-        default:
-            base
-        }
-    }
-}
-
 // MARK: - How it works (first run)
 
 private struct HowItWorks: View {
@@ -415,48 +333,6 @@ private struct HowItWorks: View {
         .padding(.vertical, 18).padding(.horizontal, 8)
         .background(CV.surface.opacity(0.9), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(CV.stroke, lineWidth: 1))
-    }
-}
-
-// MARK: - Quick action tile
-
-private struct ActionTile: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    let primary: Bool
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 0) {
-                Image(systemName: icon)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(primary ? Color.white : CV.accentLight)
-                    .frame(width: 38, height: 38)
-                    .background(primary ? CV.onAccent : CV.accentSoft, in: Circle())
-                Spacer(minLength: 12)
-                Text(title).cvText(16, .semibold, color: primary ? CV.onAccent : CV.text, tracking: -0.2, inter: true)
-                    .lineLimit(1)
-                Text(subtitle).cvText(12, color: primary ? CV.onAccent.opacity(0.6) : CV.muted, inter: true)
-                    .lineLimit(1).padding(.top, 2)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 124)
-            .background {
-                if primary {
-                    LinearGradient(colors: [Color.white, Color(hex: 0xE4E4E4)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing)
-                } else {
-                    CV.surface.opacity(0.92)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(primary ? Color.white.opacity(0.6) : CV.stroke, lineWidth: 1))
-        }
-        .buttonStyle(PressScaleStyle(scale: 0.97))
     }
 }
 
@@ -650,69 +526,6 @@ struct RideCountdownPanel: View {
         if m < 60 { return "\(m) min ago" }
         let h = m / 60
         return h == 1 ? "1 hr ago" : "\(h) hrs ago"
-    }
-}
-
-// MARK: - Week strip
-
-/// The next seven days at a glance, with a dot on each day that has a ride.
-private struct WeekStrip: View {
-    let rides: [Ride]
-    var onOpen: (Ride) -> Void
-
-    private var days: [Date] {
-        let start = Calendar.current.startOfDay(for: .now)
-        return (0..<7).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: start) }
-    }
-
-    var body: some View {
-        let cal = Calendar.current
-        let byDay = days.map { d in rides.filter { cal.isDate($0.departs, inSameDayAs: d) } }
-        let count = byDay.reduce(0) { $0 + $1.count }
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("This week").cvText(20, .semibold, tracking: -0.3, inter: true)
-                Spacer()
-                Text(count == 0 ? "No rides yet" : count == 1 ? "1 ride" : "\(count) rides")
-                    .cvText(15, .medium, color: CV.muted, inter: true)
-            }
-            HStack(spacing: 6) {
-                ForEach(Array(days.enumerated()), id: \.offset) { i, day in
-                    dayCell(day, rides: byDay[i], isToday: i == 0)
-                }
-            }
-            .padding(8)
-            .background(CV.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(CV.stroke, lineWidth: 1))
-        }
-    }
-
-    private func dayCell(_ day: Date, rides: [Ride], isToday: Bool) -> some View {
-        let has = !rides.isEmpty
-        return Button { if let r = rides.first { onOpen(r) } } label: {
-            VStack(spacing: 6) {
-                Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                    .cvText(10, .semibold, color: isToday ? CV.onAccent.opacity(0.65) : CV.muted, tracking: 0.4, inter: true)
-                Text(day.formatted(.dateTime.day()))
-                    .cvText(18, .semibold, color: isToday ? CV.onAccent : CV.text, inter: true)
-                    .monospacedDigit()
-                Circle()
-                    .fill(has ? (isToday ? CV.onAccent : CV.accent) : Color.clear)
-                    .frame(width: 6, height: 6)
-            }
-            .frame(maxWidth: .infinity).frame(height: 70)
-            .background {
-                if isToday {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous).fill(CV.accent)
-                } else if has {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous).fill(CV.accentSoft)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!has)
-        .accessibilityLabel("\(day.formatted(.dateTime.weekday(.wide).day().month())), \(has ? "\(rides.count) ride" : "no rides")")
     }
 }
 

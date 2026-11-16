@@ -108,6 +108,13 @@ struct ScenicCollectionView: View {
     private func content(_ c: ScenicCollection) -> some View {
         let places = c.placeIds.compactMap(store.place)
         let routes = c.routeIds.compactMap(store.route)
+        // Each photo appears once per collection: the cover first, then places, then routes.
+        // A repeat (e.g. Kolli Hills the place and Kolli hairpins the road) shows its map instead.
+        var seen: Set<PhotoRef.Source> = []
+        if let cover = c.photo?.source { seen.insert(cover) }
+        var mapPlaces: Set<String> = [], mapRoutes: Set<String> = []
+        for p in places { if let src = p.photos.first?.source { if !seen.insert(src).inserted { mapPlaces.insert(p.id) } } }
+        for r in routes { if let src = r.photos.first?.source { if !seen.insert(src).inserted { mapRoutes.insert(r.id) } } }
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 DetailHero(photo: c.photo, height: 300) {
@@ -130,7 +137,8 @@ struct ScenicCollectionView: View {
                         ForEach(places) { p in
                             VStack(alignment: .leading, spacing: 8) {
                                 PlaceCard(place: p, rideLine: store.rideLine(p), width: nil, height: 250,
-                                          saved: app.isSaved(p), onSave: { app.toggleSaved(p) }) { app.push(.placeDetail(p.id)) }
+                                          saved: app.isSaved(p), showMap: mapPlaces.contains(p.id),
+                                          onSave: { app.toggleSaved(p) }) { app.push(.placeDetail(p.id)) }
                                 reason(c.reasons[p.id])
                             }
                         }
@@ -138,7 +146,8 @@ struct ScenicCollectionView: View {
                     if scope != "Places" {
                         ForEach(routes) { r in
                             VStack(alignment: .leading, spacing: 8) {
-                                RouteCard(route: r, width: nil, photoHeight: 170, saved: app.isSaved(r), onSave: { app.toggleSaved(r) }) {
+                                RouteCard(route: r, width: nil, photoHeight: 170, saved: app.isSaved(r), showMap: mapRoutes.contains(r.id),
+                                          onSave: { app.toggleSaved(r) }) {
                                     app.push(.routeDetail(r.id))
                                 }
                                 reason(c.reasons[r.id])
@@ -151,7 +160,7 @@ struct ScenicCollectionView: View {
             .padding(.bottom, store.trip.isEmpty ? 40 : 110)
         }
         .scrollIndicators(.hidden)
-        .background(CV.bg.ignoresSafeArea())
+        .background { TopoBackground(glow: false) }
         .ignoresSafeArea(edges: .top)
         .toolbar(.hidden, for: .navigationBar)
         .tripBar()
@@ -244,7 +253,7 @@ struct SurpriseFeedView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            CV.bg.ignoresSafeArea()
+            TopoBackground(glow: false)
             if items.isEmpty {
                 VStack {
                     Spacer()
