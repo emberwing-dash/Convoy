@@ -1,253 +1,277 @@
+
 import SwiftUI
 
-// MARK: - Convoy Opening Animation  v9 (Definitive Masterpiece)
-// Concept: THE ROAD BENEATH THE C
-//
-// 1. Scene begins on pure black (#000000).
-// 2. The exact Convoy logo road is zoomed-in (5.5x), seamlessly spanning the screen.
-//    The white C is masked off-screen above the viewport.
-// 3. Realistic motorcycle riders (authentic racing sport-bike with geared rider) ride smoothly
-//    along the road's curve with proper highway perspective and subtle road banking.
-// 4. As the riders vanish at the horizon vanishing point, the road smoothly contracts and zooms out
-//    directly into its exact logo position.
-// 5. The white "C" shape unmasks seamlessly around the contracting road, completing the logo.
-// 6. Bold "CONVOY" brand typography resolves cleanly below with wide letter-tracking settling.
-// 7. Briefly holds before smoothly transitioning into the main app experience.
-
 struct ConvoyOpeningAnimationView: View {
+
     var onFinish: () -> Void
 
-    @State private var startDate: Date? = nil
-    @State private var isFinished = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let orangeGlow = Color(red: 1.000, green: 0.420, blue: 0.000) // #FF6B00
+    @State private var startDate: Date?
+    @State private var didFinish = false
+
+    private let cream = Color(red: 0.98, green: 0.97, blue: 0.94)
+    private let orange = Color(red: 1.0, green: 0.39, blue: 0.0)
+
+    private let duration = 2.6
 
     var body: some View {
-        TimelineView(.animation) { tl in
-            let t: Double = {
-                guard let s = startDate else { return 0 }
-                return min(2.85, max(0, tl.date.timeIntervalSince(s)))
-            }()
+
+        TimelineView(
+            .animation(minimumInterval: 1.0 / 60.0, paused: startDate == nil)
+        ) { timeline in
+
+            let t = startDate.map {
+                min(duration, max(0, timeline.date.timeIntervalSince($0)))
+            } ?? 0
 
             GeometryReader { geo in
+
                 ZStack {
                     Color.black.ignoresSafeArea()
-                    animContent(t: t, w: geo.size.width, h: geo.size.height)
-                }
-            }
-            .onChange(of: t >= 2.78) { _, done in
-                guard done, !isFinished else { return }
-                isFinished = true
-                DispatchQueue.main.async { onFinish() }
-            }
-        }
-        .navigationBarBackButtonHidden()
-        .toolbar(.hidden, for: .navigationBar)
-        .onAppear {
-            guard startDate == nil else { return }
-            startDate = Date()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.95) {
-                guard !isFinished else { return }
-                isFinished = true
-                onFinish()
-            }
-        }
-    }
 
-    // MARK: - Main Animation Content
-    @ViewBuilder
-    private func animContent(t: Double, w: CGFloat, h: CGFloat) -> some View {
-        let cx = w / 2
-        let cy = h / 2 - 24
-        let baseLogoSize: CGFloat = 160
-
-        // ── Phase Timing ────────────────────────────────────────────────
-        // 0.00 – 0.30s : Screen fades in from pure black
-        // 0.30 – 1.85s : Riders travel along the road curve
-        // 1.80 – 2.45s : Road contracts smoothly from fullscreen (5.5x) down to logo size (1.0x)
-        // 2.05 – 2.50s : The white "C" unmasks and reveals around the road
-        // 2.40 – 2.80s : "CONVOY" typography reveals with tracking animation
-        let roadAppear = ss(0.00, 0.30, t)
-        let morphP     = CGFloat(ss(1.80, 2.45, t))
-        let cRevealP   = CGFloat(ss(2.05, 2.50, t))
-        let textAlpha  = ss(2.40, 2.80, t)
-
-        // Seamless zoom transformation:
-        // At morphP = 0 (zoomed): scale = 5.5x, shifted upward so the road spans the entire screen
-        // At morphP = 1 (logo):   scale = 1.0x, centered at (cx, cy)
-        let zoomScale: CGFloat   = 5.50
-        let targetScale: CGFloat = 1.00
-        let currentScale = zoomScale + (targetScale - zoomScale) * easeOutCubic(morphP)
-
-        let zoomedOffsetY: CGFloat = -h * 0.22
-        let logoOffsetY: CGFloat   = 0.0
-        let currentOffsetY = zoomedOffsetY + (logoOffsetY - zoomedOffsetY) * easeOutCubic(morphP)
-
-        let logoFrameCenter = CGPoint(x: cx, y: cy + currentOffsetY)
-        let currentLogoSize = baseLogoSize * currentScale
-
-        // ── 1. The Convoy Logo Road & C Shape ────────────────────────────
-        ZStack {
-            // Ambient Orange Glow behind the logo — only during reveal
-            if cRevealP > 0.01 {
-                RoundedRectangle(cornerRadius: 36 * currentScale, style: .continuous)
-                    .fill(orangeGlow.opacity(Double(cRevealP) * 0.55))
-                    .frame(width: currentLogoSize + 14, height: currentLogoSize + 14)
-                    .blur(radius: 26)
-            }
-
-            // Layer A — Road-only (bottom 51% of logo, always visible once road appears).
-            // This keeps the road and orange stripe showing during the biker scene
-            // WITHOUT revealing any part of the C shape.
-            Image("logo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: currentLogoSize, height: currentLogoSize)
-                .mask {
-                    GeometryReader { g in
-                        // Reveal only bottom 51% (road portion), top 49% stays black
-                        VStack(spacing: 0) {
-                            Color.clear.frame(height: g.size.height * 0.49)
-                            Color.white.frame(height: g.size.height * 0.51)
-                        }
+                    if reduceMotion {
+                        reducedView(size: geo.size)
+                    } else {
+                        signaturePulse(time: t, size: geo.size)
                     }
                 }
-                .opacity(Double(roadAppear))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onChange(of: t >= duration) { _, finished in
+                    if finished {
+                        finish()
+                    }
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            guard startDate == nil else { return }
 
-            // Layer B — Full logo (road + C) fades in together during reveal phase.
-            // Opacity is 0 until cRevealP > 0 so the C is completely invisible
-            // before the reveal transition begins.
+            startDate = Date()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+                finish()
+            }
+        }
+    }
+
+    // MARK: - Signature Pulse
+
+    private func signaturePulse(time t: Double, size: CGSize) -> some View {
+
+        let center = CGPoint(
+            x: size.width / 2,
+            y: size.height / 2 - 20
+        )
+
+        let logoSize = min(size.width * 0.47, 190)
+
+        let logoIn = ease(0.15, 0.75, t)
+        let wordmarkIn = ease(1.25, 1.75, t)
+
+        let finalFade = 1 - ease(2.30, 2.60, t)
+
+        return ZStack {
+
+            // 1. Soft orange ambient light
+
+            Circle()
+                .fill(orange.opacity(0.16))
+                .frame(width: 115, height: 115)
+                .blur(radius: 42)
+                .position(center)
+                .opacity(logoIn * finalFade)
+
+            // 2. Expanding signature waves
+
+            Canvas { context, canvasSize in
+
+                let c = CGPoint(
+                    x: canvasSize.width / 2,
+                    y: canvasSize.height / 2
+                )
+
+                // Three carefully spaced waves
+
+                for index in 0..<3 {
+
+                    let delay = Double(index) * 0.23
+                    let progress = ease(
+                        0.48 + delay,
+                        1.65 + delay,
+                        t
+                    )
+
+                    if progress > 0 && progress < 1 {
+
+                        let radius = CGFloat(logoSize * 0.48)
+                            + CGFloat(progress) * 75
+
+                        let opacity = (1 - progress) * 0.23
+
+                        let rect = CGRect(
+                            x: c.x - radius,
+                            y: c.y - radius,
+                            width: radius * 2,
+                            height: radius * 2
+                        )
+
+                        var wave = Path()
+                        wave.addEllipse(in: rect)
+
+                        context.stroke(
+                            wave,
+                            with: .color(
+                                index == 1
+                                    ? orange.opacity(opacity)
+                                    : cream.opacity(opacity * 0.65)
+                            ),
+                            lineWidth: index == 0 ? 1.5 : 1
+                        )
+                    }
+                }
+
+                // Fine orange orbital arc
+
+                let orbitProgress = ease(0.55, 1.65, t)
+
+                if orbitProgress < 1 {
+
+                    var arc = Path()
+
+                    let orbitRect = CGRect(
+                        x: c.x - logoSize * 0.63,
+                        y: c.y - logoSize * 0.63,
+                        width: logoSize * 1.26,
+                        height: logoSize * 1.26
+                    )
+
+                    arc.addArc(
+                        center: c,
+                        radius: logoSize * 0.63,
+                        startAngle: .degrees(-90),
+                        endAngle: .degrees(-90 + 300 * orbitProgress),
+                        clockwise: false
+                    )
+
+                    context.stroke(
+                        arc,
+                        with: .color(
+                            orange.opacity((1 - orbitProgress) * 0.65)
+                        ),
+                        style: StrokeStyle(
+                            lineWidth: 1.5,
+                            lineCap: .round
+                        )
+                    )
+                }
+            }
+            .frame(width: size.width, height: size.height)
+            .opacity(finalFade)
+
+            // 3. Original logo appears intact
+
             Image("logo")
                 .resizable()
                 .scaledToFit()
-                .frame(width: currentLogoSize, height: currentLogoSize)
-                .clipShape(RoundedRectangle(cornerRadius: 36 * currentScale, style: .continuous))
-                .opacity(Double(cRevealP))
-        }
-        .position(logoFrameCenter)
-
-        // ── 2. Real Geared Motorcycle Riders along the exact road curve ─
-        if morphP < 0.15 && t >= 0.30 && t <= 1.95 {
-            // 3 riders with convoy spacing
-            ForEach(0..<3, id: \.self) { idx in
-                riderView(
-                    idx: idx,
-                    t: t,
-                    w: w,
-                    h: h,
-                    logoFrameCenter: logoFrameCenter,
-                    scale: currentScale,
-                    baseLogoSize: baseLogoSize
+                .frame(width: logoSize, height: logoSize)
+                .scaleEffect(0.91 + logoIn * 0.09)
+                .opacity(logoIn)
+                .shadow(
+                    color: orange.opacity(0.13 * logoIn),
+                    radius: 15
                 )
-            }
-        }
+                .position(center)
+                .opacity(finalFade)
 
-        // ── 3. Final "CONVOY" Brand Typography ──────────────────────────
-        if textAlpha > 0.001 {
-            VStack(spacing: 0) {
-                Text("CONVOY")
-                    .font(.system(size: 38, weight: .bold, design: .default))
-                    .tracking(CGFloat(7.0 - textAlpha * 3.0))
-                    .foregroundStyle(.white)
-            }
-            .opacity(textAlpha)
-            .position(x: cx, y: cy + baseLogoSize / 2 + 44)
+            // 4. A refined light sweep
+
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            orange.opacity(0.65),
+                            cream.opacity(0.85),
+                            .clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: logoSize * 0.9, height: 1)
+                .blur(radius: 1.5)
+                .rotationEffect(.degrees(-20))
+                .position(
+                    x: center.x - logoSize * 0.48
+                        + ease(0.85, 1.35, t) * logoSize * 0.96,
+                    y: center.y
+                )
+                .opacity(
+                    ease(0.85, 1.0, t)
+                    * (1 - ease(1.35, 1.55, t))
+                    * 0.8
+                )
+
+            // 5. Wordmark
+
+            Text("CONVOY")
+                .font(.system(size: 27, weight: .bold, design: .default))
+                .tracking(7)
+                .foregroundStyle(cream)
+                .opacity(wordmarkIn * finalFade)
+                .position(
+                    x: center.x,
+                    y: center.y + logoSize / 2 + 42
+                )
         }
+        .frame(width: size.width, height: size.height)
     }
 
-    // MARK: - Individual Motorcyclist along the Logo's Exact Road Path
-    @ViewBuilder
-    private func riderView(
-        idx: Int,
-        t: Double,
-        w: CGFloat,
-        h: CGFloat,
-        logoFrameCenter: CGPoint,
-        scale: CGFloat,
-        baseLogoSize: CGFloat
-    ) -> some View {
-        // Stagger: 0.36s spacing, each takes 1.20s to traverse the curve
-        let startT   = 0.34 + Double(idx) * 0.36
-        let duration = 1.20
-        let elapsed  = t - startT
+    // MARK: - Reduced Motion
 
-        if elapsed >= 0 && elapsed <= duration {
-            let u = CGFloat(elapsed / duration)
+    private func reducedView(size: CGSize) -> some View {
 
-            // Logo-space origin (top-left corner of the logo square)
-            let s = baseLogoSize * scale
-            let originX = logoFrameCenter.x - s / 2
-            let originY = logoFrameCenter.y - s / 2
+        VStack(spacing: 20) {
 
-            // Road centerline Bézier — calibrated to the actual white road ribbon.
-            // The road enters from bottom-left, sweeps right and curves up toward
-            // the horizon at top-right, matching the logo's S-curve road exactly.
-            // All coordinates are in normalized logo space (0..1).
-            let p0 = CGPoint(x: originX + 0.18 * s, y: originY + 0.90 * s)  // enter bottom-left
-            let p1 = CGPoint(x: originX + 0.38 * s, y: originY + 0.78 * s)  // sweep right low
-            let p2 = CGPoint(x: originX + 0.60 * s, y: originY + 0.60 * s)  // mid-curve rising
-            let p3 = CGPoint(x: originX + 0.56 * s, y: originY + 0.46 * s)  // vanish into logo center
-
-            let pos = cubicBezier(p0, p1, p2, p3, u)
-            let rawAngle = cubicTangent(p0, p1, p2, p3, u)
-
-            // Natural lean: bikes bank into the curve but not excessively
-            let leanAngle = rawAngle * 0.42
-
-            // Perspective scale: bikes start large (near, bottom) and shrink to small
-            // (far, horizon). Range 0.72→0.28 gives natural road depth without looking tiny.
-            let nearScale: CGFloat = 0.72
-            let farScale:  CGFloat = 0.28
-            let pScale = nearScale + (farScale - nearScale) * easeOutCubic(u)
-
-            // Natural rider size: 120×75 at 1x scale
-            let riderW: CGFloat = 120
-            let riderH: CGFloat = 75
-
-            // Smooth fade in at entrance, fade out as riders reach vanishing point
-            let fadeIn  = u < 0.06 ? Double(u / 0.06) : 1.0
-            let fadeOut = u > 0.88 ? Double((1.0 - u) / 0.12) : 1.0
-            let opacity = fadeIn * fadeOut
-
-            Image("race_biker")
+            Image("logo")
                 .resizable()
                 .scaledToFit()
-                .frame(width: riderW, height: riderH)
-                // Subtle drop shadow for ground contact realism
-                .shadow(color: .black.opacity(0.5 * opacity), radius: 4 * pScale, y: 3 * pScale)
-                .rotationEffect(.radians(Double(leanAngle)))
-                .scaleEffect(pScale)
-                .position(pos)
-                .opacity(opacity)
-        }
-    }
+                .frame(width: min(size.width * 0.47, 190))
 
-    // MARK: - Bézier Mathematics
-    private func cubicBezier(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ t: CGFloat) -> CGPoint {
-        let u = 1 - t
-        return CGPoint(
-            x: u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x,
-            y: u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y
+            Text("CONVOY")
+                .font(.system(size: 27, weight: .bold))
+                .tracking(7)
+                .foregroundStyle(cream)
+        }
+        .position(
+            x: size.width / 2,
+            y: size.height / 2 - 20
         )
     }
 
-    private func cubicTangent(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ t: CGFloat) -> CGFloat {
-        let u = 1 - t
-        let dx = 3*u*u*(p1.x - p0.x) + 6*u*t*(p2.x - p1.x) + 3*t*t*(p3.x - p2.x)
-        let dy = 3*u*u*(p1.y - p0.y) + 6*u*t*(p2.y - p1.y) + 3*t*t*(p3.y - p2.y)
-        return atan2(dy, dx)
-    }
+    // MARK: - Timing
 
-    private func easeOutCubic(_ x: CGFloat) -> CGFloat {
-        let inv = 1 - x
-        return 1 - inv * inv * inv
-    }
+    private func ease(
+        _ start: Double,
+        _ end: Double,
+        _ time: Double
+    ) -> Double {
 
-    private func ss(_ lo: Double, _ hi: Double, _ t: Double) -> Double {
-        let x = max(0, min(1, (t - lo) / (hi - lo)))
+        let x = min(1, max(0, (time - start) / (end - start)))
         return x * x * (3 - 2 * x)
+    }
+
+    // MARK: - Completion
+
+    private func finish() {
+        guard !didFinish else { return }
+        didFinish = true
+        onFinish()
     }
 }
 
-// MARK: - Backward Compatibility Alias
+// MARK: - Compatibility
+
 typealias InConvoyView = ConvoyOpeningAnimationView

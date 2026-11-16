@@ -1,53 +1,62 @@
+
 import SwiftUI
 import Combine
-
-// MARK: - Ellis Mascot Controller
-// Orchestrates physics, momentum dragging, edge collisions, tap reactions,
-// autonomous idle behaviors, conversation lifecycle states, and context-aware reactions.
 
 @MainActor
 @Observable
 public final class EllisController {
 
-    // MARK: - Transform & Pose State
+    // MARK: - Mascot State
+
     public var expression: EllisExpression = .idle
-    public var rotation: Double = 0.0              // Degrees
-    public var squashX: CGFloat = 1.0              // Width scale
-    public var squashY: CGFloat = 1.0              // Height scale
-    public var offsetY: CGFloat = 0.0              // Vertical jump / float offset
-    public var offsetX: CGFloat = 0.0              // Horizontal shake offset
-    public var lookOffset: CGSize = .zero          // Gaze direction
-    public var blinkProgress: CGFloat = 0.0        // Eyelid progress
+    public var rotation: Double = 0
+    public var squashX: CGFloat = 1
+    public var squashY: CGFloat = 1
+    public var offsetY: CGFloat = 0
+    public var offsetX: CGFloat = 0
+    public var lookOffset: CGSize = .zero
+    public var blinkProgress: CGFloat = 0
 
-    // MARK: - Dragging & Physics State
-    public var position: CGPoint = .zero           // Current center position
-    public var defaultPosition: CGPoint = .zero    // Resting welcome/dock position
-    public var isDragging: Bool = false
-    public var dragBounds: CGRect = .zero          // Usable bounding box
-    public var mascotSize: CGFloat = 110.0
-    public var currentPriority: Int = 0
+    // MARK: - Position and Dragging
 
-    // MARK: - Configuration
-    public var reduceMotion: Bool = false
+    public var position: CGPoint = .zero
+    public var defaultPosition: CGPoint = .zero
+    public var isDragging = false
+    public var dragBounds: CGRect = .zero
+    public var mascotSize: CGFloat = 110
+    public var currentPriority = 0
 
-    // MARK: - Internal Engine Mechanics
+    public var reduceMotion = false
+    public var nearMessageTarget: CGPoint? = nil
+
+    // MARK: - Internal State
+
     private var velocity: CGVector = .zero
     private var dragStartPosition: CGPoint = .zero
     private var lastDragPoint: CGPoint = .zero
-    private var lastDragTime: Date = Date()
-    private var physicsTimer: Timer? = nil
-    private var idleTimer: Timer? = nil
-    private var floatTimer: Timer? = nil
-    private var blinkTimer: Timer? = nil   // Dedicated natural blink timer
-    private var floatPhase: Double = 0.0
+    private var lastDragTime = Date()
 
-    private var tapReactionIndex: Int = 0
-    private var lastTapTime: Date = .distantPast
-    private var lastCollisionTime: Date = .distantPast
-    private var isRecovering: Bool = false
+    private var physicsTimer: Timer?
+    private var idleTimer: Timer?
+    private var floatTimer: Timer?
+    private var blinkTimer: Timer?
+
+    private var floatPhase: Double = 0
+    private var tapReactionIndex = 0
+    private var lastTapTime = Date.distantPast
+    private var lastCollisionTime = Date.distantPast
+
+    private var isRecovering = false
+    private var chatbotIsThinking = false
+
+    private var actionGeneration = 0
+    private var restoreWorkItem: DispatchWorkItem?
+
+    // MARK: - Initialization
+
+    public init() {}
 
     // MARK: - Lifecycle
-    public init() {}
 
     public func start() {
         startIdleScheduler()
@@ -57,59 +66,59 @@ public final class EllisController {
 
     public func stop() {
         idleTimer?.invalidate()
-        idleTimer = nil
         floatTimer?.invalidate()
+        physicsTimer?.invalidate()
+        blinkTimer?.invalidate()
+
+        idleTimer = nil
         floatTimer = nil
+        physicsTimer = nil
+        blinkTimer = nil
+
+        invalidateScheduledRestore()
+    }
+
+    // MARK: - Animation Priority
+
+    private func invalidateScheduledRestore() {
+        actionGeneration += 1
+        restoreWorkItem?.cancel()
+        restoreWorkItem = nil
+    }
+
+    private func scheduleRestore(after delay: Double) {
+        invalidateScheduledRestore()
+
+        let generation = actionGeneration
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.actionGeneration == generation,
+                  !self.isDragging
+            else {
+                return
+            }
+
+            self.restoreWorkItem = nil
+            self.softSettle()
+        }
+
+        restoreWorkItem = work
+
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + delay,
+            execute: work
+        )
+    }
+
+    // MARK: - Dragging
+
+    public func onDragStarted(at point: CGPoint) {
+        invalidateScheduledRestore()
+
         physicsTimer?.invalidate()
         physicsTimer = nil
-        blinkTimer?.invalidate()
-        blinkTimer = nil
-    }
 
-    // MARK: - Dedicated Natural Blink Scheduler
-    // Fires independently of idle actions so Ellis always blinks naturally
-    private func startBlinkScheduler() {
-        scheduleNextBlink()
-    }
-
-    private func scheduleNextBlink() {
-        // Natural human blink: every 2–7 seconds, varied
-        let delay = Double.random(in: 2.5...7.0)
-        blinkTimer?.invalidate()
-        blinkTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                // Only blink if not already in a prioritized expression
-                if self.currentPriority == 0 || self.currentPriority <= 10 {
-                    // Occasionally do a double blink (25% chance)
-                    if Double.random(in: 0...1) < 0.25 {
-                        self.performDoubleBlink()
-                    } else {
-                        self.performBlink()
-                    }
-                }
-                self.scheduleNextBlink()
-            }
-        }
-    }
-
-    // MARK: - Floating / Breathing Loop
-    private func startFloatingLoop() {
-        floatTimer?.invalidate()
-        floatTimer = Timer.scheduledTimer(withTimeInterval: 0.033, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                guard !self.isDragging && self.expression == .idle && !self.isRecovering else { return }
-                self.floatPhase += 0.045
-                let breathe = sin(self.floatPhase) * (self.reduceMotion ? 1.0 : 3.0)
-                self.offsetY = breathe
-            }
-        }
-    }
-
-    // MARK: - Drag Gesture Handling
-    public func onDragStarted(at point: CGPoint) {
-        physicsTimer?.invalidate()
         velocity = .zero
         dragStartPosition = position
         lastDragPoint = position
@@ -117,493 +126,656 @@ public final class EllisController {
     }
 
     public func onDragConfirmed() {
+        invalidateScheduledRestore()
+
         isDragging = true
-        currentPriority = 100 // Drag is top priority
+        currentPriority = 100
+
         physicsTimer?.invalidate()
+        physicsTimer = nil
 
         if !reduceMotion {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+            withAnimation(
+                .spring(response: 0.25, dampingFraction: 0.6)
+            ) {
                 squashX = 1.06
                 squashY = 0.94
-                rotation = 2.0
+                rotation = 2
             }
         }
     }
 
     public func onDragChanged(translation: CGSize) {
         guard isDragging else { return }
+
         let now = Date()
         let dt = max(0.008, now.timeIntervalSince(lastDragTime))
-        
-        let newPos = CGPoint(
+
+        let newPosition = CGPoint(
             x: dragStartPosition.x + translation.width,
             y: dragStartPosition.y + translation.height
         )
 
-        // Calculate velocity (pt/s)
-        let vx = (newPos.x - lastDragPoint.x) / CGFloat(dt)
-        let vy = (newPos.y - lastDragPoint.y) / CGFloat(dt)
-        velocity = CGVector(dx: vx, dy: vy)
+        velocity = CGVector(
+            dx: (newPosition.x - lastDragPoint.x) / CGFloat(dt),
+            dy: (newPosition.y - lastDragPoint.y) / CGFloat(dt)
+        )
 
-        lastDragPoint = newPos
+        lastDragPoint = newPosition
         lastDragTime = now
 
-        // Check boundary limits and clamp
-        let clampedPos = clampPositionToBounds(newPos)
-        let hitEdge = (clampedPos != newPos)
-        position = clampedPos
+        let clamped = clampPosition(newPosition)
+        position = clamped
 
-        // Check if fast drag hit an edge while dragging
-        if hitEdge {
-            let speed = hypot(velocity.dx, velocity.dy)
-            checkAndTriggerCollision(speed: speed)
+        if clamped != newPosition {
+            checkAndTriggerCollision(
+                speed: hypot(velocity.dx, velocity.dy)
+            )
         }
     }
 
     public func onDragEnded(finalTranslation: CGSize) {
         isDragging = false
-        
-        // Settle pickup squash
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-            squashX = 1.0
-            squashY = 1.0
-            rotation = 0.0
+
+        withAnimation(
+            .spring(response: 0.35, dampingFraction: 0.7)
+        ) {
+            squashX = 1
+            squashY = 1
+            rotation = 0
         }
 
-        // Check flick momentum
         let speed = hypot(velocity.dx, velocity.dy)
+
         if speed > 80 {
             startMomentumPhysics()
         } else {
-            currentPriority = 0
+            currentPriority = chatbotIsThinking ? 75 : 0
             softSettle()
         }
     }
 
-    // MARK: - Momentum Physics & Boundary Bounce
+    private func clampPosition(_ point: CGPoint) -> CGPoint {
+        guard dragBounds.width > mascotSize,
+              dragBounds.height > mascotSize
+        else {
+            return point
+        }
+
+        let half = mascotSize / 2
+
+        return CGPoint(
+            x: min(
+                max(point.x, dragBounds.minX + half),
+                dragBounds.maxX - half
+            ),
+            y: min(
+                max(point.y, dragBounds.minY + half),
+                dragBounds.maxY - half
+            )
+        )
+    }
+
+    // MARK: - Momentum Physics
+
     private func startMomentumPhysics() {
         physicsTimer?.invalidate()
+
         let friction: CGFloat = 0.92
-        let minSpeed: CGFloat = 20.0
+        let minimumSpeed: CGFloat = 20
 
-        physicsTimer = Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { [weak self] _ in
-            // Capture timer reference safely to avoid Sendable warning
+        physicsTimer = Timer.scheduledTimer(
+            withTimeInterval: 0.016,
+            repeats: true
+        ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self = self else { return }
+                guard let self, !self.isDragging else { return }
 
-                var curX = self.position.x + self.velocity.dx * 0.016
-                var curY = self.position.y + self.velocity.dy * 0.016
+                var x = self.position.x + self.velocity.dx * 0.016
+                var y = self.position.y + self.velocity.dy * 0.016
 
                 let half = self.mascotSize / 2
-                var didCollide = false
-                var impactSpeed: CGFloat = 0
+                var collisionSpeed: CGFloat = 0
+                var collided = false
 
-                // X boundary bounce
-                if curX - half < self.dragBounds.minX {
-                    curX = self.dragBounds.minX + half
-                    impactSpeed = abs(self.velocity.dx)
+                if x - half < self.dragBounds.minX {
+                    x = self.dragBounds.minX + half
+                    collisionSpeed = abs(self.velocity.dx)
                     self.velocity.dx = -self.velocity.dx * 0.58
-                    didCollide = true
-                } else if curX + half > self.dragBounds.maxX {
-                    curX = self.dragBounds.maxX - half
-                    impactSpeed = abs(self.velocity.dx)
+                    collided = true
+                } else if x + half > self.dragBounds.maxX {
+                    x = self.dragBounds.maxX - half
+                    collisionSpeed = abs(self.velocity.dx)
                     self.velocity.dx = -self.velocity.dx * 0.58
-                    didCollide = true
+                    collided = true
                 }
 
-                // Y boundary bounce
-                if curY - half < self.dragBounds.minY {
-                    curY = self.dragBounds.minY + half
-                    impactSpeed = max(impactSpeed, abs(self.velocity.dy))
+                if y - half < self.dragBounds.minY {
+                    y = self.dragBounds.minY + half
+                    collisionSpeed = max(
+                        collisionSpeed,
+                        abs(self.velocity.dy)
+                    )
                     self.velocity.dy = -self.velocity.dy * 0.58
-                    didCollide = true
-                } else if curY + half > self.dragBounds.maxY {
-                    curY = self.dragBounds.maxY - half
-                    impactSpeed = max(impactSpeed, abs(self.velocity.dy))
+                    collided = true
+                } else if y + half > self.dragBounds.maxY {
+                    y = self.dragBounds.maxY - half
+                    collisionSpeed = max(
+                        collisionSpeed,
+                        abs(self.velocity.dy)
+                    )
                     self.velocity.dy = -self.velocity.dy * 0.58
-                    didCollide = true
+                    collided = true
                 }
 
-                self.position = CGPoint(x: curX, y: curY)
+                self.position = CGPoint(x: x, y: y)
 
-                if didCollide {
-                    self.checkAndTriggerCollision(speed: impactSpeed)
+                if collided {
+                    self.checkAndTriggerCollision(speed: collisionSpeed)
                 }
 
-                // Apply friction
                 self.velocity.dx *= friction
                 self.velocity.dy *= friction
 
-                let speed = hypot(self.velocity.dx, self.velocity.dy)
-                if speed < minSpeed {
+                if hypot(self.velocity.dx, self.velocity.dy) < minimumSpeed {
                     self.physicsTimer?.invalidate()
                     self.physicsTimer = nil
-                    self.currentPriority = 0
+                    self.currentPriority = self.chatbotIsThinking ? 75 : 0
                     self.softSettle()
                 }
             }
         }
     }
 
-    private func clampPositionToBounds(_ pos: CGPoint) -> CGPoint {
-        guard dragBounds.width > mascotSize && dragBounds.height > mascotSize else { return pos }
-        let half = mascotSize / 2
-        let minX = dragBounds.minX + half
-        let maxX = dragBounds.maxX - half
-        let minY = dragBounds.minY + half
-        let maxY = dragBounds.maxY - half
+    // MARK: - Collision Reactions
 
-        return CGPoint(
-            x: min(maxX, max(minX, pos.x)),
-            y: min(maxY, max(minY, pos.y))
-        )
-    }
-
-    // MARK: - Collision Detection & Pained Expression
     private func checkAndTriggerCollision(speed: CGFloat) {
-        let now = Date()
-        guard now.timeIntervalSince(lastCollisionTime) > 0.9 else { return } // Cooldown
+        guard Date().timeIntervalSince(lastCollisionTime) > 0.7 else {
+            return
+        }
 
         if speed > 700 {
-            // HARD COLLISION -> Pained expression + recoil + shake
-            lastCollisionTime = now
-            triggerPainedCollisionReaction()
+            lastCollisionTime = Date()
+            triggerPainedCollision()
         } else if speed > 280 {
-            // MEDIUM COLLISION -> Surprised recoil
-            lastCollisionTime = now
+            lastCollisionTime = Date()
             triggerSurprisedBounce()
         }
     }
 
-    private func triggerPainedCollisionReaction() {
-        currentPriority = 100 // Highest
+    private func triggerPainedCollision() {
+        invalidateScheduledRestore()
+
+        currentPriority = 100
         isRecovering = true
         expression = .pained
 
-        // Haptic feedback
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-
         if !reduceMotion {
-            // Squash on impact
-            withAnimation(.spring(response: 0.18, dampingFraction: 0.4)) {
+            withAnimation(
+                .spring(response: 0.18, dampingFraction: 0.4)
+            ) {
                 squashX = 1.25
                 squashY = 0.78
                 rotation = Double.random(in: -9...9)
             }
 
-            // Quick shake
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                withAnimation(.linear(duration: 0.06).repeatCount(4, autoreverses: true)) {
-                    self.offsetX = 7.0
+                guard self.isRecovering else { return }
+
+                withAnimation(
+                    .linear(duration: 0.06)
+                        .repeatCount(4, autoreverses: true)
+                ) {
+                    self.offsetX = 7
                 }
             }
         }
 
-        // Recover to normal
+        let generation = actionGeneration
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+            guard self.actionGeneration == generation else { return }
+
             self.expression = .recovering
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+
+            withAnimation(
+                .spring(response: 0.35, dampingFraction: 0.7)
+            ) {
                 self.offsetX = 0
-                self.squashX = 1.0
-                self.squashY = 1.0
+                self.squashX = 1
+                self.squashY = 1
                 self.rotation = 0
             }
         }
 
-        // Restore completely
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
-            self.expression = .idle
+            guard self.actionGeneration == generation else { return }
+
             self.isRecovering = false
-            self.currentPriority = 0
+            self.currentPriority = self.chatbotIsThinking ? 75 : 0
+            self.softSettle()
         }
     }
 
     private func triggerSurprisedBounce() {
         guard currentPriority <= 85 else { return }
+
+        invalidateScheduledRestore()
+
         currentPriority = 85
         expression = .surprised
 
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
-
         if !reduceMotion {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
+            withAnimation(
+                .spring(response: 0.25, dampingFraction: 0.5)
+            ) {
                 squashX = 1.12
                 squashY = 0.88
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                self.squashX = 1.0
-                self.squashY = 1.0
-            }
-            self.expression = .idle
-            self.currentPriority = 0
-        }
+        scheduleRestore(after: 0.45)
     }
 
-    // MARK: - Tap Interactions (Varied Playful Reactions)
+    // MARK: - Tap Reactions
+
     public func onTap() {
+        guard !isDragging else { return }
+
         let now = Date()
-        guard now.timeIntervalSince(lastTapTime) > 0.4 else { return }
+        guard now.timeIntervalSince(lastTapTime) > 0.35 else {
+            return
+        }
+
         lastTapTime = now
-        guard currentPriority <= 80 else { return }
 
-        tapReactionIndex = (tapReactionIndex + 1) % 6
-        currentPriority = 80
+        // A tap should be able to interrupt thinking or speaking.
+        invalidateScheduledRestore()
 
-        let haptic = UISelectionFeedbackGenerator()
-        haptic.selectionChanged()
+        currentPriority = 90
+        tapReactionIndex = (tapReactionIndex + 1) % 7
 
         switch tapReactionIndex {
         case 0:
-            // 1. Surprised reaction followed by a small jump
             expression = .surprised
+
             if !reduceMotion {
-                withAnimation(.spring(response: 0.22, dampingFraction: 0.5)) {
+                withAnimation(
+                    .spring(response: 0.22, dampingFraction: 0.5)
+                ) {
                     offsetY = -18
                     squashX = 0.94
                     squashY = 1.08
                 }
             }
-            scheduleRestore(after: 0.45)
+
+            scheduleRestore(after: 0.65)
 
         case 1:
-            // 2. Playful annoyed expression + small shake
             expression = .angry
+
             if !reduceMotion {
-                withAnimation(.linear(duration: 0.06).repeatCount(4, autoreverses: true)) {
+                withAnimation(
+                    .linear(duration: 0.06)
+                        .repeatCount(4, autoreverses: true)
+                ) {
                     offsetX = 6
                     rotation = 6
                 }
             }
-            scheduleRestore(after: 0.50)
+
+            scheduleRestore(after: 0.7)
 
         case 2:
-            // 3. Quick 360-degree spin
             expression = .excited
+
             if !reduceMotion {
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.65)) {
+                withAnimation(
+                    .spring(response: 0.45, dampingFraction: 0.65)
+                ) {
                     rotation += 360
                     offsetY = -12
                 }
             }
-            scheduleRestore(after: 0.55)
+
+            scheduleRestore(after: 0.85)
 
         case 3:
-            // 4. Happy double jump
             expression = .happy
+
             if !reduceMotion {
-                withAnimation(.spring(response: 0.2, dampingFraction: 0.55)) {
+                withAnimation(
+                    .spring(response: 0.2, dampingFraction: 0.55)
+                ) {
                     offsetY = -16
                 }
+
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                    withAnimation(.spring(response: 0.2, dampingFraction: 0.55)) {
+                    guard self.currentPriority == 90 else { return }
+
+                    withAnimation(
+                        .spring(response: 0.2, dampingFraction: 0.55)
+                    ) {
                         self.offsetY = -20
                     }
                 }
             }
-            scheduleRestore(after: 0.58)
+
+            scheduleRestore(after: 0.75)
 
         case 4:
-            // 5. Curious head tilt
             expression = .confused
+
             if !reduceMotion {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) {
+                withAnimation(
+                    .spring(response: 0.3, dampingFraction: 0.65)
+                ) {
                     rotation = 14
                     lookOffset = CGSize(width: -4, height: -2)
                 }
             }
-            scheduleRestore(after: 0.50)
 
-        default:
-            // 6. Playful bounce & celebration
+            scheduleRestore(after: 0.7)
+
+        case 5:
             expression = .celebrating
+
             if !reduceMotion {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.5)) {
+                withAnimation(
+                    .spring(response: 0.28, dampingFraction: 0.5)
+                ) {
                     squashX = 1.15
                     squashY = 0.85
                     offsetY = -14
                 }
             }
-            scheduleRestore(after: 0.48)
+
+            scheduleRestore(after: 0.75)
+
+        default:
+            expression = .happy
+
+            if !reduceMotion {
+                withAnimation(
+                    .spring(response: 0.25, dampingFraction: 0.6)
+                ) {
+                    offsetX = 8
+                    rotation = -8
+                }
+            }
+
+            scheduleRestore(after: 0.7)
         }
     }
 
-    // MARK: - Conversation Lifecycle Bindings
+    // MARK: - Conversation Reactions
+
     public func onUserSentMessage() {
-        guard currentPriority <= 70 else { return }
+        chatbotIsThinking = false
+
+        guard currentPriority < 90 else { return }
+
+        invalidateScheduledRestore()
+
         currentPriority = 70
         expression = .listening
+
         if !reduceMotion {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+            withAnimation(
+                .spring(response: 0.25, dampingFraction: 0.7)
+            ) {
                 rotation = -4
                 offsetY = -6
             }
         }
-        scheduleRestore(after: 1.0)
+
+        scheduleRestore(after: 0.8)
     }
 
     public func onChatbotThinking(isThinking: Bool) {
+        chatbotIsThinking = isThinking
+
         if isThinking {
-            guard currentPriority <= 75 else { return }
+            guard currentPriority < 90 else { return }
+
+            invalidateScheduledRestore()
+
             currentPriority = 75
             expression = .thinking
             lookOffset = CGSize(width: 4, height: -4)
+
             if !reduceMotion {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     rotation = 6
                 }
             }
         } else {
+            guard currentPriority < 90 else { return }
+
             if expression == .thinking {
+                invalidateScheduledRestore()
+
+                currentPriority = 65
                 expression = .speaking
-                scheduleRestore(after: 0.8)
+
+                if !reduceMotion {
+                    withAnimation(
+                        .spring(response: 0.25, dampingFraction: 0.7)
+                    ) {
+                        rotation = 0
+                        lookOffset = .zero
+                    }
+                }
+
+                scheduleRestore(after: 0.9)
             }
         }
     }
 
     public func onRidePlanCompleted() {
-        guard currentPriority <= 85 else { return }
+        guard currentPriority < 90 else { return }
+
+        invalidateScheduledRestore()
+
         currentPriority = 85
         expression = .celebrating
+
         if !reduceMotion {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+            withAnimation(
+                .spring(response: 0.3, dampingFraction: 0.5)
+            ) {
                 offsetY = -24
                 rotation = 8
             }
         }
+
         scheduleRestore(after: 1.2)
     }
 
     public func onChatbotError() {
-        guard currentPriority <= 65 else { return }
+        guard currentPriority < 90 else { return }
+
+        invalidateScheduledRestore()
+
         currentPriority = 65
         expression = .confused
+
         if !reduceMotion {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+            withAnimation(
+                .spring(response: 0.25, dampingFraction: 0.6)
+            ) {
                 rotation = -8
             }
         }
+
         scheduleRestore(after: 1.0)
     }
 
-    // MARK: - Context-Aware Conversation Reactions (Section 9)
-    /// Set by ChatbotView to tell Ellis where the most recent message bubble is
-    public var nearMessageTarget: CGPoint? = nil
+    // MARK: - Message-Based Reactions
 
-    /// Analyzes an incoming assistant message and triggers an appropriate
-    /// emotional reaction based on keywords and sentiment.
-    /// Also drifts Ellis slowly toward the latest message bubble.
     public func onMessageReceived(_ text: String) {
-        guard currentPriority <= 60 else { return }
+        guard currentPriority < 90 else { return }
+
         let lower = text.lowercased()
 
-        // Drift Ellis slowly toward the message bubble (top ~30% of chat area)
-        driftNearMessage()
-
-        // Celebratory / positive
-        if matchesAny(lower, ["congratulations", "awesome", "perfect", "ride created",
-                              "all set", "let's go", "you're all set", "great news",
-                              "successfully", "booked", "confirmed"]) {
-            triggerContextReaction(.happy, priority: 65, duration: 1.0, jump: -10, tilt: 5)
+        if matchesAny(lower, [
+            "congratulations", "awesome", "perfect",
+            "ride created", "all set", "let's go",
+            "great news", "successfully", "booked", "confirmed"
+        ]) {
+            triggerContextReaction(
+                .happy,
+                priority: 65,
+                duration: 1.0,
+                jump: -10,
+                tilt: 5
+            )
             return
         }
 
-        // Excited / enthusiastic
-        if matchesAny(lower, ["amazing", "incredible", "beautiful route", "scenic",
-                              "waterfall", "epic", "breathtaking", "stunning"]) {
-            triggerContextReaction(.excited, priority: 65, duration: 0.9, jump: -14, tilt: 4)
+        if matchesAny(lower, [
+            "amazing", "incredible", "beautiful route",
+            "scenic", "waterfall", "epic",
+            "breathtaking", "stunning"
+        ]) {
+            triggerContextReaction(
+                .excited,
+                priority: 65,
+                duration: 0.9,
+                jump: -14,
+                tilt: 4
+            )
             return
         }
 
-        // Error / problem
-        if matchesAny(lower, ["sorry", "couldn't", "error", "failed", "unable",
-                              "not found", "issue", "problem", "unfortunately"]) {
-            triggerContextReaction(.confused, priority: 60, duration: 0.9, jump: 0, tilt: -8)
+        if matchesAny(lower, [
+            "sorry", "couldn't", "error", "failed",
+            "unable", "not found", "issue",
+            "problem", "unfortunately"
+        ]) {
+            triggerContextReaction(
+                .confused,
+                priority: 65,
+                duration: 0.9,
+                jump: 0,
+                tilt: -8
+            )
             return
         }
 
-        // Question / clarification
-        if matchesAny(lower, ["which", "where would", "do you want", "would you like",
-                              "can you tell", "what time", "how many", "could you"]) {
-            triggerContextReaction(.listening, priority: 60, duration: 0.8, jump: -4, tilt: -4)
+        if matchesAny(lower, [
+            "which", "where would", "do you want",
+            "would you like", "can you tell",
+            "what time", "how many", "could you"
+        ]) {
+            triggerContextReaction(
+                .listening,
+                priority: 65,
+                duration: 0.8,
+                jump: -4,
+                tilt: -4
+            )
             return
         }
 
-        // Thinking / working
-        if matchesAny(lower, ["let me check", "searching", "looking up", "finding",
-                              "calculating", "one moment"]) {
-            triggerContextReaction(.thinking, priority: 60, duration: 0.7, jump: 0, tilt: 6)
+        if matchesAny(lower, [
+            "let me check", "searching", "looking up",
+            "finding", "calculating", "one moment"
+        ]) {
+            triggerContextReaction(
+                .thinking,
+                priority: 65,
+                duration: 0.7,
+                jump: 0,
+                tilt: 6
+            )
             return
         }
 
-        // Friendly greeting
-        if matchesAny(lower, ["hey", "hello", "hi there", "good morning", "good evening",
-                              "welcome back", "nice to see"]) {
-            triggerContextReaction(.happy, priority: 60, duration: 0.8, jump: -8, tilt: 3)
+        if matchesAny(lower, [
+            "hey", "hello", "hi there", "good morning",
+            "good evening", "welcome back", "nice to see"
+        ]) {
+            triggerContextReaction(
+                .happy,
+                priority: 65,
+                duration: 0.8,
+                jump: -8,
+                tilt: 3
+            )
             return
         }
 
-        // Farewell
-        if matchesAny(lower, ["ride safe", "see you", "goodbye", "take care",
-                              "have a great ride", "safe travels"]) {
-            triggerContextReaction(.happy, priority: 60, duration: 1.0, jump: -6, tilt: 0)
-            return
+        if matchesAny(lower, [
+            "ride safe", "see you", "goodbye",
+            "take care", "safe travels"
+        ]) {
+            triggerContextReaction(
+                .happy,
+                priority: 65,
+                duration: 1.0,
+                jump: -6,
+                tilt: 0
+            )
         }
     }
 
-    /// Smoothly drifts Ellis toward the top-right area where messages appear,
-    /// keeping a safe gap so it doesn't sit on top of the text.
-    private func driftNearMessage() {
-        guard !isDragging else { return }
-        // Target: upper-right of content area, next to the assistant avatar row
-        // We use a fraction of dragBounds — right side, upper third
-        guard dragBounds.width > 60 && dragBounds.height > 60 else { return }
-        let half = mascotSize / 2
-        let targetX = dragBounds.maxX - half - 4   // right edge
-        let targetY = dragBounds.minY + half + 8   // near top
-        let target = CGPoint(x: targetX, y: targetY)
-
-        // Only drift if not already close
-        let dist = hypot(position.x - target.x, position.y - target.y)
-        guard dist > 20 else { return }
-
-        withAnimation(.easeInOut(duration: 0.9)) {
-            position = target
-        }
-    }
-
-    private func matchesAny(_ text: String, _ keywords: [String]) -> Bool {
+    private func matchesAny(
+        _ text: String,
+        _ keywords: [String]
+    ) -> Bool {
         keywords.contains { text.contains($0) }
     }
 
-    private func triggerContextReaction(_ expr: EllisExpression, priority: Int, duration: Double, jump: CGFloat, tilt: Double) {
+    private func triggerContextReaction(
+        _ expression: EllisExpression,
+        priority: Int,
+        duration: Double,
+        jump: CGFloat,
+        tilt: Double
+    ) {
+        guard currentPriority < 90 else { return }
+
+        invalidateScheduledRestore()
+
         currentPriority = priority
-        expression = expr
+        self.expression = expression
 
         if !reduceMotion {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.65)) {
-                if jump != 0 { offsetY = jump }
-                if tilt != 0 { rotation = tilt }
+            withAnimation(
+                .spring(response: 0.25, dampingFraction: 0.65)
+            ) {
+                if jump != 0 {
+                    offsetY = jump
+                }
+
+                if tilt != 0 {
+                    rotation = tilt
+                }
             }
         }
+
         scheduleRestore(after: duration)
     }
 
-    // MARK: - Autonomous Idle System
+    // MARK: - Idle Behaviour
+
     private func startIdleScheduler() {
         scheduleNextIdleAction()
     }
 
     private func scheduleNextIdleAction() {
-        let delay = Double.random(in: 3.2...6.8)
         idleTimer?.invalidate()
-        idleTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+
+        let delay = Double.random(in: 3.2...6.8)
+
+        idleTimer = Timer.scheduledTimer(
+            withTimeInterval: delay,
+            repeats: false
+        ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self = self else { return }
+                guard let self else { return }
+
                 self.performRandomIdleAction()
                 self.scheduleNextIdleAction()
             }
@@ -611,111 +783,269 @@ public final class EllisController {
     }
 
     private func performRandomIdleAction() {
-        guard currentPriority == 0 && !isDragging && !isRecovering else { return }
+        guard !isDragging,
+              !isRecovering,
+              currentPriority < 60
+        else {
+            return
+        }
 
-        let roll = Int.random(in: 0...10)
-        switch roll {
+        if chatbotIsThinking {
+            switch Int.random(in: 0...3) {
+            case 0:
+                glance(
+                    offset: CGSize(width: -4, height: 0),
+                    expression: .lookLeft
+                )
+
+            case 1:
+                glance(
+                    offset: CGSize(width: 4, height: 0),
+                    expression: .lookRight
+                )
+
+            case 2:
+                glance(
+                    offset: CGSize(width: 0, height: -4),
+                    expression: .lookUp
+                )
+
+            default:
+                performBlink()
+            }
+
+            return
+        }
+
+        switch Int.random(in: 0...10) {
         case 0, 1, 2, 3:
-            // Natural blink
             performBlink()
+
         case 4:
-            // Double blink
             performDoubleBlink()
+
         case 5:
-            // Glance left
-            glance(offset: CGSize(width: -6, height: 0), expr: .lookLeft)
+            glance(
+                offset: CGSize(width: -6, height: 0),
+                expression: .lookLeft
+            )
+
         case 6:
-            // Glance right
-            glance(offset: CGSize(width: 6, height: 0), expr: .lookRight)
+            glance(
+                offset: CGSize(width: 6, height: 0),
+                expression: .lookRight
+            )
+
         case 7:
-            // Glance up
-            glance(offset: CGSize(width: 0, height: -5), expr: .lookUp)
+            glance(
+                offset: CGSize(width: 0, height: -5),
+                expression: .lookUp
+            )
+
         case 8:
-            // Subtle head tilt
             tiltHead()
+
         case 9:
-            // Small playful hop
             if !reduceMotion {
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                withAnimation(
+                    .spring(response: 0.25, dampingFraction: 0.6)
+                ) {
                     offsetY = -10
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+
+                let generation = actionGeneration
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    guard self.actionGeneration == generation else {
+                        return
+                    }
+
                     self.softSettle()
                 }
             }
+
         default:
             performBlink()
         }
     }
 
+    // MARK: - Natural Blinking
+
+    private func startBlinkScheduler() {
+        scheduleNextBlink()
+    }
+
+    private func scheduleNextBlink() {
+        blinkTimer?.invalidate()
+
+        let delay = Double.random(in: 2.5...7.0)
+
+        blinkTimer = Timer.scheduledTimer(
+            withTimeInterval: delay,
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+
+                if !self.isDragging && self.currentPriority < 80 {
+                    if Double.random(in: 0...1) < 0.25 {
+                        self.performDoubleBlink()
+                    } else {
+                        self.performBlink()
+                    }
+                }
+
+                self.scheduleNextBlink()
+            }
+        }
+    }
+
     private func performBlink() {
-        withAnimation(.easeInOut(duration: 0.10)) { blinkProgress = 1.0 }
+        withAnimation(.easeInOut(duration: 0.10)) {
+            blinkProgress = 1
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            withAnimation(.easeInOut(duration: 0.10)) { self.blinkProgress = 0.0 }
+            withAnimation(.easeInOut(duration: 0.10)) {
+                self.blinkProgress = 0
+            }
         }
     }
 
     private func performDoubleBlink() {
         performBlink()
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
             self.performBlink()
         }
     }
 
-    private func glance(offset: CGSize, expr: EllisExpression) {
-        expression = expr
-        withAnimation(.easeInOut(duration: 0.2)) { lookOffset = offset }
+    // MARK: - Eye Movement
+
+    private func glance(
+        offset: CGSize,
+        expression: EllisExpression
+    ) {
+        let generation = actionGeneration
+
+        self.expression = expression
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            lookOffset = offset
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+            guard self.actionGeneration == generation,
+                  !self.isDragging
+            else {
+                return
+            }
+
             withAnimation(.easeInOut(duration: 0.2)) {
                 self.lookOffset = .zero
-                self.expression = .idle
+                self.expression = self.chatbotIsThinking
+                    ? .thinking
+                    : .idle
             }
         }
     }
+
+    // MARK: - Head Tilt
 
     private func tiltHead() {
-        let angle = Double.random(in: 0...1) > 0.5 ? 9.0 : -9.0
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+        let generation = actionGeneration
+        let angle = Bool.random() ? 9.0 : -9.0
+
+        withAnimation(
+            .spring(response: 0.35, dampingFraction: 0.7)
+        ) {
             rotation = angle
         }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                self.rotation = 0.0
+            guard self.actionGeneration == generation else { return }
+
+            withAnimation(
+                .spring(response: 0.35, dampingFraction: 0.7)
+            ) {
+                self.rotation = 0
             }
         }
     }
 
-    // MARK: - State Restoration & Settling
-    private func scheduleRestore(after delay: Double) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            self.softSettle()
+    // MARK: - Floating Animation
+
+    private func startFloatingLoop() {
+        floatTimer?.invalidate()
+
+        floatTimer = Timer.scheduledTimer(
+            withTimeInterval: 0.033,
+            repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      !self.isDragging,
+                      !self.isRecovering,
+                      self.currentPriority < 60,
+                      self.expression == .idle ||
+                      self.expression == .thinking ||
+                      self.expression == .speaking
+                else {
+                    return
+                }
+
+                self.floatPhase += 0.045
+
+                let amount: CGFloat = self.reduceMotion ? 0.5 : 2.5
+
+                self.offsetY = sin(self.floatPhase) * amount
+            }
         }
     }
+
+    // MARK: - Restore and Settle
 
     public func softSettle() {
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.75)) {
-            rotation = 0.0
-            squashX = 1.0
-            squashY = 1.0
-            offsetX = 0.0
-            offsetY = 0.0
-            lookOffset = .zero
-            blinkProgress = 0.0
+        guard !isDragging else { return }
+
+        withAnimation(
+            .spring(response: 0.38, dampingFraction: 0.75)
+        ) {
+            rotation = chatbotIsThinking ? 6 : 0
+            squashX = 1
+            squashY = 1
+            offsetX = 0
+            offsetY = 0
+            lookOffset = chatbotIsThinking
+                ? CGSize(width: 4, height: -4)
+                : .zero
+            blinkProgress = 0
         }
-        expression = .idle
-        currentPriority = 0
+
+        expression = chatbotIsThinking ? .thinking : .idle
+        currentPriority = chatbotIsThinking ? 75 : 0
     }
 
-    /// Reset position to default welcome position
+    // MARK: - Reset Position
+
     public func resetToDefaultPosition() {
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
+        physicsTimer?.invalidate()
+        physicsTimer = nil
+
+        velocity = .zero
+        invalidateScheduledRestore()
+
+        withAnimation(
+            .spring(response: 0.45, dampingFraction: 0.75)
+        ) {
             position = defaultPosition
             rotation = 0
-            squashX = 1.0
-            squashY = 1.0
+            squashX = 1
+            squashY = 1
             offsetX = 0
             offsetY = 0
         }
+
         softSettle()
     }
 }
