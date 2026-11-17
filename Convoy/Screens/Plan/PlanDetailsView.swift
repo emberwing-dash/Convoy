@@ -108,7 +108,9 @@ struct PlanDetailsView: View {
                     routeBanner(
                         fromText: displayFromText,
                         toText: short(app.draft.to),
-                        subtext: "\(app.draft.distanceText(app.draft.style)) · \(app.draft.durationText(app.draft.style)) · \(app.draft.style.rawValue)"
+                        subtext: r.isEstimate
+                            ? "\(app.draft.distanceText(app.draft.style)) · estimate · road route unavailable"
+                            : "\(app.draft.distanceText(app.draft.style)) · \(app.draft.durationText(app.draft.style)) · \(app.draft.style.rawValue)"
                     )
                 } else if let sc = app.draft.startCoord, let ec = app.draft.endCoord {
                     let waypoints = [sc] + app.draft.stopCoords + [ec]

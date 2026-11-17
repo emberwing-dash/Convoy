@@ -1,6 +1,7 @@
 // ChatbotEngine.swift
 import Foundation
 import SwiftUI
+import Supabase
 
 // MARK: - Location resolution option (used by begin_ride_planning / set_ride_start)
 
@@ -9,6 +10,9 @@ struct LocationOption: Codable, Equatable, Hashable {
     let address: String
     let lat: Double
     let lon: Double
+    /// Town / city / region / natural place (true) vs a business such as a hotel (false).
+    /// Optional so drafts saved by older builds still decode.
+    var isGeographic: Bool? = nil
     var coord: Coord { Coord(lat: lat, lon: lon) }
 }
 
@@ -28,16 +32,51 @@ struct RidePlanDraft: Equatable, Codable {
     /// Places awaiting the user's choice (returned by begin_ride_planning / set_ride_start).
     var pendingDestinationChoices: [LocationOption] = []
     var pendingStartChoices: [LocationOption] = []
+    /// What the rider typed while a choice is pending (shown in the plan banner only).
+    var destinationQuery: String? = nil
+    /// Route style the rider chose when review was opened (used to reopen review directly).
+    var routeStyle: String? = nil
+    /// Set when review has been opened, with the app's last-created ride at that moment, so the
+    /// chat can tell when the rider actually created the ride (then the plan is done).
+    var reviewOpened = false
+    var lastCreatedRideAtReview: UUID? = nil
+
+    /// A place only counts as set once it has real coordinates from a chosen search result —
+    /// never from typed text alone.
+    var hasConfirmedDestination: Bool { destination != nil && destinationCoord != nil }
+    var hasConfirmedStart: Bool { startLocation != nil && (startCoord != nil || startIsCurrentLocation) }
 
     var missingFields: [String] {
         var m: [String] = []
-        if destination == nil { m.append("destination") }
-        if startLocation == nil { m.append("start") }
+        if !hasConfirmedDestination { m.append("destination") }
+        if !hasConfirmedStart { m.append("start") }
         if scheduledAt == nil { m.append("time") }
         return m
     }
-    var isComplete: Bool { missingFields.isEmpty }
-    var isActive: Bool { destination != nil }
+    var isComplete: Bool { missingFields.isEmpty && pendingDestinationChoices.isEmpty && pendingStartChoices.isEmpty }
+    var isActive: Bool { destination != nil || destinationQuery != nil || !pendingDestinationChoices.isEmpty }
+
+    init() {}
+
+    /// Tolerant decoding: drafts saved by older builds (missing newer fields) still load.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        destination = try c.decodeIfPresent(String.self, forKey: .destination)
+        destinationCoord = try c.decodeIfPresent(Coord.self, forKey: .destinationCoord)
+        startLocation = try c.decodeIfPresent(String.self, forKey: .startLocation)
+        startCoord = try c.decodeIfPresent(Coord.self, forKey: .startCoord)
+        startIsCurrentLocation = try c.decodeIfPresent(Bool.self, forKey: .startIsCurrentLocation) ?? false
+        checkpoints = try c.decodeIfPresent([String].self, forKey: .checkpoints) ?? []
+        scheduledAt = try c.decodeIfPresent(Date.self, forKey: .scheduledAt)
+        crewName = try c.decodeIfPresent(String.self, forKey: .crewName)
+        friendUsernames = try c.decodeIfPresent([String].self, forKey: .friendUsernames) ?? []
+        pendingDestinationChoices = try c.decodeIfPresent([LocationOption].self, forKey: .pendingDestinationChoices) ?? []
+        pendingStartChoices = try c.decodeIfPresent([LocationOption].self, forKey: .pendingStartChoices) ?? []
+        destinationQuery = try c.decodeIfPresent(String.self, forKey: .destinationQuery)
+        routeStyle = try c.decodeIfPresent(String.self, forKey: .routeStyle)
+        reviewOpened = try c.decodeIfPresent(Bool.self, forKey: .reviewOpened) ?? false
+        lastCreatedRideAtReview = try c.decodeIfPresent(UUID.self, forKey: .lastCreatedRideAtReview)
+    }
 }
 
 struct ChatMessage: Identifiable, Hashable, Codable {
@@ -46,6 +85,9 @@ struct ChatMessage: Identifiable, Hashable, Codable {
     var kind: Kind
     var text: String
     var pendingConfirmation: PendingConfirmation? = nil
+    /// The tool a confirmation card ran once confirmed (e.g. "finalize_ride_plan"), so the chat can
+    /// offer to repeat it later ("Open ride review" again after visiting the planner).
+    var action: String? = nil
 
     init(id: UUID = UUID(), kind: Kind, text: String, pendingConfirmation: PendingConfirmation? = nil) {
         self.id = id
@@ -96,6 +138,12 @@ final class ChatbotEngine {
     private(set) var promptsRemaining: Int = 9999
     private(set) var errorMessage: String? = nil
     private(set) var pendingConfirmation: PendingConfirmation? = nil
+    /// Set when the last message couldn't be answered, so the rider can retry without retyping.
+    private(set) var failedUserText: String? = nil
+    /// Token usage for this conversation (both backends report it).
+    private(set) var usage = ChatUsageStats()
+    /// Backend used for the current request (fixed for a whole send → reply cycle).
+    private(set) var backend: ChatbotBackend = .v1
 
     var rideDraft = RidePlanDraft()
 
@@ -108,18 +156,41 @@ final class ChatbotEngine {
     private var toolFailureRetries = 0
     private var rateLimitRetries = 0
     private var isExecutingTool = false
+    // V2 only: one-off adjustments after specific server errors.
+    private var v2ForceAllTools = false
+    private var v2OmitReasoningEffort = false
 
     private static let countKey = "chat.promptsToday"
     private static let dateKey  = "chat.promptsDate"
 
-    private let messagesKey = "chat.messages.v2"
-    private let apiMessagesKey = "chat.apiMessages.v2"
-    private let timestampKey = "chat.timestamp.v2"
-    private let rideDraftKey = "chat.rideDraft.v2"
+    // Chat state is stored per account, so riders sharing a phone never see each other's chat.
+    // Keys: "chat.<kind>.v2.<user id>". Older builds stored one shared copy under "chat.<kind>.v2".
+    private let owner: String
+    private var messagesKey: String { "chat.messages.v2.\(owner)" }
+    private var apiMessagesKey: String { "chat.apiMessages.v2.\(owner)" }
+    private var timestampKey: String { "chat.timestamp.v2.\(owner)" }
+    private var rideDraftKey: String { "chat.rideDraft.v2.\(owner)" }
+    private var usageKey: String { "chat.usage.v2.\(owner)" }
+    private static let legacyKeys = ["chat.messages.v2", "chat.apiMessages.v2", "chat.timestamp.v2", "chat.rideDraft.v2"]
 
     init() {
+        owner = AppStateResolver.shared.current?.backendUserId?.uuidString.lowercased() ?? "signed-out"
+        migrateLegacyStateIfNeeded()
         loadState()
         refreshRateLimit()
+    }
+
+    /// One-time move of the old shared chat into the signed-in rider's own slot (they're the
+    /// person who has been using this phone), so nobody loses an ongoing conversation.
+    private func migrateLegacyStateIfNeeded() {
+        let d = UserDefaults.standard
+        guard owner != "signed-out", d.object(forKey: "chat.timestamp.v2") != nil else { return }
+        if d.object(forKey: timestampKey) == nil {
+            for key in Self.legacyKeys {
+                if let value = d.object(forKey: key) { d.set(value, forKey: "\(key).\(owner)") }
+            }
+        }
+        for key in Self.legacyKeys { d.removeObject(forKey: key) }
     }
 
     // MARK: - Memory Persistence
@@ -143,6 +214,10 @@ final class ChatbotEngine {
            let decoded = try? JSONDecoder().decode(RidePlanDraft.self, from: data) {
             rideDraft = decoded
         }
+        if let data = UserDefaults.standard.data(forKey: usageKey),
+           let decoded = try? JSONDecoder().decode(ChatUsageStats.self, from: data) {
+            usage = decoded
+        }
     }
 
     func saveState() {
@@ -155,17 +230,31 @@ final class ChatbotEngine {
         if let data = try? JSONEncoder().encode(rideDraft) {
             UserDefaults.standard.set(data, forKey: rideDraftKey)
         }
+        if let data = try? JSONEncoder().encode(usage) {
+            UserDefaults.standard.set(data, forKey: usageKey)
+        }
         UserDefaults.standard.set(Date(), forKey: timestampKey)
+    }
+
+    /// Starts a fresh conversation (from the Ellis sheet). The plan and history are cleared.
+    func startNewChat() {
+        guard !isThinking, !isExecutingTool else { return }
+        pendingConfirmation = nil
+        errorMessage = nil
+        failedUserText = nil
+        clearState()
     }
 
     private func clearState() {
         messages = []
         apiMessages = []
         rideDraft = RidePlanDraft()
+        usage = ChatUsageStats()
         UserDefaults.standard.removeObject(forKey: messagesKey)
         UserDefaults.standard.removeObject(forKey: apiMessagesKey)
         UserDefaults.standard.removeObject(forKey: rideDraftKey)
         UserDefaults.standard.removeObject(forKey: timestampKey)
+        UserDefaults.standard.removeObject(forKey: usageKey)
     }
 
     // MARK: - Public API
@@ -173,6 +262,32 @@ final class ChatbotEngine {
     func send(_ text: String, app: AppState) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // One message at a time: a double tap or a send while the reply is coming is ignored.
+        guard !isThinking, !isExecutingTool else { return }
+        failedUserText = nil
+        // A new message while a Confirm card is open declines that action, so the conversation
+        // never contains an unanswered tool call (which providers reject on every later request).
+        if let pending = pendingConfirmation {
+            pendingConfirmation = nil
+            if let idx = messages.lastIndex(where: { $0.pendingConfirmation?.id == pending.id }) {
+                messages[idx].pendingConfirmation = nil
+                messages[idx].text = "Skipped"
+            }
+            apiMessages.append(["role": "tool", "tool_call_id": pending.toolCallId,
+                                "content": "{\"error\": \"User moved on without confirming\"}"])
+        }
+        // "Open the ride planner again" with a finished plan: open it straight away. The model does
+        // not reliably remember that the plan is complete and would start asking for details again.
+        if rideDraft.isComplete, Self.isReopenReviewRequest(trimmed) {
+            messages.append(ChatMessage(kind: .user, text: trimmed))
+            apiMessages.append(["role": "user", "content": trimmed])
+            let reply = "Opening the review for your ride to \(rideDraft.destination ?? "your destination")."
+            messages.append(ChatMessage(kind: .assistant, text: reply))
+            apiMessages.append(["role": "assistant", "content": reply])
+            saveState()
+            await reopenReview(app: app)
+            return
+        }
         guard promptsRemaining > 0 else {
             errorMessage = "You've used all \(dailyLimit) prompts today. Come back tomorrow."
             return
@@ -189,6 +304,19 @@ final class ChatbotEngine {
         rateLimitRetries = 0
         saveState()
         await runLoop(app: app)
+        if errorMessage != nil { failedUserText = trimmed }
+    }
+
+    /// Retries the last message that failed (it's already in the conversation — no retyping).
+    func retryLastFailed(app: AppState) async {
+        guard failedUserText != nil, !isThinking, !isExecutingTool else { return }
+        let text = failedUserText
+        failedUserText = nil
+        errorMessage = nil
+        toolFailureRetries = 0
+        rateLimitRetries = 0
+        await runLoop(app: app)
+        if errorMessage != nil { failedUserText = text }
     }
 
     func confirmPending(app: AppState) async {
@@ -201,7 +329,9 @@ final class ChatbotEngine {
 
         if let idx = messages.lastIndex(where: { $0.pendingConfirmation?.id == pending.id }) {
             messages[idx].pendingConfirmation = nil
-            messages[idx].text = "Confirmed: \(pending.displayTitle)"
+            messages[idx].action = pending.toolName
+            messages[idx].text = pending.toolName == "finalize_ride_plan"
+                ? "Ride review opened" : "Confirmed: \(pending.displayTitle)"
         }
 
         isThinking = true
@@ -219,7 +349,8 @@ final class ChatbotEngine {
         thinkingStatus = nil
 
         saveState()
-        if pending.isNavigating { return }
+        // Opening a screen ends the turn — unless it failed, then the assistant explains.
+        if pending.isNavigating && !result.contains("\"error\"") { return }
         await runLoop(app: app)
     }
 
@@ -239,13 +370,53 @@ final class ChatbotEngine {
         await runLoop(app: app)
     }
 
-    func clearError() { errorMessage = nil }
+    func clearError() { errorMessage = nil; failedUserText = nil }
+
+    // MARK: - Ride plan after review
+
+    /// Reopens the ride review for the current plan straight away (no AI call). Used by the
+    /// plan banner's "Review" button after coming back from the planner.
+    func reopenReview(app: AppState) async {
+        guard rideDraft.isComplete, !isThinking, !isExecutingTool else { return }
+        isExecutingTool = true
+        defer { isExecutingTool = false }
+        let result = await ChatTools.execute(name: "finalize_ride_plan",
+                                             args: ["route_style": rideDraft.routeStyle ?? "Fastest"],
+                                             app: app, engine: self)
+        if result.contains("\"error\"") {
+            errorMessage = "Couldn't open the planner right now. Please try again."
+        }
+        saveState()
+    }
+
+    /// "open the ride planner again", "show review", "go back to the plan"… (short requests only).
+    nonisolated static func isReopenReviewRequest(_ text: String) -> Bool {
+        let t = text.lowercased()
+        guard t.count <= 60 else { return false }
+        let verbs = ["open", "show", "go to", "go back", "back to", "take me", "reopen", "view", "see"]
+        let targets = ["planner", "review", "ride plan", "the plan", "my plan", "route plan"]
+        return verbs.contains { t.contains($0) } && targets.contains { t.contains($0) }
+    }
+
+    /// When the rider has created the ride from review, the chat plan is finished: clear it and say so.
+    func noteRideCreatedIfNeeded(app: AppState) {
+        guard rideDraft.reviewOpened, let created = app.lastCreatedRideID,
+              created != rideDraft.lastCreatedRideAtReview else { return }
+        let name = rideDraft.destination ?? "your destination"
+        rideDraft = RidePlanDraft()
+        let text = "Your ride to \(name) is created. You'll find it on the Ride tab."
+        messages.append(ChatMessage(kind: .assistant, text: text))
+        apiMessages.append(["role": "assistant", "content": text])
+        saveState()
+    }
 
     // MARK: - Main loop
 
     private func runLoop(app: AppState) async {
         isThinking = true
         defer { isThinking = false; thinkingStatus = nil; saveState() }
+        backend = ChatbotBackend.current
+        v2ForceAllTools = false
 
         let sysPrompt: [String: Any] = ["role": "system", "content": buildSystemPrompt(app: app)]
         if apiMessages.first?["role"] as? String == "system" {
@@ -257,7 +428,8 @@ final class ChatbotEngine {
         for _ in 0..<8 {
             thinkingStatus = "Thinking…"
             do {
-                let response = try await callGroq()
+                let response = try await callAI()
+                usage.add(response: response)
 
                 guard let choice = (response["choices"] as? [[String: Any]])?.first,
                       let message = choice["message"] as? [String: Any] else {
@@ -302,10 +474,34 @@ final class ChatbotEngine {
                     continue
                 }
 
-                if let text = message["content"] as? String, !text.isEmpty {
+                if let raw = message["content"] as? String, !raw.isEmpty {
+                    // The model sometimes loops ("Let me know the date… Whenever you're ready, tell me
+                    // the date…"). Keep only the first wording, in the chat and in the history it sees.
+                    let text = ChatTextFormatter.clean(raw)
                     apiMessages.append(["role": "assistant", "content": text])
                     messages.append(ChatMessage(kind: .assistant, text: text))
                 }
+                return
+            } catch let serviceError as ChatServiceError {
+                // V2 only: structured errors from groq-proxy-v2.
+                if serviceError.code == "tool_call_invalid", toolFailureRetries == 0 {
+                    // The model asked for a tool it wasn't given this turn: retry once with all tools.
+                    toolFailureRetries += 1
+                    v2ForceAllTools = true
+                    continue
+                }
+                if serviceError.code == "unsupported_parameter", !v2OmitReasoningEffort {
+                    v2OmitReasoningEffort = true
+                    continue
+                }
+                if let wait = RetryPolicy.delay(for: serviceError, attempt: rateLimitRetries, jitter: Double.random(in: 0...1)) {
+                    rateLimitRetries += 1
+                    thinkingStatus = "Busy — retrying in \(Int(wait.rounded()))s…"
+                    do { try await Task.sleep(for: .seconds(wait)) }
+                    catch { errorMessage = "Cancelled."; return }
+                    continue
+                }
+                errorMessage = Self.message(for: serviceError)
                 return
             } catch {
                 if isToolHallucinationError(error), toolFailureRetries == 0 {
@@ -336,6 +532,7 @@ final class ChatbotEngine {
     private func isToolHallucinationError(_ error: Error) -> Bool {
         let msg = error.localizedDescription.lowercased()
         return msg.contains("tool call validation failed") || msg.contains("tool_use_failed")
+            || msg.contains("output_parse_failed")
     }
 
     private func isRateLimitError(_ error: Error) -> Bool {
@@ -356,6 +553,82 @@ final class ChatbotEngine {
         let recent = Array(apiMessages[cutIndex...])
         apiMessages = [systemPrompt] + recent
     }
+
+    // MARK: - Backends
+
+    private func callAI() async throws -> [String: Any] {
+        switch backend {
+        case .v1: return try await callGroq()      // original request, unchanged
+        case .v2: return try await callV2()
+        }
+    }
+
+    /// Friendly text for a V2 error, with the wait time when a retry isn't automatic.
+    private static func message(for e: ChatServiceError) -> String {
+        if let wait = e.retryAfter, wait > RetryPolicy.longestAutoWait,
+           e.code == "rate_limited" || e.code == "user_rate_limited" {
+            let minutes = Int((wait / 60).rounded(.up))
+            return "The assistant is busy right now. Please try again in about \(minutes) minute\(minutes == 1 ? "" : "s")."
+        }
+        return e.friendlyMessage
+    }
+
+    /// groq-proxy-v2: the signed-in rider's own access token, only the relevant tools, a compacted
+    /// history within a token budget, low reasoning effort and a capped reply length.
+    private func callV2() async throws -> [String: Any] {
+        guard let session = try? await SupabaseManager.shared.client.auth.session else {
+            // Never fall back to V1 on an auth problem.
+            throw ChatServiceError(status: 401, code: "unauthenticated", message: "Please reopen the app to continue chatting.")
+        }
+
+        let lastUser = apiMessages.last(where: { ($0["role"] as? String) == "user" })?["content"] as? String ?? ""
+        var names = v2ForceAllTools ? Set(ChatTools.allToolNames) : ChatToolSelector.select(lastUserText: lastUser, draft: rideDraft)
+        let known = Set(ChatTools.allToolNames)
+        let plannedToolTokens = ChatHistoryCompactor.estimateTokens(ChatTools.schemas(named: names))
+        let history = ChatHistoryCompactor.compact(
+            ChatHistoryCompactor.sanitize(apiMessages, knownTools: known),
+            budget: max(1_500, Self.v2InputBudget - plannedToolTokens))
+        // Tools referenced by calls still in the history stay defined.
+        names.formUnion(ChatHistoryCompactor.referencedTools(history))
+        let tools = ChatTools.schemas(named: names)
+
+        var body: [String: Any] = [
+            "messages": history,
+            "temperature": 0.4,
+            "max_tokens": 900,
+            "client": "ios",
+        ]
+        if !tools.isEmpty { body["tools"] = tools; body["tool_choice"] = "auto" }
+        if !v2OmitReasoningEffort { body["reasoning_effort"] = "low" }
+
+        var req = URLRequest(url: ChatbotBackend.v2.endpoint)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(ChatbotBackend.publishableKey, forHTTPHeaderField: "apikey")
+        req.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        req.timeoutInterval = 45
+
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: req)
+        } catch {
+            let timedOut = (error as? URLError)?.code == .timedOut
+            throw ChatServiceError(status: 0, code: timedOut ? "provider_timeout" : "provider_unavailable",
+                                   message: timedOut ? "The assistant took too long to answer. Please try again."
+                                                     : "Can't reach the assistant. Check your connection and try again.")
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw ChatServiceError.parse(status: status, data: data) }
+        guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            throw ChatServiceError(status: 502, code: "provider_bad_response", message: "The assistant sent an unexpected reply. Please try again.")
+        }
+        return json
+    }
+
+    /// Input budget for one V2 request (system prompt + tools + history), in estimated tokens.
+    /// Keeps a single request well inside Groq's free-tier 8K tokens/minute.
+    static let v2InputBudget = 5_200
 
     private func callGroq() async throws -> [String: Any] {
         let body: [String: Any] = [
@@ -450,6 +723,10 @@ final class ChatbotEngine {
            Present only the options returned in the response (Fastest / Scenic / Off-route — as present).
            Ask the user to pick one.
         4. When the user picks a style, call finalize_ride_plan(route_style: "ChosenStyle").
+        - A place is only set once a search result is chosen. Never treat the typed name as confirmed.
+        - To change the destination, call begin_ride_planning again with the new place (start and time are kept).
+        - If the user cancels or wants to start over, call cancel_ride_planning.
+        - If fetch_routes returns "estimate": true, tell the user distances are approximate.
 
         SOCIAL / CREW TOOLS:
         - find_user(username: "handle") — look up a rider (without @).
@@ -470,8 +747,10 @@ final class ChatbotEngine {
 
         STYLE:
         - 1-2 short sentences.
-        - ONE question per message.
-        - Plain text only.
+        - ONE question per message. Ask it once, then stop — never re-ask it in other words.
+        - Plain text. When listing places or options, put each on its own line as a numbered list:
+          "1. **Name** – short detail". Never repeat the same sentence.
+        - After review opens, the plan is kept. If the user asks to open the planner again, call finalize_ride_plan.
         - When listing options, show them as a numbered list.
         """
     }

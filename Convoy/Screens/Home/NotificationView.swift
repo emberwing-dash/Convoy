@@ -36,8 +36,10 @@ struct NotificationView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    topBar
+                        .padding(.top, 4)
                     headerView
-                        .padding(.top, 60)
+                        .padding(.top, 12)
 
                     filterChips
                         .padding(.top, 18)
@@ -85,53 +87,59 @@ struct NotificationView: View {
     }
 
     // MARK: - Header
-    private var headerView: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("ACTIVITY FEED")
-                    .cvText(12, .semibold, color: CV.muted, tracking: 0.6, inter: true)
-                Text("Notifications")
-                    .cvText(32, .bold, color: CV.text, tracking: -0.6, inter: true)
-            }
-
+    /// Title on its own line so it never wraps ("Notificati / ons" on narrow phones); the status pill
+    /// and settings sit in the top bar next to the back button.
+    private var topBar: some View {
+        HStack(spacing: 10) {
             Spacer()
-
+            statusPill
             Button { app.push(.notificationSettings) } label: {
-                Image(systemName: "gearshape")
+                Image(systemName: "gearshape.fill")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(CV.text)
-                    .frame(width: 36, height: 36)
-                    .background(CV.surface, in: Circle())
-                    .overlay(Circle().strokeBorder(CV.stroke, lineWidth: 1))
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Notification settings")
-
-            if pendingCount > 0 {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(CV.accent)
-                        .frame(width: 7, height: 7)
-                    Text("\(pendingCount) PENDING")
-                        .cvText(11, .bold, color: CV.accent, tracking: 0.8, inter: true)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(CV.accent.opacity(0.12), in: Capsule())
-                .overlay(Capsule().strokeBorder(CV.accent.opacity(0.25), lineWidth: 1))
-            } else {
-                HStack(spacing: 5) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(CV.muted)
-                    Text("ALL CAUGHT UP")
-                        .cvText(11, .semibold, color: CV.muted, tracking: 0.8, inter: true)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.04), in: Capsule())
-            }
         }
+    }
+
+    @ViewBuilder
+    private var statusPill: some View {
+        if pendingCount > 0 {
+            HStack(spacing: 6) {
+                Circle().fill(Hue.honey).frame(width: 7, height: 7)
+                Text("\(pendingCount) pending")
+                    .cvText(12, .bold, color: Hue.honey, inter: true)
+            }
+            .padding(.horizontal, 12).frame(height: 32)
+            .background(Hue.honey.opacity(0.14), in: Capsule())
+            .overlay(Capsule().strokeBorder(Hue.honey.opacity(0.3), lineWidth: 1))
+        } else {
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Hue.sage)
+                Text("All caught up")
+                    .cvText(12, .semibold, color: CV.text.opacity(0.75), inter: true)
+            }
+            .padding(.horizontal, 12).frame(height: 32)
+            .background(Hue.sage.opacity(0.12), in: Capsule())
+        }
+    }
+
+    private var headerView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("ACTIVITY FEED")
+                .cvText(12, .semibold, color: CV.muted, tracking: 0.6, inter: true)
+            Text("Notifications")
+                .cvText(32, .bold, color: CV.text, tracking: -0.6, inter: true)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Filter Chips
@@ -141,50 +149,53 @@ struct NotificationView: View {
                 ForEach(NotificationFilter.allCases) { f in
                     let isSelected = filter == f
                     let count = app.notifications.filter { matches($0, f) }.count
+                    let label = isSelected ? CV.onAccent : CV.text
 
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            filter = f
-                        }
+                        withAnimation(.easeInOut(duration: 0.2)) { filter = f }
                     } label: {
-                        HStack(spacing: 6) {
-                            filterIcon(f)
-                                .font(.system(size: 12))
+                        HStack(spacing: 7) {
+                            Image(systemName: filterSymbol(f))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(isSelected ? CV.onAccent : filterHue(f))
                             Text(f.rawValue)
-                                .cvText(13, isSelected ? .bold : .medium, inter: true)
+                                .cvText(13, isSelected ? .bold : .medium, color: label, inter: true)
                                 .fixedSize(horizontal: true, vertical: false)
                             if count > 0 {
                                 Text("\(count)")
-                                    .cvText(11, .bold, inter: true)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(isSelected ? CV.onAccent.opacity(0.2) : Color.white.opacity(0.08), in: Capsule())
+                                    .cvText(11, .bold, color: isSelected ? CV.onAccent : filterHue(f), inter: true)
+                                    .padding(.horizontal, 6).padding(.vertical, 1)
+                                    .background(isSelected ? CV.onAccent.opacity(0.12) : filterHue(f).opacity(0.16), in: Capsule())
                             }
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .foregroundStyle(isSelected ? CV.onAccent : CV.text)
+                        .padding(.horizontal, 14).frame(height: 36)
                         .background(isSelected ? CV.accent : CV.surface, in: Capsule())
                         .overlay(Capsule().strokeBorder(isSelected ? Color.clear : Color.white.opacity(0.08), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, 20)
+        }
+        .padding(.horizontal, -20)   // chips scroll edge to edge
+    }
+
+    private func filterSymbol(_ f: NotificationFilter) -> String {
+        switch f {
+        case .all: return "tray.full.fill"
+        case .rides: return "flag.2.crossed.fill"
+        case .people: return "person.2.fill"
+        case .crews: return "shield.fill"
         }
     }
 
-    @ViewBuilder
-    private func filterIcon(_ f: NotificationFilter) -> some View {
+    private func filterHue(_ f: NotificationFilter) -> Color {
         switch f {
-        case .all:
-            Image(systemName: "tray.full.fill")
-        case .rides:
-            Image(systemName: "flag.2.crossed.fill")
-        case .people:
-            Image(systemName: "person.2.fill")
-        case .crews:
-            Image(systemName: "shield.fill")
+        case .all: return Hue.sky
+        case .rides: return Hue.ember
+        case .people: return Hue.lavender
+        case .crews: return Hue.teal
         }
     }
 
@@ -203,23 +214,32 @@ struct NotificationView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(notif.actorName ?? notif.title)
                             .cvText(15, .bold, color: CV.text, inter: true)
+                            .lineLimit(1)
+                            .layoutPriority(1)
                         if let handle = notif.actorHandle, !handle.isEmpty {
                             Text("@\(handle)")
                                 .cvText(12, color: CV.muted, inter: true)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
                     }
 
                     Text(cardDescription(notif))
-                        .cvText(13, color: CV.muted, lineHeight: 17, inter: true)
-                        .lineLimit(2)
+                        .cvText(13, color: CV.text.opacity(0.7), lineHeight: 17, inter: true)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer()
-
-                typeTag(notif.type)
+                VStack(alignment: .trailing, spacing: 6) {
+                    typeTag(notif.type)
+                    Text(relativeTime(notif.date))
+                        .cvText(11, color: CV.muted.opacity(0.8), inter: true)
+                }
+                .fixedSize()
             }
 
             // Trip / Destination Callout (For ride joins)
@@ -239,80 +259,68 @@ struct NotificationView: View {
                     .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
 
-            // Action area
-            HStack(alignment: .center) {
-                Text(relativeTime(notif.date))
-                    .cvText(11, color: CV.muted.opacity(0.8), inter: true)
-
-                Spacer()
-
-                if notif.status == .info {
-                    infoAction(notif)
-                } else if notif.status == .pending {
-                    HStack(spacing: 10) {
-                        // Decline Button
-                        Button {
-                            Task { await app.declineNotification(notif) }
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 11, weight: .bold))
-                                Text("Decline")
-                                    .cvText(13, .semibold, inter: true)
-                            }
-                            .foregroundStyle(CV.text)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(CV.elevated, in: Capsule())
-                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+            // Action area — full-width buttons, so they fit on every iPhone width.
+            if notif.status == .pending {
+                HStack(spacing: 10) {
+                    Button {
+                        Task { await app.declineNotification(notif) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Decline").cvText(14, .semibold, color: CV.text, inter: true)
                         }
-                        .buttonStyle(.plain)
+                        .foregroundStyle(CV.text)
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .background(CV.elevated, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Decline \(notif.actorName ?? "request")")
 
-                        // Accept Button
-                        Button {
-                            Task { await app.acceptNotification(notif) }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 11, weight: .bold))
-                                Text("Accept")
-                                    .cvText(13, .bold, color: CV.onAccent, inter: true)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(CV.accent, in: Capsule())
+                    Button {
+                        Task { await app.acceptNotification(notif) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .heavy))
+                            Text("Accept").cvText(14, .bold, color: CV.onAccent, inter: true)
                         }
-                        .buttonStyle(.plain)
+                        .foregroundStyle(CV.onAccent)
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .background(CV.accent, in: Capsule())
                     }
-                } else if notif.status == .accepted {
-                    HStack(spacing: 5) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 13))
-                        Text(notif.type == .rideJoin ? "Accepted · In trip" : "Accepted")
-                            .cvText(12, .semibold, inter: true)
-                    }
-                    .foregroundStyle(CV.green)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(CV.green.opacity(0.12), in: Capsule())
-                } else {
-                    HStack(spacing: 5) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 13))
-                        Text("Declined")
-                            .cvText(12, .semibold, inter: true)
-                    }
-                    .foregroundStyle(CV.muted)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.05), in: Capsule())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Accept \(notif.actorName ?? "request")")
                 }
+            } else if notif.status == .info {
+                if hasInfoAction(notif) {
+                HStack {
+                    Spacer(minLength: 0)
+                    infoAction(notif)
+                }
+                }
+            } else if notif.status == .accepted {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: 13))
+                    Text(notif.type == .rideJoin ? "Accepted · In trip" : "Accepted")
+                        .cvText(12, .semibold, color: Hue.sage, inter: true)
+                }
+                .foregroundStyle(Hue.sage)
+                .padding(.horizontal, 12).frame(height: 30)
+                .background(Hue.sage.opacity(0.14), in: Capsule())
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 13))
+                    Text("Declined").cvText(12, .semibold, color: CV.muted, inter: true)
+                }
+                .foregroundStyle(CV.muted)
+                .padding(.horizontal, 12).frame(height: 30)
+                .background(Color.white.opacity(0.06), in: Capsule())
             }
         }
         .padding(16)
-        .background(CV.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .strokeBorder(isUnread(notif) ? CV.accent.opacity(0.2) : Color.white.opacity(0.07), lineWidth: 1))
+        .pxCard(radius: 22, tint: isUnread(notif) ? typeColor(notif.type) : nil)
     }
 
     private func isUnread(_ n: AppNotification) -> Bool {
@@ -348,6 +356,16 @@ struct NotificationView: View {
             .cvText(11, .semibold, color: c, inter: true)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(c.opacity(0.14), in: Capsule())
+    }
+
+    /// Whether `infoAction` shows a button (so cards without one don't keep an empty row).
+    private func hasInfoAction(_ n: AppNotification) -> Bool {
+        switch n.type {
+        case .rideJoinAccepted, .postLike, .postComment, .newPost: return true
+        case .newFollower: return n.actorId != nil
+        case .rideInvite, .rideUpdated, .rideStarted, .rideCompleted, .sos: return n.rideId != nil
+        default: return false
+        }
     }
 
     @ViewBuilder
@@ -390,7 +408,7 @@ struct NotificationView: View {
         Button(action: action) {
             Text(title)
                 .cvText(13, .bold, color: filled ? CV.onAccent : CV.text, inter: true)
-                .padding(.horizontal, 16).padding(.vertical, 8)
+                .padding(.horizontal, 18).frame(height: 40)
                 .background(filled ? CV.accent : CV.elevated, in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.white.opacity(filled ? 0 : 0.08), lineWidth: 1))
         }
@@ -488,100 +506,82 @@ struct NotificationView: View {
     }
 
     private func typeBadge(_ type: NotificationType) -> some View {
-        ZStack {
-            Circle()
-                .fill(typeColor(type))
-                .frame(width: 18, height: 18)
-                .overlay(Circle().strokeBorder(CV.surface, lineWidth: 2))
+        let c = typeColor(type)
+        return ZStack {
+            Circle().fill(c).frame(width: 20, height: 20)
+                .overlay(Circle().strokeBorder(Color(hex: 0x17171A), lineWidth: 2.5))
+            Image(systemName: typeSymbol(type))
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle([.rideCancelled, .sos].contains(type) ? Color.white : CV.onAccent)
+        }
+    }
 
-            Group {
-                switch type {
-                case .rideJoin:
-                    Image(systemName: "flag.fill").font(.system(size: 8))
-                case .friendRequest:
-                    Image(systemName: "person.fill").font(.system(size: 8))
-                case .crewInvite:
-                    Image(systemName: "shield.fill").font(.system(size: 8))
-                case .rideJoinAccepted:
-                    Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
-                case .rideJoinDeclined:
-                    Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
-                case .newFollower:
-                    Image(systemName: "person.badge.plus").font(.system(size: 8))
-                case .postLike:
-                    Image(systemName: "heart.fill").font(.system(size: 8))
-                case .postComment:
-                    Image(systemName: "bubble.left.fill").font(.system(size: 8))
-                case .friendAccepted:
-                    Image(systemName: "person.2.fill").font(.system(size: 7))
-                case .crewJoined, .crewLeft:
-                    Image(systemName: "person.3.fill").font(.system(size: 6))
-                case .rideInvite:
-                    Image(systemName: "envelope.fill").font(.system(size: 7))
-                case .rideUpdated:
-                    Image(systemName: "pencil").font(.system(size: 8, weight: .bold))
-                case .rideStarted:
-                    Image(systemName: "play.fill").font(.system(size: 7))
-                case .rideCompleted:
-                    Image(systemName: "flag.checkered").font(.system(size: 7))
-                case .rideCancelled:
-                    Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
-                case .sos:
-                    Image(systemName: "sos").font(.system(size: 6, weight: .black))
-                case .newPost:
-                    Image(systemName: "square.and.pencil").font(.system(size: 7))
-                case .achievement:
-                    Image(systemName: "trophy.fill").font(.system(size: 7))
-                }
-            }
-            // Dark glyph on light badges (white, green, amber); white on dark ones.
-            .foregroundStyle([.rideJoinDeclined, .crewInvite, .crewLeft, .rideCancelled, .sos].contains(type) ? Color.white : CV.onAccent)
+    private func typeSymbol(_ type: NotificationType) -> String {
+        switch type {
+        case .rideJoin: return "flag.fill"
+        case .friendRequest: return "person.fill.badge.plus"
+        case .crewInvite: return "shield.fill"
+        case .rideJoinAccepted: return "checkmark"
+        case .rideJoinDeclined: return "xmark"
+        case .newFollower: return "person.fill.badge.plus"
+        case .postLike: return "heart.fill"
+        case .postComment: return "bubble.left.fill"
+        case .friendAccepted: return "person.2.fill"
+        case .crewJoined, .crewLeft: return "person.3.fill"
+        case .rideInvite: return "envelope.fill"
+        case .rideUpdated: return "pencil"
+        case .rideStarted: return "play.fill"
+        case .rideCompleted: return "flag.checkered"
+        case .rideCancelled: return "xmark"
+        case .sos: return "sos"
+        case .newPost: return "square.and.pencil"
+        case .achievement: return "trophy.fill"
         }
     }
 
     private func typeTag(_ type: NotificationType) -> some View {
-        let (text, color): (String, Color) = {
+        let text: String = {
             switch type {
-            case .rideJoin: return ("TRIP JOIN", CV.accent)
-            case .friendRequest: return ("FRIEND", CV.warning)
-            case .crewInvite: return ("CREW", CV.muted)
-            case .rideJoinAccepted: return ("ACCEPTED", CV.green)
-            case .rideJoinDeclined: return ("DECLINED", CV.muted)
-            case .newFollower: return ("FOLLOWER", CV.warning)
-            case .postLike: return ("LIKE", CV.accent)
-            case .postComment: return ("COMMENT", CV.warning)
-            case .friendAccepted: return ("FRIEND", CV.green)
-            case .crewJoined: return ("CREW", CV.green)
-            case .crewLeft: return ("CREW", CV.muted)
-            case .rideInvite: return ("INVITE", CV.accent)
-            case .rideUpdated: return ("UPDATED", CV.warning)
-            case .rideStarted: return ("LIVE", CV.green)
-            case .rideCompleted: return ("DONE", CV.muted)
-            case .rideCancelled: return ("CANCELLED", CV.danger)
-            case .sos: return ("SOS", CV.danger)
-            case .newPost: return ("POST", CV.accent)
-            case .achievement: return ("AWARD", CV.warning)
+            case .rideJoin: return "TRIP JOIN"
+            case .friendRequest: return "FRIEND"
+            case .crewInvite: return "CREW"
+            case .rideJoinAccepted: return "ACCEPTED"
+            case .rideJoinDeclined: return "DECLINED"
+            case .newFollower: return "FOLLOWER"
+            case .postLike: return "LIKE"
+            case .postComment: return "COMMENT"
+            case .friendAccepted: return "FRIEND"
+            case .crewJoined, .crewLeft: return "CREW"
+            case .rideInvite: return "INVITE"
+            case .rideUpdated: return "UPDATED"
+            case .rideStarted: return "LIVE"
+            case .rideCompleted: return "DONE"
+            case .rideCancelled: return "CANCELLED"
+            case .sos: return "SOS"
+            case .newPost: return "POST"
+            case .achievement: return "AWARD"
             }
         }()
-
+        let color = typeColor(type)
         return Text(text)
             .cvText(10, .bold, color: color, tracking: 0.8, inter: true)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(color.opacity(0.12), in: Capsule())
+            .background(color.opacity(0.14), in: Capsule())
     }
 
+    /// One soft hue per kind of notification (same palette as the rest of the app; red only for SOS).
     private func typeColor(_ type: NotificationType) -> Color {
         switch type {
-        case .rideJoin: return CV.accent
-        case .friendRequest: return CV.warning
-        case .crewInvite: return CV.muted
-        case .rideJoinAccepted: return CV.green
-        case .rideJoinDeclined: return CV.dim
-        case .newFollower, .postComment, .rideUpdated, .achievement: return CV.warning
-        case .postLike, .rideInvite, .newPost: return CV.accent
-        case .friendAccepted, .crewJoined, .rideStarted: return CV.green
-        case .crewLeft, .rideCompleted: return CV.dim
+        case .rideJoin, .rideStarted: return type == .rideStarted ? Hue.sage : Hue.ember
+        case .friendRequest, .newFollower, .friendAccepted: return Hue.lavender
+        case .crewInvite, .crewJoined: return Hue.teal
+        case .rideJoinAccepted: return Hue.sage
+        case .rideJoinDeclined, .crewLeft: return CV.dim
+        case .postLike, .postComment: return Hue.rose
+        case .rideInvite, .rideCompleted: return Hue.periwinkle
+        case .rideUpdated, .achievement: return Hue.honey
+        case .newPost: return Hue.sky
         case .rideCancelled, .sos: return CV.danger
         }
     }
@@ -604,12 +604,8 @@ struct NotificationView: View {
                 Circle()
                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                     .frame(width: 70, height: 70)
-                Circle()
-                    .fill(CV.elevated)
-                    .frame(width: 46, height: 46)
-                Image(systemName: "bell.badge.slash")
-                    .font(.system(size: 20))
-                    .foregroundStyle(CV.text.opacity(0.6))
+                IconBadge(symbol: filter == .all ? "bell.fill" : filterSymbol(filter),
+                          color: filter == .all ? Hue.honey : filterHue(filter), size: 52)
             }
             .padding(.top, 10)
 
@@ -625,10 +621,8 @@ struct NotificationView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 44)
+        .padding(.vertical, 40)
         .padding(.horizontal, 24)
-        .background(CV.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.06), lineWidth: 1))
+        .pxCard(radius: 24, tint: filter == .all ? Hue.honey : filterHue(filter))
     }
 }

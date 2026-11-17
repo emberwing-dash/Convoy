@@ -7,7 +7,7 @@ enum ChatTools {
         "search_places", "search_routes", "list_my_rides", "list_my_crews", "list_my_friends", "find_user",
         "suggest_checkpoints",
         "begin_ride_planning", "set_ride_companions", "set_ride_start", "set_ride_checkpoints",
-        "set_ride_time", "fetch_routes", "finalize_ride_plan", "select_location",
+        "set_ride_time", "fetch_routes", "finalize_ride_plan", "select_location", "cancel_ride_planning",
         "join_ride", "join_crew",
         "send_friend_request", "create_crew", "invite_to_crew",
         "invite_to_ride", "post_to_crew_feed",
@@ -20,6 +20,15 @@ enum ChatTools {
     ]
 
     static func requiresConfirmation(_ name: String) -> Bool { writeTools.contains(name) }
+
+    /// Tool definitions for the given names, in the canonical order (used by V2's dynamic tool selection).
+    static func schemas(named names: Set<String>) -> [[String: Any]] {
+        schemas.filter { names.contains(schemaName($0)) }
+    }
+
+    static func schemaName(_ schema: [String: Any]) -> String {
+        ((schema["function"] as? [String: Any])?["name"] as? String) ?? ""
+    }
     static func isNavigating(_ name: String) -> Bool { name == "finalize_ride_plan" }
 
     static let schemas: [[String: Any]] = [
@@ -27,7 +36,7 @@ enum ChatTools {
         findUserSchema, suggestCheckpointsSchema,
         beginRideSchema, setCompanionsSchema, setStartSchema,
         setCheckpointsSchema, setTimeSchema, fetchRoutesSchema, finalizeRideSchema,
-        selectLocationSchema,
+        selectLocationSchema, cancelRidePlanningSchema,
         joinRideSchema, joinCrewSchema,
         sendFriendSchema, createCrewSchema, inviteToCrewSchema,
         inviteToRideSchema, postToCrewFeedSchema,
@@ -89,6 +98,8 @@ enum ChatTools {
         ["kind": ["type": "string", "enum": ["destination", "start"]],
          "index": ["type": "integer", "description": "1-based index from the options list."]],
         ["kind", "index"])
+
+    private static let cancelRidePlanningSchema = fn("cancel_ride_planning", "Clear the current ride plan when the user cancels it or wants to start over.")
 
     private static let joinRideSchema = fn("join_ride", "Join a ride by 6-character code.",
         ["code": ["type": "string"]], ["code"])
@@ -163,6 +174,7 @@ enum ChatTools {
         case "suggest_checkpoints": return "Searching MapKit…"
         case "fetch_routes": return "Calculating routes…"
         case "begin_ride_planning", "set_ride_start": return "Looking up the place…"
+        case "cancel_ride_planning": return "Clearing the plan…"
         case "finalize_ride_plan": return "Opening review…"
         default: return "Working…"
         }
@@ -237,10 +249,24 @@ enum ChatTools {
                 }
                 return jsonEncode(["error": "Date must be in the future and ISO8601 format."])
 
+            case "cancel_ride_planning":
+                engine.rideDraft = RidePlanDraft()
+                engine.saveState()
+                return jsonEncode(["status": "cancelled", "hint": "Tell the user the ride plan was cleared."])
+
             case "fetch_routes":
-                let start = args["start"] as? String ?? engine.rideDraft.startLocation ?? ""
-                let dest = args["destination"] as? String ?? engine.rideDraft.destination ?? ""
-                let stops = args["stops"] as? [String] ?? engine.rideDraft.checkpoints
+                // Always plan from the CONFIRMED places (names + coordinates chosen by the rider),
+                // never from free text the model passes — that re-search could land elsewhere.
+                let d = engine.rideDraft
+                guard d.hasConfirmedDestination, d.pendingDestinationChoices.isEmpty else {
+                    return jsonEncode(["error": "Destination not confirmed yet.", "hint": nextHint(d)])
+                }
+                guard d.hasConfirmedStart, d.pendingStartChoices.isEmpty else {
+                    return jsonEncode(["error": "Start not confirmed yet.", "hint": nextHint(d)])
+                }
+                let start = d.startLocation ?? ""
+                let dest = d.destination ?? ""
+                let stops = d.checkpoints.isEmpty ? (args["stops"] as? [String] ?? []) : d.checkpoints
                 let seed = PlanSeed(
                     name: "Ride to \(dest)",
                     start: start, startCoord: engine.rideDraft.startCoord,
@@ -259,10 +285,16 @@ enum ChatTools {
 
                 if app.planner.state == .ready {
                     let opts = RouteStyle.allCases.filter { app.draft.routes[$0] != nil }.map { $0.rawValue }
-                    return jsonEncode(["status": "success", "options": opts,
-                                       "hint": "Ask the user which route they prefer."])
+                    let estimate = app.draft.selected?.isEstimate == true
+                    var out: [String: Any] = ["status": "success", "options": opts,
+                                              "hint": "Ask the user which route they prefer."]
+                    if estimate {
+                        out["estimate"] = true
+                        out["hint"] = "Road routes couldn't be calculated right now, so distances are straight-line estimates. Tell the user, then ask which style they want."
+                    }
+                    return jsonEncode(out)
                 }
-                return jsonEncode(["error": "Could not calculate routes. Ask for a more specific location."])
+                return jsonEncode(["error": "Could not calculate a road route right now. Ask the user to try again in a moment."])
 
             case "finalize_ride_plan":
                 return await finalizeRidePlan(args: args, app: app, engine: engine)
@@ -351,96 +383,94 @@ enum ChatTools {
 
     @MainActor
     private static func beginRidePlanning(_ rawDest: String, engine: ChatbotEngine) async -> String {
-        let matches = await searchForDestination(rawDest)
-        if matches.isEmpty {
-            engine.rideDraft = RidePlanDraft()
+        // Changing the destination mid-plan keeps start, time and companions; stops belonged to
+        // the old route, so they are cleared.
+        var draft = engine.rideDraft
+        draft.destination = nil
+        draft.destinationCoord = nil
+        draft.pendingDestinationChoices = []
+        draft.checkpoints = []
+        draft.destinationQuery = rawDest
+        draft.routeStyle = nil
+        draft.reviewOpened = false
+        draft.lastCreatedRideAtReview = nil
+
+        switch await DestinationResolver.resolve(rawDest, purpose: .destination) {
+        case .none:
+            draft.destinationQuery = nil
+            engine.rideDraft = draft
             return jsonEncode([
-                "status": "no_results",
-                "destination": rawDest,
-                "hint": "Nothing matched. Ask the user for a more specific place name (include city and state)."
+                "status": "no_results", "destination": rawDest,
+                "hint": "Nothing matched. Ask the user for a more specific place name (town and state)."
             ])
-        }
-        if matches.count == 1 {
-            let m = matches[0]
-            engine.rideDraft = RidePlanDraft()
-            engine.rideDraft.destination = m.name.isEmpty ? rawDest : m.name
-            engine.rideDraft.destinationCoord = m.coord
+        case .unique(let m):
+            draft.destination = m.name
+            draft.destinationCoord = m.coord
+            draft.destinationQuery = nil
+            engine.rideDraft = draft
             return jsonEncode([
                 "status": "started",
-                "resolved": ["name": m.name, "address": m.address, "lat": m.lat, "lon": m.lon],
-                "missing": engine.rideDraft.missingFields,
-                "hint": nextHint(engine.rideDraft)
+                "resolved": ["name": m.name, "address": m.address],
+                "missing": draft.missingFields,
+                "hint": nextHint(draft)
+            ])
+        case .choose(let options):
+            draft.pendingDestinationChoices = options
+            engine.rideDraft = draft
+            return jsonEncode([
+                "status": "needs_choice", "kind": "destination",
+                "options": options.enumerated().map { i, m in ["index": i + 1, "name": m.name, "address": m.address] },
+                "hint": "Several places match. Ask the user which one by number (1-\(options.count)). When they answer, call select_location(kind: \"destination\", index: N). Do not continue planning until they choose."
             ])
         }
-        // Multiple matches — let the user pick
-        engine.rideDraft = RidePlanDraft()
-        engine.rideDraft.destination = rawDest
-        engine.rideDraft.pendingDestinationChoices = matches
-        return jsonEncode([
-            "status": "needs_choice",
-            "kind": "destination",
-            "options": matches.enumerated().map { (i, m) in
-                ["index": i + 1, "name": m.name, "address": m.address]
-            },
-            "hint": "Ask the user which one by number (1-\(matches.count)). When they answer, call select_location(kind: \"destination\", index: N)."
-        ])
     }
 
     @MainActor
     private static func setRideStart(args: [String: Any], engine: ChatbotEngine) async -> String {
         let useCurrent = args["use_current_location"] as? Bool ?? false
-
-        if useCurrent {
-            if let loc = LocationService.shared.currentLocation {
-                let geocoded = await LocationService.shared.reverseGeocode(coordinate: loc.coordinate)
-                let clean = geocoded.isEmpty ? "Current Location" : primaryPlaceName(geocoded)
-                engine.rideDraft.startLocation = clean
-                engine.rideDraft.startCoord = Coord(loc.coordinate)
-                engine.rideDraft.startIsCurrentLocation = true
-                engine.rideDraft.pendingStartChoices = []
-                return jsonEncode([
-                    "status": "ok",
-                    "resolved": ["name": clean, "lat": loc.coordinate.latitude, "lon": loc.coordinate.longitude],
-                    "missing": engine.rideDraft.missingFields,
-                    "hint": nextHint(engine.rideDraft)
-                ])
-            }
-            return jsonEncode(["error": "Current location unavailable. Ask the user to type a place name instead."])
-        }
-
         let rawLoc = (args["location"] as? String ?? "").trimmingCharacters(in: .whitespaces)
-        guard !rawLoc.isEmpty else { return jsonEncode(["error": "Missing location"]) }
+        let saysCurrent = ["current location", "my location", "here", "where i am"].contains(rawLoc.lowercased())
 
-        let matches = await searchForStart(rawLoc)
-        if matches.isEmpty {
-            return jsonEncode([
-                "status": "no_results",
-                "hint": "Nothing matched. Ask the user for a more specific place name."
-            ])
-        }
-        if matches.count == 1 {
-            let m = matches[0]
-            engine.rideDraft.startLocation = m.name.isEmpty ? rawLoc : m.name
-            engine.rideDraft.startCoord = m.coord
-            engine.rideDraft.startIsCurrentLocation = false
+        if useCurrent || saysCurrent {
+            guard let loc = LocationService.shared.currentLocation else {
+                return jsonEncode(["error": "Current location unavailable. Ask the user to type a place name instead."])
+            }
+            let geocoded = await LocationService.shared.reverseGeocode(coordinate: loc.coordinate)
+            let clean = geocoded.isEmpty ? "Current Location" : primaryPlaceName(geocoded)
+            engine.rideDraft.startLocation = clean
+            engine.rideDraft.startCoord = Coord(loc.coordinate)
+            engine.rideDraft.startIsCurrentLocation = true
             engine.rideDraft.pendingStartChoices = []
             return jsonEncode([
-                "status": "ok",
-                "resolved": ["name": m.name, "address": m.address, "lat": m.lat, "lon": m.lon],
-                "missing": engine.rideDraft.missingFields,
-                "hint": nextHint(engine.rideDraft)
+                "status": "ok", "resolved": ["name": clean],
+                "missing": engine.rideDraft.missingFields, "hint": nextHint(engine.rideDraft)
             ])
         }
-        engine.rideDraft.startLocation = rawLoc
-        engine.rideDraft.pendingStartChoices = matches
-        return jsonEncode([
-            "status": "needs_choice",
-            "kind": "start",
-            "options": matches.enumerated().map { (i, m) in
-                ["index": i + 1, "name": m.name, "address": m.address]
-            },
-            "hint": "Ask the user which one by number (1-\(matches.count)). When they answer, call select_location(kind: \"start\", index: N)."
-        ])
+
+        guard !rawLoc.isEmpty else { return jsonEncode(["error": "Missing location"]) }
+        engine.rideDraft.startLocation = nil
+        engine.rideDraft.startCoord = nil
+        engine.rideDraft.startIsCurrentLocation = false
+        engine.rideDraft.pendingStartChoices = []
+
+        switch await DestinationResolver.resolve(rawLoc, purpose: .start) {
+        case .none:
+            return jsonEncode(["status": "no_results", "hint": "Nothing matched. Ask the user for a more specific place name."])
+        case .unique(let m):
+            engine.rideDraft.startLocation = m.name
+            engine.rideDraft.startCoord = m.coord
+            return jsonEncode([
+                "status": "ok", "resolved": ["name": m.name, "address": m.address],
+                "missing": engine.rideDraft.missingFields, "hint": nextHint(engine.rideDraft)
+            ])
+        case .choose(let options):
+            engine.rideDraft.pendingStartChoices = options
+            return jsonEncode([
+                "status": "needs_choice", "kind": "start",
+                "options": options.enumerated().map { i, m in ["index": i + 1, "name": m.name, "address": m.address] },
+                "hint": "Ask the user which one by number (1-\(options.count)). When they answer, call select_location(kind: \"start\", index: N)."
+            ])
+        }
     }
 
     private static func selectLocation(args: [String: Any], engine: ChatbotEngine) -> String {
@@ -449,27 +479,30 @@ enum ChatTools {
         switch kind {
         case "destination":
             let choices = engine.rideDraft.pendingDestinationChoices
+            guard !choices.isEmpty else { return jsonEncode(["error": "No destination choice is pending."]) }
             guard index >= 1 && index <= choices.count else {
                 return jsonEncode(["error": "Invalid index. Valid range is 1-\(choices.count)."])
             }
             let picked = choices[index - 1]
-            engine.rideDraft.destination = picked.name.isEmpty ? picked.address : picked.name
+            engine.rideDraft.destination = picked.name
             engine.rideDraft.destinationCoord = picked.coord
             engine.rideDraft.pendingDestinationChoices = []
-            return jsonEncode(["status": "ok", "missing": engine.rideDraft.missingFields,
-                               "hint": nextHint(engine.rideDraft)])
+            engine.rideDraft.destinationQuery = nil
+            return jsonEncode(["status": "ok", "resolved": ["name": picked.name, "address": picked.address],
+                               "missing": engine.rideDraft.missingFields, "hint": nextHint(engine.rideDraft)])
         case "start":
             let choices = engine.rideDraft.pendingStartChoices
+            guard !choices.isEmpty else { return jsonEncode(["error": "No start choice is pending."]) }
             guard index >= 1 && index <= choices.count else {
                 return jsonEncode(["error": "Invalid index. Valid range is 1-\(choices.count)."])
             }
             let picked = choices[index - 1]
-            engine.rideDraft.startLocation = picked.name.isEmpty ? picked.address : picked.name
+            engine.rideDraft.startLocation = picked.name
             engine.rideDraft.startCoord = picked.coord
             engine.rideDraft.startIsCurrentLocation = false
             engine.rideDraft.pendingStartChoices = []
-            return jsonEncode(["status": "ok", "missing": engine.rideDraft.missingFields,
-                               "hint": nextHint(engine.rideDraft)])
+            return jsonEncode(["status": "ok", "resolved": ["name": picked.name, "address": picked.address],
+                               "missing": engine.rideDraft.missingFields, "hint": nextHint(engine.rideDraft)])
         default:
             return jsonEncode(["error": "Invalid kind — must be 'destination' or 'start'."])
         }
@@ -492,8 +525,11 @@ enum ChatTools {
             app.friends.contains { $0.username.lowercased() == u.lowercased() }
         })
 
-        // Preserve pre-computed routes from fetch_routes; otherwise plan now.
-        if app.draft.routes.isEmpty {
+        // Reuse routes from fetch_routes only if they were built for these exact confirmed places;
+        // otherwise (none yet, or the rider changed a place since) plan now from the saved coordinates.
+        let routesMatchPlaces = !app.draft.routes.isEmpty
+            && app.draft.endCoord == d.destinationCoord && app.draft.startCoord == d.startCoord
+        if !routesMatchPlaces {
             let seed = PlanSeed(
                 name: "Ride to \(d.destination ?? "")",
                 start: d.startLocation ?? "",
@@ -508,22 +544,28 @@ enum ChatTools {
             app.draft.starts = when
         }
 
-        guard app.draft.selected != nil else {
-            return jsonEncode(["error": "Could not calculate route to \(d.destination ?? ""). Ask the user for a more specific location."])
-        }
-
+        // Use the chosen style if it was calculated, otherwise the first one that was (often only
+        // Fastest exists). Must happen before checking `selected`, which reads the current style.
         if app.draft.routes[style] == nil {
             style = RouteStyle.allCases.first(where: { app.draft.routes[$0] != nil }) ?? .fastest
         }
         app.draft.style = style
 
-        // Push BOTH so "Edit route" on planReview has somewhere to land that isn't Home.
-        app.push(.planDetails)
+        guard app.draft.selected != nil else {
+            return jsonEncode(["error": "Could not calculate a route to \(d.destination ?? "") right now. Ask the user to try again in a moment."])
+        }
+
+        // "Edit route" on review swaps review for the details screen (AppState.editRouteFromReview),
+        // so only review is opened here.
         app.push(.planReview)
 
-        engine.rideDraft = RidePlanDraft()
+        // Keep the plan: after Edit / Back the rider can reopen review from the chat. It is cleared
+        // when they cancel, start another plan, or actually create the ride.
+        engine.rideDraft.routeStyle = style.rawValue
+        engine.rideDraft.reviewOpened = true
+        engine.rideDraft.lastCreatedRideAtReview = app.lastCreatedRideID
         engine.saveState()
-        return jsonEncode(["status": "opened_review"])
+        return jsonEncode(["status": "opened_review", "hint": "The plan stays available; the user can reopen review."])
     }
 
     // MARK: - Social helpers
@@ -581,53 +623,6 @@ enum ChatTools {
         }
     }
 
-    // MARK: - MapKit search helpers
-
-    @MainActor
-    private static func searchForDestination(_ query: String) async -> [LocationOption] {
-        let clean = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty else { return [] }
-        let req = MKLocalSearch.Request()
-        req.naturalLanguageQuery = clean
-        req.resultTypes = [.address, .pointOfInterest]
-        guard let res = try? await MKLocalSearch(request: req).start() else { return [] }
-        return res.mapItems.prefix(5).compactMap { item in
-            guard let name = item.name, !name.isEmpty else { return nil }
-            var parts: [String] = []
-            if let loc = item.placemark.locality, !loc.isEmpty { parts.append(loc) }
-            if let region = item.placemark.administrativeArea, !region.isEmpty { parts.append(region) }
-            if let country = item.placemark.country, !country.isEmpty { parts.append(country) }
-            let address = parts.joined(separator: ", ")
-            let coord = item.placemark.coordinate
-            return LocationOption(name: name, address: address, lat: coord.latitude, lon: coord.longitude)
-        }
-    }
-
-    @MainActor
-    private static func searchForStart(_ query: String) async -> [LocationOption] {
-        let clean = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty else { return [] }
-        let req = MKLocalSearch.Request()
-        req.naturalLanguageQuery = clean
-        req.resultTypes = [.address, .pointOfInterest]
-        if let loc = LocationService.shared.currentLocation {
-            req.region = MKCoordinateRegion(
-                center: loc.coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 1.0, longitudeDelta: 1.0))
-        }
-        guard let res = try? await MKLocalSearch(request: req).start() else { return [] }
-        return res.mapItems.prefix(5).compactMap { item in
-            guard let name = item.name, !name.isEmpty else { return nil }
-            var parts: [String] = []
-            if let t = item.placemark.thoroughfare, !t.isEmpty { parts.append(t) }
-            if let sub = item.placemark.subLocality, !sub.isEmpty { parts.append(sub) }
-            if let loc = item.placemark.locality, !loc.isEmpty { parts.append(loc) }
-            let address = parts.joined(separator: ", ")
-            let coord = item.placemark.coordinate
-            return LocationOption(name: name, address: address, lat: coord.latitude, lon: coord.longitude)
-        }
-    }
-
     // MARK: - Misc helpers
 
     /// Whole numbers from the model can arrive as 2, 2.0 or "2".
@@ -644,10 +639,10 @@ enum ChatTools {
     }
 
     private static func nextHint(_ draft: RidePlanDraft) -> String {
-        if draft.destination == nil { return "Ask for destination." }
         if !draft.pendingDestinationChoices.isEmpty { return "Destination choice pending — ask user which one by number." }
-        if draft.startLocation == nil { return "Ask where it starts." }
+        if !draft.hasConfirmedDestination { return "Ask for destination." }
         if !draft.pendingStartChoices.isEmpty { return "Start choice pending — ask user which one by number." }
+        if !draft.hasConfirmedStart { return "Ask where it starts." }
         if draft.scheduledAt == nil { return "Ask when they want to leave." }
         return "Ask if they want checkpoints, then calculate routes."
     }

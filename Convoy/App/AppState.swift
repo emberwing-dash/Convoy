@@ -521,11 +521,27 @@ final class AppState {
         }
     }
 
+    /// Withdraws my pending request to join a ride (Home → "Waiting for approval" → ✕).
+    @discardableResult
+    func withdrawJoinRequest(rideId: UUID) async -> Bool {
+        lastSocialError = nil
+        do {
+            try await social.cancelRequest(rideId: rideId)
+            pendingRideJoinsByMe.removeAll { $0.id == rideId }
+            return true
+        } catch {
+            lastSocialError = SocialError.from(error).message
+            return false
+        }
+    }
+
     /// Refresh the pending-join list (user's outgoing requests awaiting approval).
     func refreshMyPendingRideJoins() async {
         guard let userId = await resolvedUserId() else { return }
         do {
             let pending = try await SupabaseManager.shared.fetchMyPendingRideJoins(userId: userId)
+                // A request for a ride that is over can never be answered usefully — don't keep showing it.
+                .filter { !$0.isCompleted && $0.departs > Date().addingTimeInterval(-12 * 3600) }
             await MainActor.run { self.pendingRideJoinsByMe = pending }
         } catch {
             print("[PendingJoins] refresh failed: \(error)")
@@ -1583,6 +1599,20 @@ final class AppState {
     func push(_ r: Route) { path.append(r) }
     func pop() { if !path.isEmpty { path.removeLast() } }
     func popToRoot() { path.removeAll() }
+    /// "Edit route" from the review screen: back to the editable route details for the current
+    /// draft, whichever way the planner was opened (normal flow, Discover hand-off or the chatbot).
+    /// The draft (places, coordinates, companions, stops) is kept as is.
+    func editRouteFromReview() {
+        if let idx = path.lastIndex(of: .planDetails) {
+            path.removeSubrange((idx + 1)...)
+        } else {
+            // Opened straight onto review (e.g. from the chatbot): swap review for details so
+            // Back from details returns to wherever the rider came from.
+            if path.last == .planReview { path.removeLast() }
+            path.append(.planDetails)
+        }
+    }
+
     func popToLast(_ count: Int) {
         let n = min(count, path.count)
         path.removeLast(n)

@@ -43,6 +43,8 @@ struct PlanMapView: View {
 
     @State private var routeLine: [CLLocationCoordinate2D] = []
     @State private var distanceMeters: Double = 0
+    /// True while the line shown is the straight-line fallback, not a calculated road route.
+    @State private var distanceIsEstimate = false
     @State private var durationSeconds: Double = 0
     @State private var isCalculating = false
     @State private var calcTask: Task<Void, Never>? = nil
@@ -638,9 +640,10 @@ struct PlanMapView: View {
                      : "Direct fastest route"
     }
     private var shortDistance: String {
-        distanceMeters < 1000
-            ? "\(Int(distanceMeters)) m"
-            : String(format: "%.1f km", distanceMeters / 1000)
+        let approx = distanceIsEstimate ? "≈ " : ""
+        return distanceMeters < 1000
+            ? "\(approx)\(Int(distanceMeters)) m"
+            : approx + String(format: "%.1f km", distanceMeters / 1000) + (distanceIsEstimate ? " (est.)" : "")
     }
     private var shortDuration: String {
         let m = Int(round(durationSeconds / 60))
@@ -671,6 +674,7 @@ struct PlanMapView: View {
             self.routeLine = sel.coords.map(\.cl)
             self.distanceMeters = sel.rawDistance
             self.durationSeconds = sel.rawTime
+            self.distanceIsEstimate = sel.isEstimate
             self.fitRoute()
         }
 
@@ -859,6 +863,7 @@ struct PlanMapView: View {
                 self.routeLine       = matched.coords.map(\.cl)
                 self.distanceMeters  = matched.distanceMeters
                 self.durationSeconds = matched.durationSeconds
+                self.distanceIsEstimate = false
                 self.isCalculating   = false
                 self.fitRoute()
             }
@@ -884,6 +889,7 @@ struct PlanMapView: View {
                 self.routeLine       = poly
                 self.distanceMeters  = dist
                 self.durationSeconds = time
+                self.distanceIsEstimate = false
                 self.isCalculating   = false
                 self.fitRoute()
             }
@@ -896,6 +902,7 @@ struct PlanMapView: View {
                 self.routeLine       = fallbackCoords.map(\.cl)
                 self.distanceMeters  = fallbackDist
                 self.durationSeconds = cal.saddleDurationSeconds
+                self.distanceIsEstimate = true
                 self.isCalculating   = false
                 self.errorMessage    = nil
                 self.fitRoute()

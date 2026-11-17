@@ -27,6 +27,8 @@ final class RoutePlanner {
         var time: Double          // seconds
         var kind: Kind
         var steps: [NavStep]
+        /// Straight-line corridor fallback — not a calculated road route.
+        var estimate = false
         enum Kind { case apple }
     }
 
@@ -113,7 +115,8 @@ final class RoutePlanner {
                               distance: distM,
                               time: cal.saddleDurationSeconds,
                               kind: .apple,
-                              steps: steps)
+                              steps: steps,
+                              estimate: true)
                 ]
             }
 
@@ -440,7 +443,8 @@ final class RoutePlanner {
             note: note,
             steps: c.steps,
             rawDistance: c.distance,
-            rawTime: c.time)
+            rawTime: c.time,
+            isEstimate: c.estimate)
     }
 }
 

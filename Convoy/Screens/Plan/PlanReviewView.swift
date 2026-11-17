@@ -174,7 +174,7 @@ struct PlanReviewView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
                             .font(.system(size: 11, weight: .bold))
-                        Text("\(app.draft.distanceText(app.draft.style)) · \(app.draft.durationText(app.draft.style))")
+                        Text("\(app.draft.distanceText(app.draft.style)) · \(app.draft.durationText(app.draft.style))\(app.draft.selected?.isEstimate == true ? " · estimate" : "")")
                             .cvText(12, .semibold, color: CV.onAccent, inter: true)
                     }
                     .foregroundStyle(CV.onAccent)
@@ -185,7 +185,7 @@ struct PlanReviewView: View {
 
                     Spacer(minLength: 8)
 
-                    Button { app.popToLast(2) } label: {
+                    Button { app.editRouteFromReview() } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "pencil")
                                 .font(.system(size: 11, weight: .semibold))

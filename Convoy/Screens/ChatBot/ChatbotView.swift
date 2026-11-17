@@ -4,10 +4,14 @@ import SwiftUI
 struct ChatbotView: View {
     @Environment(AppState.self) private var app
     @State private var engine = ChatbotEngine()
+    @State private var backendLabel = ChatbotBackend.current.rawValue.uppercased()
     @State private var input = ""
     @FocusState private var focused: Bool
     @State private var ellisController = EllisController()
     @State private var hasCustomPosition = false
+    @AppStorage(ChatTheme.storageKey) private var themeRaw = ChatTheme.ember.rawValue
+    @State private var showEllisSheet = false
+    private var theme: ChatTheme { ChatTheme.load(themeRaw) }
 
     // Typewriter state for welcome message
     @State private var typedWelcome = ""
@@ -42,8 +46,11 @@ struct ChatbotView: View {
     var body: some View {
         ZStack(alignment: .top) {
             CV.bg.ignoresSafeArea()
+            ChatTopGlow(theme: theme)
             VStack(spacing: 0) {
                 header
+                ZStack(alignment: .top) {
+                VStack(spacing: 0) {
                 if engine.rideDraft.isActive { progressBanner }
 
                 GeometryReader { contentGeo in
@@ -72,11 +79,18 @@ struct ChatbotView: View {
                 }
 
                 inputBar
+                }
+                    if showEllisSheet { ellisSheetLayer }
+                }
             }
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
+        // Pick up the operator's V1/V2 switch (app_config) each time the chat opens.
+        .task { await ChatbotBackend.refresh(userId: app.backendUserId); backendLabel = ChatbotBackend.current.rawValue.uppercased() }
+        // Back from the planner: if the ride was created there, close the plan in the chat.
+        .onAppear { engine.noteRideCreatedIfNeeded(app: app) }
         .onChange(of: engine.isThinking) { _, thinking in
             ellisController.onChatbotThinking(isThinking: thinking)
             if !thinking, let last = engine.messages.last, last.kind == .assistant {
@@ -153,17 +167,48 @@ struct ChatbotView: View {
             CircleBackButton { app.pop() }
             Spacer()
             HStack(spacing: 10) {
-                Image("ellis_logo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 28, height: 28)
-                    .clipShape(Circle())
-                    .overlay(Circle().strokeBorder(CV.accent.opacity(0.4), lineWidth: 1))
+                Button { toggleEllisSheet() } label: {
+                    HStack(spacing: 10) {
+                        Image("ellis_logo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 30, height: 30)
+                            .clipShape(Circle())
+                            .overlay(Circle().strokeBorder(theme.accent.opacity(0.6), lineWidth: 1.5))
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Ellis").cvText(16, .semibold, inter: true)
-                    Text(rateLabel).cvText(11, color: rateColor, inter: true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 4) {
+                                Text("Ellis").cvText(16, .semibold, inter: true)
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(CV.text.opacity(0.6))
+                                    .rotationEffect(.degrees(showEllisSheet ? 180 : 0))
+                            }
+                            Text(rateLabel).cvText(11, color: rateColor, inter: true)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Ellis options")
+                .accessibilityHint("Change the chat colour or start a new chat")
+                #if DEBUG
+                // Test switch (Debug builds only): long-press to cycle Remote → V1 → V2.
+                Text(backendLabel)
+                    .cvText(10, .bold, color: backendLabel == "V2" ? CV.green : CV.muted, inter: true)
+                    .padding(.horizontal, 6).frame(height: 18)
+                    .background(Color.white.opacity(0.08), in: Capsule())
+                    .onLongPressGesture {
+                        switch ChatbotBackend.debugOverride {
+                        case nil: ChatbotBackend.debugOverride = .v1
+                        case .v1: ChatbotBackend.debugOverride = .v2
+                        case .v2: ChatbotBackend.debugOverride = nil
+                        }
+                        let o = ChatbotBackend.debugOverride
+                        backendLabel = o == nil ? "\(ChatbotBackend.current.rawValue.uppercased())·R" : o!.rawValue.uppercased()
+                    }
+                    .accessibilityLabel("Chatbot backend \(backendLabel)")
+                #endif
             }
             Spacer()
 
@@ -176,7 +221,7 @@ struct ChatbotView: View {
                 } label: {
                     Image(systemName: "arrow.counterclockwise.circle.fill")
                         .font(.system(size: 20))
-                        .foregroundStyle(CV.accent.opacity(0.85))
+                        .foregroundStyle(theme.accent.opacity(0.9))
                 }
                 .buttonStyle(.plain)
                 .frame(width: 44, height: 44)
@@ -209,20 +254,36 @@ struct ChatbotView: View {
         let collected = 3 - draft.missingFields.count
         let next = draft.missingFields.first.map(labelFor) ?? "Ready"
         return HStack(spacing: 8) {
-            Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(CV.accent)
+            IconBadge(symbol: "point.topleft.down.to.point.bottomright.curvepath", color: theme.accent, size: 24)
             Text("Ride to \(draft.destination ?? "…")")
                 .cvText(12, .semibold, inter: true)
+                .lineLimit(1)
             Text("· \(collected) of 3 details")
                 .cvText(11, color: CV.text.opacity(0.55), inter: true)
             Spacer()
-            Text(next)
-                .cvText(11, .medium, color: CV.accent, inter: true)
+            if draft.isComplete {
+                // The plan is kept after visiting the planner — reopen review in one tap.
+                Button { Task { await engine.reopenReview(app: app) } } label: {
+                    HStack(spacing: 4) {
+                        Text("Review").cvText(12, .bold, color: CV.onAccent, inter: true)
+                        Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(CV.onAccent)
+                    }
+                    .padding(.horizontal, 10).frame(height: 26)
+                    .background(theme.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(engine.isThinking)
+                .accessibilityLabel("Open ride review")
+            } else {
+                Text(next)
+                    .cvText(11, .medium, color: theme.accent, inter: true)
+            }
         }
-        .padding(.horizontal, 14).frame(height: 36)
-        .background(CV.accent.opacity(0.12), in: Capsule())
-        .overlay(Capsule().strokeBorder(CV.accent.opacity(0.3), lineWidth: 1))
+        .padding(.leading, 6).padding(.trailing, draft.isComplete ? 5 : 14).frame(height: 36)
+        .background(.ultraThinMaterial, in: Capsule())
+        .background(theme.accent.opacity(0.12), in: Capsule())
+        .overlay(Capsule().strokeBorder(theme.accent.opacity(0.35), lineWidth: 1))
         .padding(.horizontal, 20).padding(.bottom, 8)
     }
 
@@ -345,6 +406,17 @@ struct ChatbotView: View {
         }
     }
 
+    /// List items in the latest answer can be tapped to reply with them; older answers are read-only.
+    private func pickHandler(for msg: ChatMessage) -> ((String) -> Void)? {
+        guard msg.id == engine.messages.last(where: { $0.kind == .assistant })?.id,
+              msg.id == engine.messages.last?.id else { return nil }
+        return { title in
+            guard !engine.isThinking, engine.pendingConfirmation == nil else { return }
+            ellisController.onUserSentMessage()
+            Task { await engine.send(title, app: app) }
+        }
+    }
+
     // MARK: - Message Bubbles
     private func bubble(for msg: ChatMessage) -> some View {
         Group {
@@ -355,22 +427,19 @@ struct ChatbotView: View {
                     Text(msg.text)
                         .cvText(15, color: CV.onAccent, lineHeight: 21, inter: true)
                         .padding(14)
-                        .background(CV.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .background(theme.bubble, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
             case .assistant, .system:
                 HStack(alignment: .top, spacing: 12) {
                     assistantAvatar
-                    let attributed = (try? AttributedString(markdown: msg.text)) ?? AttributedString(msg.text)
-                    Text(attributed)
-                        .cvText(15, lineHeight: 21, inter: true)
+                    ChatAnswerView(text: msg.text, onPick: pickHandler(for: msg), tint: theme.accent)
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(CV.hairline, lineWidth: 1))
+                        .pxCard(radius: 16, tint: theme.accent)
                 }
             case .confirmation:
                 if let p = msg.pendingConfirmation { confirmationCard(p) }
+                else if msg.action == "finalize_ride_plan" { reviewOpenedCard(msg) }
                 else {
                     HStack(alignment: .top, spacing: 12) {
                         assistantAvatar
@@ -396,9 +465,8 @@ struct ChatbotView: View {
             assistantAvatar
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
-                    Image(systemName: p.isNavigating ? "arrow.up.forward.app" : "questionmark.circle.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(CV.warning)
+                    IconBadge(symbol: p.isNavigating ? "map.fill" : "questionmark.circle.fill",
+                              color: p.isNavigating ? theme.accent : Hue.honey, size: 28)
                     Text(p.displayTitle).cvText(15, .semibold, inter: true)
                 }
                 Text(p.displayDetail)
@@ -413,28 +481,153 @@ struct ChatbotView: View {
                     Button { Task { await engine.confirmPending(app: app) } } label: {
                         Text(p.buttonLabel).cvText(13, .semibold, color: CV.onAccent, inter: true)
                             .frame(maxWidth: .infinity).frame(height: 40)
-                            .background(CV.accent, in: Capsule())
+                            .background(theme.accent, in: Capsule())
                     }.buttonStyle(.plain)
                 }
             }
             .padding(14)
-            .background(CV.warning.opacity(0.08),
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(CV.warning.opacity(0.3), lineWidth: 1))
+            .pxCard(radius: 16, tint: theme.accent)
         }
+    }
+
+    /// A confirmed "Open ride review" card. While the plan is still open, the latest one keeps a
+    /// button to open the review again (after Edit route → back to chat).
+    private func reviewOpenedCard(_ msg: ChatMessage) -> some View {
+        let isLatest = msg.id == engine.messages.last(where: { $0.action == "finalize_ride_plan" })?.id
+        let canReopen = isLatest && engine.rideDraft.isComplete
+        return HStack(alignment: .top, spacing: 12) {
+            assistantAvatar
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    IconBadge(symbol: "checkmark.circle.fill", color: Hue.sage, size: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(msg.text).cvText(15, .semibold, inter: true)
+                        if let dest = engine.rideDraft.destination, canReopen {
+                            Text("Ride to \(dest)").cvText(12, color: CV.text.opacity(0.6), inter: true)
+                        }
+                    }
+                }
+                if canReopen {
+                    Button { Task { await engine.reopenReview(app: app) } } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "map.fill").font(.system(size: 12, weight: .semibold))
+                            Text("Open ride review").cvText(13, .semibold, color: CV.onAccent, inter: true)
+                        }
+                        .foregroundStyle(CV.onAccent)
+                        .frame(maxWidth: .infinity).frame(height: 40)
+                        .background(theme.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(engine.isThinking)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .pxCard(radius: 16, tint: Hue.sage)
+        }
+    }
+
+    // MARK: - Ellis sheet (drops down from the title)
+
+    private func toggleEllisSheet() {
+        focused = false
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { showEllisSheet.toggle() }
+    }
+
+    private var ellisSheetLayer: some View {
+        ZStack(alignment: .top) {
+            Color.black.opacity(0.45)
+                .ignoresSafeArea(edges: .bottom)
+                .onTapGesture { toggleEllisSheet() }
+                .transition(.opacity)
+            ellisSheet
+                .padding(.horizontal, 12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    private var ellisSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Image("ellis_logo").resizable().scaledToFit()
+                    .frame(width: 44, height: 44).clipShape(Circle())
+                    .overlay(Circle().strokeBorder(theme.accent.opacity(0.7), lineWidth: 1.5))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ellis").cvText(17, .bold, inter: true)
+                    Text("Your ride assistant").cvText(12, color: CV.text.opacity(0.6), inter: true)
+                }
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("CHAT COLOUR").cvText(11, .semibold, color: CV.text.opacity(0.5), tracking: 0.8, inter: true)
+                HStack(spacing: 0) {
+                    ForEach(ChatTheme.allCases) { t in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.3)) { themeRaw = t.rawValue }
+                        } label: {
+                            VStack(spacing: 6) {
+                                ZStack {
+                                    Circle().fill(t.swatch).frame(width: 36, height: 36)
+                                    if t == theme {
+                                        Circle().strokeBorder(Color.white, lineWidth: 2).frame(width: 44, height: 44)
+                                        Image(systemName: "checkmark").font(.system(size: 13, weight: .bold))
+                                            .foregroundStyle(t == .graphite ? CV.onAccent : .white)
+                                    }
+                                }
+                                .frame(width: 46, height: 46)
+                                Text(t.name).cvText(10.5, t == theme ? .semibold : .regular,
+                                                    color: CV.text.opacity(t == theme ? 1 : 0.6), inter: true)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(t.name) colour")
+                        .accessibilityAddTraits(t == theme ? .isSelected : [])
+                    }
+                }
+            }
+
+            Rectangle().fill(CV.hairline).frame(height: 1)
+
+            Button {
+                engine.startNewChat()
+                hasCustomPosition = false
+                toggleEllisSheet()
+            } label: {
+                HStack(spacing: 12) {
+                    IconBadge(symbol: "square.and.pencil", color: Hue.periwinkle, size: 34)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("New chat").cvText(14, .semibold, inter: true)
+                        Text("Clears this conversation and any ride plan in it")
+                            .cvText(11.5, color: CV.text.opacity(0.55), inter: true)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(CV.text.opacity(0.35))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(engine.isThinking || engine.messages.isEmpty)
+            .opacity(engine.messages.isEmpty ? 0.5 : 1)
+        }
+        .padding(16)
+        .pxCard(radius: 24, tint: theme.accent)
+        .background(Color(hex: 0x131316), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: .black.opacity(0.5), radius: 24, y: 12)
     }
 
     private var thinkingBubble: some View {
         HStack(alignment: .top, spacing: 12) {
             assistantAvatar
             HStack(spacing: 8) {
-                ProgressView().tint(CV.accent).scaleEffect(0.8)
+                ProgressView().tint(theme.accent).scaleEffect(0.8)
                 Text(engine.thinkingStatus ?? "Thinking…")
                     .cvText(13, color: CV.text.opacity(0.6), inter: true)
             }
             .padding(.horizontal, 14).padding(.vertical, 12)
-            .background(CV.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .pxCard(radius: 16, tint: theme.accent)
             Spacer(minLength: 0)
         }
     }
@@ -444,9 +637,18 @@ struct ChatbotView: View {
             assistantAvatar
             VStack(alignment: .leading, spacing: 8) {
                 Text(text).cvText(13, color: CV.text, lineHeight: 18, inter: true)
-                Button { engine.clearError() } label: {
-                    Text("Dismiss").cvText(12, .semibold, color: CV.accent, inter: true)
-                }.buttonStyle(.plain)
+                HStack(spacing: 16) {
+                    if engine.failedUserText != nil {
+                        Button { Task { await engine.retryLastFailed(app: app) } } label: {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(CV.accent)
+                        }.buttonStyle(.plain)
+                    }
+                    Button { engine.clearError() } label: {
+                        Text("Dismiss").cvText(12, .semibold, color: CV.accent, inter: true)
+                    }.buttonStyle(.plain)
+                }
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -462,7 +664,7 @@ struct ChatbotView: View {
             .scaledToFit()
             .frame(width: 36, height: 36)
             .clipShape(Circle())
-            .overlay(Circle().strokeBorder(CV.accent.opacity(0.35), lineWidth: 1))
+            .overlay(Circle().strokeBorder(theme.accent.opacity(0.55), lineWidth: 1.5))
     }
 
     // MARK: - Input Composer
@@ -477,7 +679,7 @@ struct ChatbotView: View {
                                     .foregroundColor(CV.text.opacity(0.35)),
                           axis: .vertical)
                     .focused($focused)
-                    .tint(CV.accent)
+                    .tint(theme.accent)
                     .cvText(15, inter: true)
                     .lineLimit(1...4)
                     .disabled(engine.promptsRemaining == 0)
@@ -500,7 +702,7 @@ struct ChatbotView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(canSend ? CV.onAccent : CV.text.opacity(0.35))
                     .frame(width: 44, height: 44)
-                    .background(canSend ? CV.accent : Color.white.opacity(0.08), in: Circle())
+                    .background(canSend ? AnyShapeStyle(theme.bubble) : AnyShapeStyle(Color.white.opacity(0.08)), in: Circle())
             }
             .buttonStyle(.plain)
             .disabled(!canSend)

@@ -44,6 +44,9 @@ struct RouteSummary: Hashable, Sendable {
     var steps: [NavStep] = []
     var rawDistance: Double = 0
     var rawTime: Double = 0
+    /// True when this is a straight-line corridor estimate (no road route could be calculated).
+    /// Estimates are always labelled as such and never shown as a verified road distance.
+    var isEstimate = false
 }
 
 func durationText(_ minutes: Int) -> String {
@@ -119,15 +122,16 @@ struct PlanDraft: Hashable {
 
     func distanceText(_ s: RouteStyle) -> String {
         if let r = routes[s], r.km > 0 {
-            if r.km < 1.0 { return "\(Int(r.rawDistance)) m" }
-            return String(format: "%.1f km", r.km)
+            let approx = r.isEstimate ? "≈ " : ""
+            if r.km < 1.0 { return "\(approx)\(Int(r.rawDistance)) m" }
+            return approx + String(format: "%.1f km", r.km)
         }
         return "-- km"
     }
 
     func durationText(_ s: RouteStyle) -> String {
         if let m = routes[s]?.minutes, m > 0 {
-            return Convoy.durationText(m)
+            return (routes[s]?.isEstimate == true ? "≈ " : "") + Convoy.durationText(m)
         }
         return "-- min"
     }
@@ -205,10 +209,11 @@ extension PlanDraft {
                     km: distM / 1000.0,
                     minutes: max(1, Int((cal.saddleDurationSeconds / 60.0).rounded())),
                     coords: geom,
-                    note: "Two-wheeler route",
+                    note: "Estimated — road route not calculated yet",
                     steps: [],
                     rawDistance: distM,
-                    rawTime: cal.saddleDurationSeconds
+                    rawTime: cal.saddleDurationSeconds,
+                    isEstimate: true
                 )
                 initialRoutes[.fastest] = summary
                 initialRoutes[.scenic] = summary

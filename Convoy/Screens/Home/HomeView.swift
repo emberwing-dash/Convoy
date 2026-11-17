@@ -4,6 +4,9 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppState.self) private var app
     @State private var scrollY: CGFloat = 0
+    @State private var withdrawTarget: Ride?
+    @State private var withdrawing: UUID?
+    @State private var withdrawError: String?
     private var weather: WeatherService { .shared }
 
     var body: some View {
@@ -158,6 +161,10 @@ struct HomeView: View {
                     ForEach(app.pendingRideJoinsByMe) { ride in pendingRideCard(ride) }
                 }
                 .padding(.top, 12)
+                .alert("Couldn't withdraw", isPresented: Binding(get: { withdrawError != nil },
+                                                                set: { if !$0 { withdrawError = nil } })) {
+                    Button("OK", role: .cancel) { withdrawError = nil }
+                } message: { Text(withdrawError ?? "") }
             }
 
             if !later.isEmpty {
@@ -179,6 +186,11 @@ struct HomeView: View {
                 .padding(.top, 20).padding(.bottom, -10)
                 .zIndex(1)
 
+                if later.count == 1, let only = later.first {
+                    // A lone ride fills the width as a wide card instead of leaving the row half empty.
+                    RidePosterCard(ride: only, fullWidth: true) { app.push(.rideDetails(only.id)) }
+                        .padding(.top, 12)
+                } else {
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: 12) {
                         ForEach(later) { ride in
@@ -193,6 +205,7 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, -20)
                 .padding(.top, 12)
+                }
             } else if !sorted.isEmpty {
                 Button { app.push(.myRides) } label: {
                     HStack {
@@ -237,9 +250,42 @@ struct HomeView: View {
                     .cvText(12, color: CV.muted, inter: true).lineLimit(1)
             }
             Spacer(minLength: 0)
+            if withdrawing == ride.id {
+                ProgressView().tint(CV.text).frame(width: 36, height: 36)
+            } else {
+                Button { withdrawTarget = ride } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(CV.text.opacity(0.8))
+                        .frame(width: 36, height: 36)
+                        .background(Color.white.opacity(0.08), in: Circle())
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Withdraw request to join \(ride.title)")
+            }
         }
-        .padding(12)
+        .padding(.leading, 12).padding(.vertical, 12).padding(.trailing, 6)
         .background(CV.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .confirmationDialog("Withdraw your request?",
+                            isPresented: Binding(get: { withdrawTarget?.id == ride.id },
+                                                 set: { if !$0 { withdrawTarget = nil } }),
+                            titleVisibility: .visible) {
+            Button("Withdraw request", role: .destructive) {
+                withdrawing = ride.id
+                Task {
+                    if !(await app.withdrawJoinRequest(rideId: ride.id)) {
+                        withdrawError = app.lastSocialError ?? "Couldn't withdraw the request. Please try again."
+                    }
+                    withdrawing = nil
+                }
+            }
+            Button("Keep waiting", role: .cancel) {}
+        } message: {
+            Text("\(ride.organiser) won't see your request to join '\(ride.title)' any more. You can ask again later.")
+        }
     }
 }
 
@@ -489,9 +535,11 @@ struct RideCountdownPanel: View {
 private struct RidePosterCard: View {
     @Environment(AppState.self) private var app
     let ride: Ride
+    /// Wide layout for when it is the only ride in the row.
+    var fullWidth: Bool = false
     var onTap: () -> Void
 
-    private let size = CGSize(width: 228, height: 288)
+    private var size: CGSize { fullWidth ? CGSize(width: 0, height: 220) : CGSize(width: 228, height: 288) }
 
     var body: some View {
         let cover = RideCoverService.shared.cover(for: ride)
@@ -527,7 +575,8 @@ private struct RidePosterCard: View {
                 }
                 .padding(14)
             }
-            .frame(width: size.width, height: size.height)
+            .frame(width: fullWidth ? nil : size.width, height: size.height)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
