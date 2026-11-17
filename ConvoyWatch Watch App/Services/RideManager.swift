@@ -33,6 +33,18 @@ public final class RideManager: ObservableObject {
     @Published public var connectionStep: PhoneConnectionStep = .searching
     @Published public var showSyncPairingScreen: Bool = true
     
+    // Synced user identity from iPhone
+    @Published public var userDisplayName: String = "You"
+    @Published public var userHandle: String = ""
+    @Published public var userId: String = ""
+    @Published public var isAuthenticatedFromPhone: Bool = false
+    @Published public var userAvatarData: Data? = nil
+    
+    public var userAvatarImage: UIImage? {
+        guard let data = userAvatarData else { return nil }
+        return UIImage(data: data)
+    }
+    
     private var toastTimer: AnyCancellable?
     private var telemetryTimer: AnyCancellable?
     private let connectivity = WatchConnectivityManager.shared
@@ -187,6 +199,30 @@ public final class RideManager: ObservableObject {
             )
             self.presentAlert(alert)
         }
+    }
+    
+    public func handleAuthSync(name: String, handle: String, userId: String, avatarDataString: String?) {
+        self.userDisplayName = name
+        self.userHandle = handle
+        self.userId = userId
+        self.isAuthenticatedFromPhone = true
+        if let b64 = avatarDataString, let data = Data(base64Encoded: b64) {
+            self.userAvatarData = data
+        }
+        
+        // Auto-connect and dismiss pairing screens
+        self.hasConnectedToRide = true
+        self.showSyncPairingScreen = false
+        self.session.isPhoneReachable = true
+        self.session.connectionStatus = .connected
+        
+        // Update "You" rider in the crew
+        if let idx = riders.firstIndex(where: { $0.role == .self }) {
+            riders[idx].name = name
+        }
+        
+        displayToast(message: "Signed in as \(name)")
+        playHaptic(.notification)
     }
     
     private func startLiveTimer() {

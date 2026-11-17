@@ -2,22 +2,30 @@
 //  ContentView.swift
 //  ConvoyWatch Watch App
 //
-//  Ultra-clean, native Apple Watch notification & companion experience:
-//  1. Sync Screen: Connects to iPhone Convoy app with prominent logo and centered "Connecting..." status.
-//  2. Native Apple Watch Notification: Matches official watchOS notifications with large circular
-//     avatar in the center, app icon badge at bottom-right, centered text, and full-width buttons. NO box/card.
-//  3. Tap Reason Blank Screen: Clicking "Tap Reason" opens a dedicated blank screen showing
-//     ONLY the 3 options (Fuel, Traffic, Rest) — no dropdown, no clutter.
-//  4. Crystal-Clear Formation Telemetry: Explicitly tells the rider who is falling behind
-//     (e.g. "MEERA FALLING BEHIND") instead of vague "PACK STRETCHED".
+//  Convoy Apple Watch Companion v2.0
+//  1. Opening Animation (road Bézier curve, racer, logo unmasking, typography)
+//  2. Sign In Screen (Apple / Guest / Supabase Auth)
+//  3. Watch Home View (User profile, live Apple Watch GPS location card, upcoming rides)
+//  4. Live Ride Telemetry & Notification overlays
 //
 
 import SwiftUI
+
+public enum WatchAppScreen {
+    case openingAnimation
+    case welcome
+    case login
+    case home
+    case liveRide
+}
 
 public struct ContentView: View {
     @StateObject private var rideManager = RideManager.shared
     @StateObject private var connectivity = WatchConnectivityManager.shared
     @StateObject private var whisper = ConvoyWhisperService.shared
+    @StateObject private var locationManager = WatchLocationManager.shared
+    
+    @State private var currentScreen: WatchAppScreen = .openingAnimation
     
     // Shows the blank screen with ONLY the 3 reason options
     @State private var showingReasonScreen: Bool = false
@@ -26,54 +34,86 @@ public struct ContentView: View {
     // Shows the WhisperKit voice control sheet
     @State private var showingWhisperSheet: Bool = false
     
-    // Focus state for hardware Digital Crown / rotary knob
-    @FocusState private var isCrownFocused: Bool
-    
     public init() {}
     
     public var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            if rideManager.showSyncPairingScreen {
-                // MARK: - Screen 0: iPhone Pairing / Sync Check
-                PhoneSyncPairingView(
-                    onSynced: {
+            switch currentScreen {
+            case .openingAnimation:
+                WatchOpeningAnimationView {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        if rideManager.isAuthenticatedFromPhone {
+                            currentScreen = .home
+                        } else {
+                            currentScreen = .welcome
+                        }
+                    }
+                }
+                .transition(.opacity)
+                
+            case .welcome:
+                WatchWelcomeView {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        currentScreen = .login
+                    }
+                }
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                    removal: .opacity
+                ))
+                
+            case .login:
+                WatchLoginView(
+                    onVerified: {
                         withAnimation(.easeInOut(duration: 0.3)) {
-                            rideManager.showSyncPairingScreen = false
-                            rideManager.hasConnectedToRide = true
-                            rideManager.session.isPhoneReachable = true
-                            rideManager.session.connectionStatus = .connected
+                            // After successful verification, navigate directly to profile screen
+                            currentScreen = .home
+                            showingProfile = true
                         }
                     },
-                    onSkip: {
+                    onBack: {
                         withAnimation(.easeInOut(duration: 0.25)) {
-                            rideManager.showSyncPairingScreen = false
-                            rideManager.hasConnectedToRide = true
+                            currentScreen = .welcome
                         }
                     }
                 )
-                .transition(.opacity)
-                .zIndex(10)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                    removal: .opacity
+                ))
                 
-            } else if !rideManager.hasConnectedToRide {
-                // MARK: - 1st: Connect to iPhone Convoy App (manual fallback)
-                syncConnectScreen
-                    .transition(.opacity)
-            } else if showingReasonScreen {
-                // MARK: - 3rd: Blank Screen with ONLY the 3 Reason Options (No Dropdown)
-                reasonBlankScreen
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.95)),
-                        removal: .opacity.combined(with: .scale(scale: 0.95))
-                    ))
-            } else {
-                // MARK: - 2nd: Clean, Uncluttered Main Ride Screen
-                cleanMainRideScreen
-                    .transition(.opacity)
+            case .home:
+                WatchHomeView(
+                    onStartRide: {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            currentScreen = .liveRide
+                        }
+                    },
+                    onOpenProfile: {
+                        showingProfile = true
+                    },
+                    onOpenWhisper: {
+                        showingWhisperSheet = true
+                    }
+                )
+                .transition(.opacity)
+                
+            case .liveRide:
+                if showingReasonScreen {
+                    reasonBlankScreen
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                            removal: .opacity.combined(with: .scale(scale: 0.95))
+                        ))
+                } else {
+                    cleanMainRideScreen
+                        .transition(.opacity)
+                }
             }
             
-            // MARK: - Native Apple Watch Notification (Exact watchOS Short/Long Look Style, NO Box)
+            // MARK: - Native Apple Watch Notification
             if let alert = rideManager.activeAlert {
                 NativeWatchNotificationView(alert: alert)
                     .transition(.asymmetric(
@@ -119,83 +159,38 @@ public struct ContentView: View {
         .sheet(isPresented: $showingWhisperSheet) {
             WhisperVoiceSheet()
         }
+        .onAppear {
+            locationManager.startLiveLocationUpdates()
+        }
+        .onChange(of: rideManager.isAuthenticatedFromPhone) { _, isAuthed in
+            if isAuthed && currentScreen == .welcome {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentScreen = .home
+                }
+            }
+        }
         .animation(.easeInOut(duration: 0.22), value: showingReasonScreen)
-        .animation(.easeInOut(duration: 0.25), value: rideManager.hasConnectedToRide)
-        .animation(.easeInOut(duration: 0.3), value: rideManager.showSyncPairingScreen)
         .animation(.spring(response: 0.42, dampingFraction: 0.68), value: rideManager.activeAlert?.id)
         .animation(.spring(response: 0.35, dampingFraction: 0.75), value: rideManager.showToast)
     }
-
     
-    // MARK: - Screen 1: Connect to iPhone Convoy App
-    
-    private var syncConnectScreen: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            
-            // Prominent Convoy App Logo
-            ConvoyLogoView(size: 86, showGlow: true)
-            
-            VStack(spacing: 3) {
-                Text("CONVOY")
-                    .font(.system(size: 15, weight: .black))
-                    .tracking(1.4)
-                    .foregroundStyle(.white)
-                
-                Text("iPhone Companion")
-                    .font(.system(size: 11))
-                    .foregroundStyle(W.secondary)
-            }
-            
-            Spacer()
-            
-            // Sync with iPhone Button (Connecting text is perfectly centered)
-            Button {
-                rideManager.syncWithIPhone()
-            } label: {
-                ZStack {
-                    if rideManager.isSyncing {
-                        Text("Connecting...")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.black)
-                        
-                        HStack {
-                            ProgressView()
-                                .tint(.black)
-                                .scaleEffect(0.75)
-                                .frame(width: 14, height: 14)
-                                .padding(.leading, 14)
-                            Spacer()
-                        }
-                    } else {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 13, weight: .bold))
-                            Text("Sync with iPhone")
-                                .font(.system(size: 13, weight: .bold))
-                        }
-                        .foregroundStyle(.black)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 38)
-                .background(Color.white, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(rideManager.isSyncing)
-            .padding(.horizontal, 8)
-            .padding(.bottom, 6)
-        }
-        .padding(.horizontal, 6)
-    }
-    
-    // MARK: - Screen 2: Clean, Uncluttered Main Ride Screen
+    // MARK: - Screen: Clean, Uncluttered Main Ride Screen
     
     private var cleanMainRideScreen: some View {
-        VStack(spacing: 12) {
-            // Header: Convoy + Synced + Profile Button
+        VStack(spacing: 8) {
+            // Header: Back to Home + CONVOY + Status + Profile
             HStack(spacing: 6) {
-                AppIcon(size: 20)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        currentScreen = .home
+                    }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(W.secondary)
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
                 
                 Text("CONVOY")
                     .font(.system(size: 11, weight: .bold))
@@ -228,29 +223,42 @@ public struct ContentView: View {
                     rideManager.playHaptic(.click)
                     showingProfile = true
                 } label: {
-                    Image("avatar_meera")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 22, height: 22)
-                        .clipShape(Circle())
+                    if let img = rideManager.userAvatarImage {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 22, height: 22)
+                            .clipShape(Circle())
+                            .overlay(Circle().strokeBorder(W.amber.opacity(0.8), lineWidth: 1))
+                    } else {
+                        ZStack {
+                            Circle()
+                                .fill(LinearGradient(colors: [W.amber, W.red], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 22, height: 22)
+                            Text(String(rideManager.userDisplayName.prefix(1)).uppercased())
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                        }
                         .overlay(Circle().strokeBorder(W.amber.opacity(0.8), lineWidth: 1))
+                    }
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 6)
-            .padding(.top, 4)
+            .padding(.horizontal, 4)
+            .padding(.top, 2)
             
             Spacer()
             
             // Speed & Clear Formation Warning (Explains if someone falls behind)
-            VStack(spacing: 4) {
+            VStack(spacing: 3) {
                 HStack(alignment: .lastTextBaseline, spacing: 3) {
-                    Text("\(rideManager.session.currentSpeedKmh)")
-                        .font(.system(size: 48, weight: .heavy, design: .rounded))
+                    let liveSpeed = locationManager.currentLocation != nil ? Int(max(0, locationManager.currentLocation!.speed * 3.6)) : rideManager.session.currentSpeedKmh
+                    Text("\(liveSpeed)")
+                        .font(.system(size: 46, weight: .heavy, design: .rounded))
                         .foregroundStyle(.white)
                     
                     Text("KM/H")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(W.amber)
                 }
                 
@@ -320,7 +328,7 @@ public struct ContentView: View {
                             .foregroundStyle(.white)
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 38)
+                    .frame(height: 36)
                     .background(whisper.isRecording ? Color(red: 0.3, green: 0.05, blue: 0.05) : W.card, in: Capsule())
                     .overlay(Capsule().strokeBorder(whisper.isRecording ? W.red.opacity(0.8) : W.cyan.opacity(0.4), lineWidth: 1))
                 }
@@ -341,22 +349,21 @@ public struct ContentView: View {
                             .foregroundStyle(.white)
                     }
                     .padding(.horizontal, 10)
-                    .frame(height: 38)
+                    .frame(height: 36)
                     .background(W.card, in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 6)
-            .padding(.bottom, 6)
+            .padding(.horizontal, 4)
+            .padding(.bottom, 4)
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 2)
     }
     
-    // MARK: - Screen 3: Blank Screen with ONLY the 3 Reason Options
+    // MARK: - Screen: Blank Screen with ONLY the 3 Reason Options
     
     private var reasonBlankScreen: some View {
         VStack(spacing: 0) {
-            // Minimal back button at top
             HStack {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -382,9 +389,7 @@ public struct ContentView: View {
             
             Spacer()
             
-            // ONLY the 3 Options on a pure blank screen
             HStack(spacing: 8) {
-                // 1. Fuel
                 reasonCard(
                     type: .fuelStop,
                     icon: "fuelpump.fill",
@@ -392,7 +397,6 @@ public struct ContentView: View {
                     color: W.amber
                 )
                 
-                // 2. Traffic
                 reasonCard(
                     type: .traffic,
                     icon: "car.2.fill",
@@ -400,7 +404,6 @@ public struct ContentView: View {
                     color: Color(red: 1.0, green: 0.65, blue: 0.15)
                 )
                 
-                // 3. Rest
                 reasonCard(
                     type: .breakStop,
                     icon: "cup.and.saucer.fill",
@@ -456,14 +459,12 @@ public struct ContentView: View {
         let alert: RideAlert
         @ObservedObject var rideManager = RideManager.shared
         
-        // Bubble pop spring animation states
         @State private var avatarScale: CGFloat = 0.65
         @State private var contentOpacity: Double = 0.0
         @State private var buttonsOffset: CGFloat = 14
         
         var body: some View {
             VStack(spacing: 5) {
-                // Top header: subtle dismiss 'x' & timestamp
                 HStack {
                     Button {
                         rideManager.dismissActiveAlert()
@@ -485,7 +486,6 @@ public struct ContentView: View {
                 
                 Spacer(minLength: 2)
                 
-                // Centered 3D Memoji Avatar with circular Convoy badge
                 ZStack(alignment: .bottomTrailing) {
                     Image(alert.riderAvatar ?? "avatar_meera")
                         .resizable()
@@ -493,7 +493,6 @@ public struct ContentView: View {
                         .frame(width: 52, height: 52)
                         .clipShape(Circle())
                     
-                    // Circular App Icon Badge at bottom right of avatar
                     ZStack {
                         Circle()
                             .fill(W.red)
@@ -509,7 +508,6 @@ public struct ContentView: View {
                 }
                 .scaleEffect(avatarScale)
                 
-                // Centered Contact Name & Message Text
                 VStack(spacing: 1) {
                     Text(alert.riderName ?? "Meera")
                         .font(.system(size: 15, weight: .bold))
@@ -527,7 +525,6 @@ public struct ContentView: View {
                 
                 Spacer(minLength: 4)
                 
-                // Compact Action Buttons (Capsule style)
                 if !alert.actions.isEmpty {
                     VStack(spacing: 4) {
                         ForEach(Array(alert.actions.enumerated()), id: \.offset) { idx, act in
@@ -568,11 +565,9 @@ public struct ContentView: View {
             contentOpacity = 0.0
             buttonsOffset = 14
             
-            // Bouncy bubble spring pop for the Memoji avatar & badge
             withAnimation(.spring(response: 0.42, dampingFraction: 0.62)) {
                 avatarScale = 1.0
             }
-            // Smooth reveal for text and actions
             withAnimation(.easeOut(duration: 0.25).delay(0.06)) {
                 contentOpacity = 1.0
                 buttonsOffset = 0

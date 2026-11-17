@@ -20,17 +20,26 @@ public final class WatchLocationManager: NSObject, ObservableObject, CLLocationM
     @Published public var isStreamingLocation: Bool = false
     
     private var lastBroadcastTime: TimeInterval = 0
-    private let minBroadcastInterval: TimeInterval = 1.0 // 1 update per second max
+    private let minBroadcastInterval: TimeInterval = 2.0 // 1 update per 2 seconds max (saves battery)
     
     override private init() {
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        locationManager.distanceFilter = 3.0 // 3 meters
+        locationManager.distanceFilter = kCLDistanceFilterNone // Send every update so iPhone always receives
     }
     
     public func requestAuthorization() {
-        locationManager.requestWhenInUseAuthorization()
+        // On watchOS, only requestWhenInUseAuthorization is reliably available
+        // requestAlwaysAuthorization requires special background entitlement
+        switch locationManager.authorizationStatus {
+        case .notDetermined:
+            locationManager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            break // Already authorized
+        default:
+            break
+        }
     }
     
     public func startLiveLocationUpdates() {
@@ -38,6 +47,23 @@ public final class WatchLocationManager: NSObject, ObservableObject, CLLocationM
         locationManager.startUpdatingLocation()
         locationManager.startUpdatingHeading()
         isStreamingLocation = true
+        
+        // If we already have a cached location, broadcast immediately without waiting for a delta
+        if let last = locationManager.location {
+            self.currentLocation = last
+            broadcastLocation(last)
+        }
+    }
+    
+    public func broadcastCurrentLocationNow() {
+        if let loc = currentLocation ?? locationManager.location {
+            // Force broadcast ignoring the rate-limit so iPhone gets an immediate update
+            lastBroadcastTime = 0
+            broadcastLocation(loc)
+        } else {
+            // No cached fix yet — request one (one-shot)
+            locationManager.requestLocation()
+        }
     }
     
     public func stopLiveLocationUpdates() {
@@ -69,24 +95,45 @@ public final class WatchLocationManager: NSObject, ObservableObject, CLLocationM
         guard now - lastBroadcastTime >= minBroadcastInterval else { return }
         lastBroadcastTime = now
         
-        // Broadcast watch location to iPhone via WatchConnectivity
-        var payload: [String: Any] = [
-            "type": "watch_location",
-            "latitude": latest.coordinate.latitude,
-            "longitude": latest.coordinate.longitude,
-            "altitude": latest.altitude,
-            "speed": max(0, latest.speed),
-            "speedKmh": max(0, latest.speed * 3.6),
-            "course": latest.course,
-            "horizontalAccuracy": latest.horizontalAccuracy,
-            "timestamp": latest.timestamp.timeIntervalSince1970
-        ]
-        
-        if let heading = currentHeading {
-            payload["heading"] = heading.trueHeading > 0 ? heading.trueHeading : heading.magneticHeading
+        broadcastLocation(latest)
+    }
+    
+    private func broadcastLocation(_ location: CLLocation) {
+        let heading: Double
+        if let h = currentHeading {
+            heading = h.trueHeading > 0 ? h.trueHeading : h.magneticHeading
+        } else {
+            heading = max(0, location.course)
         }
         
-        WatchConnectivityManager.shared.send(payload: payload, actionLabel: "Watch Location Stream")
+        let speedKmh = max(0, location.speed * 3.6)
+        
+        // 1. Send via WatchConnectivity (real-time message + applicationContext cache)
+        var payload: [String: Any] = [
+            "type": "watch_location",
+            "latitude": location.coordinate.latitude,
+            "longitude": location.coordinate.longitude,
+            "altitude": location.altitude,
+            "speed": max(0, location.speed),
+            "speedKmh": speedKmh,
+            "course": location.course,
+            "heading": heading,
+            "horizontalAccuracy": location.horizontalAccuracy,
+            "timestamp": location.timestamp.timeIntervalSince1970
+        ]
+        WatchConnectivityManager.shared.send(payload: payload, actionLabel: "Watch GPS Stream")
+        WatchConnectivityManager.shared.updateContext(payload)
+        
+        // 2. Stream to Supabase (so iPhone and remote riders also receive it)
+        Task {
+            await WatchSupabaseService.shared.streamLocation(
+                lat: location.coordinate.latitude,
+                lon: location.coordinate.longitude,
+                speedKmh: speedKmh,
+                heading: heading,
+                accuracy: location.horizontalAccuracy
+            )
+        }
     }
     
     public func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {

@@ -28,11 +28,39 @@ public struct UserProfileView: View {
 
                     // ── Memoji Avatar ─────────────────────────────
                     ZStack(alignment: .bottomTrailing) {
-                        Image("avatar_meera")
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 68, height: 68)
-                            .clipShape(Circle())
+                        if let img = rideManager.userAvatarImage {
+                            Image(uiImage: img)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 68, height: 68)
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(
+                                            LinearGradient(
+                                                colors: [W.amber, W.red],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ),
+                                            lineWidth: 2
+                                        )
+                                )
+                                .shadow(color: W.amber.opacity(0.4), radius: 8)
+                        } else {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [W.amber, W.red],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 68, height: 68)
+                                Text(String(rideManager.userDisplayName.prefix(1)).uppercased())
+                                    .font(.system(size: 28, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(.white)
+                            }
                             .overlay(
                                 Circle()
                                     .strokeBorder(
@@ -45,6 +73,7 @@ public struct UserProfileView: View {
                                     )
                             )
                             .shadow(color: W.amber.opacity(0.4), radius: 8)
+                        }
 
                         // Online dot
                         Circle()
@@ -56,13 +85,26 @@ public struct UserProfileView: View {
 
                     // ── Name & Role ───────────────────────────────
                     VStack(spacing: 2) {
-                        Text("You")
+                        Text(rideManager.userDisplayName)
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(.white)
 
-                        Text("Rider · Convoy")
+                        Text(rideManager.userHandle.isEmpty ? "Rider · Convoy" : "@\(rideManager.userHandle)")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(W.secondary)
+
+                        if rideManager.isAuthenticatedFromPhone {
+                            HStack(spacing: 4) {
+                                Circle().fill(W.green).frame(width: 5, height: 5)
+                                Text("Synced with iPhone")
+                                    .font(.system(size: 8, weight: .semibold))
+                                    .foregroundStyle(W.green)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(W.green.opacity(0.15), in: Capsule())
+                            .padding(.top, 1)
+                        }
                     }
 
                     // ── Stats Grid ───────────────────────────────

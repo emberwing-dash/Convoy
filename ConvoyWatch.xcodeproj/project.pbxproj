@@ -323,7 +323,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.rika.ConvoyWatch.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevingodfrey.ConvoyWatch.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -360,7 +360,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.rika.ConvoyWatch.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevingodfrey.ConvoyWatch.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -381,11 +381,11 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ZC8GP86N5T;
+				DEVELOPMENT_TEAM = 7XVL7L68YT;
 				INFOPLIST_KEY_CFBundleDisplayName = ConvoyWatch;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.rika.ConvoyWatch;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevingodfrey.ConvoyWatch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -399,11 +399,11 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ZC8GP86N5T;
+				DEVELOPMENT_TEAM = 7XVL7L68YT;
 				INFOPLIST_KEY_CFBundleDisplayName = ConvoyWatch;
 				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.rika.ConvoyWatch;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevingodfrey.ConvoyWatch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

@@ -15,6 +15,7 @@ struct ConvoyWatch_Watch_AppApp: App {
         WindowGroup {
             ContentView()
                 .onAppear {
+                    WatchConnectivityManager.shared.activateSession()
                     locationManager.startLiveLocationUpdates()
                 }
         }
