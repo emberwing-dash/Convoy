@@ -194,6 +194,24 @@ final class AppState {
 
         (savedRoutes, savedPlaces) = Self.savedItems(from: StorageService.shared.loadSavedRoutes())
 
+        // Configure watch connectivity auth provider callback
+        PhoneWatchConnectivityManager.shared.currentAuthSessionProvider = { [weak self] in
+            guard let self = self else { return nil }
+            let uid = self.backendUserId?.uuidString
+                ?? UserDefaults.standard.string(forKey: "backendUserId")
+                ?? SupabaseManager.shared.currentUserId?.uuidString
+                ?? (self.handle.isEmpty ? "anon-rider" : "anon-\(self.handle)")
+            return (
+                userId: uid,
+                displayName: self.displayName.isEmpty ? "Rider" : self.displayName,
+                handle: self.handle.isEmpty ? "rider" : self.handle,
+                avatarBase64: self.avatarImageData?.base64EncodedString()
+            )
+        }
+
+        // Sync signed-in user identity to Apple Watch
+        self.syncUserToWatch()
+
         if ProcessInfo.processInfo.arguments.contains("-initialTabDiscover") ||
            ProcessInfo.processInfo.arguments.contains("-pushRoute") {
             self.phase = .main
@@ -531,6 +549,17 @@ final class AppState {
         self.avatarImageData = imageData
         self.phase = .main
         StorageService.shared.saveOnboardingCompleted(name: displayName, handle: handle, imageData: imageData)
+        syncUserToWatch()
+    }
+    
+    func syncUserToWatch() {
+        let avatarBase64 = avatarImageData?.base64EncodedString()
+        PhoneWatchConnectivityManager.shared.sendUserAuthSync(
+            displayName: displayName,
+            handle: handle,
+            userId: backendUserId?.uuidString ?? "",
+            avatarBase64: avatarBase64
+        )
     }
 
     func signOut() async {
