@@ -2,14 +2,32 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Location resolution option (used by begin_ride_planning / set_ride_start)
+
+struct LocationOption: Codable, Equatable, Hashable {
+    let name: String
+    let address: String
+    let lat: Double
+    let lon: Double
+    var coord: Coord { Coord(lat: lat, lon: lon) }
+}
+
+// MARK: - Draft
+
 struct RidePlanDraft: Equatable, Codable {
     var destination: String? = nil
+    var destinationCoord: Coord? = nil
     var startLocation: String? = nil
+    var startCoord: Coord? = nil
     var startIsCurrentLocation: Bool = false
     var checkpoints: [String] = []
     var scheduledAt: Date? = nil
     var crewName: String? = nil
     var friendUsernames: [String] = []
+
+    /// Places awaiting the user's choice (returned by begin_ride_planning / set_ride_start).
+    var pendingDestinationChoices: [LocationOption] = []
+    var pendingStartChoices: [LocationOption] = []
 
     var missingFields: [String] {
         var m: [String] = []
@@ -29,7 +47,6 @@ struct ChatMessage: Identifiable, Hashable, Codable {
     var text: String
     var pendingConfirmation: PendingConfirmation? = nil
 
-    // ✅ Explicit init with default UUID
     init(id: UUID = UUID(), kind: Kind, text: String, pendingConfirmation: PendingConfirmation? = nil) {
         self.id = id
         self.kind = kind
@@ -42,18 +59,18 @@ struct PendingConfirmation: Identifiable, Hashable, Codable {
     let id: UUID
     let toolCallId: String
     let toolName: String
-    let argsData: Data // Store as Data for Codable
+    let argsData: Data
     let displayTitle: String
     let displayDetail: String
     let isNavigating: Bool
     let buttonLabel: String
-    
+
     var rawArgs: [String: Any] {
         (try? JSONSerialization.jsonObject(with: argsData)) as? [String: Any] ?? [:]
     }
-    
-    // ✅ Explicit init with default UUID
-    init(id: UUID = UUID(), toolCallId: String, toolName: String, argsData: Data, displayTitle: String, displayDetail: String, isNavigating: Bool, buttonLabel: String) {
+
+    init(id: UUID = UUID(), toolCallId: String, toolName: String, argsData: Data,
+         displayTitle: String, displayDetail: String, isNavigating: Bool, buttonLabel: String) {
         self.id = id
         self.toolCallId = toolCallId
         self.toolName = toolName
@@ -63,7 +80,7 @@ struct PendingConfirmation: Identifiable, Hashable, Codable {
         self.isNavigating = isNavigating
         self.buttonLabel = buttonLabel
     }
-    
+
     static func == (l: PendingConfirmation, r: PendingConfirmation) -> Bool { l.id == r.id }
     func hash(into h: inout Hasher) { h.combine(id) }
 }
@@ -85,7 +102,7 @@ final class ChatbotEngine {
     // MARK: - Private
     private var apiMessages: [[String: Any]] = []
     private let dailyLimit = 9999
-    
+
     private let endpoint = URL(string: "https://avykoruhcgwpmvmddlta.supabase.co/functions/v1/groq-proxy")!
     private let supabaseKey = "sb_publishable_4cTQxSHnQbUtxLE_n2Rz7A_YDCuQ5-0"
     private var toolFailureRetries = 0
@@ -94,8 +111,7 @@ final class ChatbotEngine {
 
     private static let countKey = "chat.promptsToday"
     private static let dateKey  = "chat.promptsDate"
-    
-    // ✅ Memory Keys
+
     private let messagesKey = "chat.messages.v2"
     private let apiMessagesKey = "chat.apiMessages.v2"
     private let timestampKey = "chat.timestamp.v2"
@@ -110,22 +126,19 @@ final class ChatbotEngine {
 
     private func loadState() {
         let lastDate = UserDefaults.standard.object(forKey: timestampKey) as? Date ?? .distantPast
-        // Expire after 48 hours
         if Date().timeIntervalSince(lastDate) > 48 * 60 * 60 {
             clearState()
             return
         }
-        
+
         if let data = UserDefaults.standard.data(forKey: messagesKey),
            let decoded = try? JSONDecoder().decode([ChatMessage].self, from: data) {
             messages = decoded
         }
-        
         if let data = UserDefaults.standard.data(forKey: apiMessagesKey),
            let decoded = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
             apiMessages = decoded
         }
-        
         if let data = UserDefaults.standard.data(forKey: rideDraftKey),
            let decoded = try? JSONDecoder().decode(RidePlanDraft.self, from: data) {
             rideDraft = decoded
@@ -181,10 +194,9 @@ final class ChatbotEngine {
     func confirmPending(app: AppState) async {
         guard let pending = pendingConfirmation else { return }
         guard !isExecutingTool else { return }
-        
+
         isExecutingTool = true
         defer { isExecutingTool = false }
-        
         pendingConfirmation = nil
 
         if let idx = messages.lastIndex(where: { $0.pendingConfirmation?.id == pending.id }) {
@@ -197,16 +209,12 @@ final class ChatbotEngine {
         let result = await ChatTools.execute(
             name: pending.toolName, args: pending.rawArgs,
             app: app, engine: self)
-            
+
         if result.contains("\"error\"") {
             print("⚠️ [Chatbot] Tool '\(pending.toolName)' failed. Result: \(result)")
         }
-        
-        apiMessages.append([
-            "role": "tool",
-            "tool_call_id": pending.toolCallId,
-            "content": result
-        ])
+
+        apiMessages.append(["role": "tool", "tool_call_id": pending.toolCallId, "content": result])
         isThinking = false
         thinkingStatus = nil
 
@@ -237,11 +245,7 @@ final class ChatbotEngine {
 
     private func runLoop(app: AppState) async {
         isThinking = true
-        defer {
-            isThinking = false
-            thinkingStatus = nil
-            saveState()
-        }
+        defer { isThinking = false; thinkingStatus = nil; saveState() }
 
         let sysPrompt: [String: Any] = ["role": "system", "content": buildSystemPrompt(app: app)]
         if apiMessages.first?["role"] as? String == "system" {
@@ -289,16 +293,11 @@ final class ChatbotEngine {
                         }
 
                         thinkingStatus = ChatTools.statusLabel(name)
-                        let result = await ChatTools.execute(
-                            name: name, args: parsed, app: app, engine: self)
-                        
+                        let result = await ChatTools.execute(name: name, args: parsed, app: app, engine: self)
                         if result.contains("\"error\"") {
                             print("⚠️ [Chatbot] Tool '\(name)' failed. Result: \(result)")
                         }
-                        
-                        apiMessages.append([
-                            "role": "tool", "tool_call_id": id, "content": result
-                        ])
+                        apiMessages.append(["role": "tool", "tool_call_id": id, "content": result])
                     }
                     continue
                 }
@@ -317,15 +316,14 @@ final class ChatbotEngine {
                     ])
                     continue
                 }
-                if isRateLimitError(error), rateLimitRetries == 0 {
+                if isRateLimitError(error), rateLimitRetries < 2 {
+                    // groq-proxy rotates GROQ_API_KEY_1 ↔ GROQ_API_KEY_2 server-side; we only
+                    // see a 429 when both keys are exhausted. Short retry first, then a longer one.
                     rateLimitRetries += 1
-                    thinkingStatus = "Rate limited. Waiting 20s…"
-                    do {
-                        try await Task.sleep(for: .seconds(21))
-                    } catch {
-                        errorMessage = "Cancelled."
-                        return
-                    }
+                    let wait: Double = rateLimitRetries == 1 ? 6 : 20
+                    thinkingStatus = "Busy — retrying in \(Int(wait))s…"
+                    do { try await Task.sleep(for: .seconds(wait)) }
+                    catch { errorMessage = "Cancelled."; return }
                     continue
                 }
                 errorMessage = error.localizedDescription
@@ -379,14 +377,12 @@ final class ChatbotEngine {
         let (data, response) = try await URLSession.shared.data(for: req)
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
             let bodyStr = String(data: data, encoding: .utf8) ?? ""
-            let snippet = bodyStr.prefix(280)
             throw NSError(domain: "Chat", code: http.statusCode,
-                          userInfo: [NSLocalizedDescriptionKey: "Server \(http.statusCode): \(snippet)"])
+                          userInfo: [NSLocalizedDescriptionKey: "Server \(http.statusCode): \(bodyStr.prefix(280))"])
         }
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw NSError(domain: "Chat", code: 500,
-                          userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
+            throw NSError(domain: "Chat", code: 500, userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
         }
         return json
     }
@@ -398,34 +394,38 @@ final class ChatbotEngine {
 
         let crews = app.crews.map(\.name).joined(separator: ", ")
         let friends = app.friends.map { "\($0.display_name) (@\($0.username))" }.joined(separator: ", ")
-        
+
         var draftStatus = "No active ride plan."
         if rideDraft.isActive {
             draftStatus = """
             ACTIVE RIDE PLAN:
             - Destination: \(rideDraft.destination ?? "Not set")
+            - Destination coord: \(rideDraft.destinationCoord.map { "\($0.lat), \($0.lon)" } ?? "Not resolved")
             - Start: \(rideDraft.startLocation ?? "Not set")
-            - Time: \(rideDraft.scheduledAt != nil ? "\(rideDraft.scheduledAt!)" : "Not set")
+            - Start coord: \(rideDraft.startCoord.map { "\($0.lat), \($0.lon)" } ?? "Not resolved")
+            - Time: \(rideDraft.scheduledAt.map { "\($0)" } ?? "Not set")
             - Companions: \(rideDraft.crewName ?? "") \(rideDraft.friendUsernames.joined(separator: ", "))
             - Checkpoints: \(rideDraft.checkpoints.joined(separator: ", "))
             - Missing Fields: \(rideDraft.missingFields.joined(separator: ", "))
+            - Pending destination choices: \(rideDraft.pendingDestinationChoices.count)
+            - Pending start choices: \(rideDraft.pendingStartChoices.count)
             """
         }
-        
+
         let toolList = ChatTools.allToolNames.joined(separator: ", ")
 
         return """
         You are Convoy's ride assistant for a motorcycle group-ride app in India.
         TODAY'S DATE IS: \(currentDate)
-        
+
         USER CONTEXT:
         - Crews: \(crews.isEmpty ? "None" : crews)
         - Friends: \(friends.isEmpty ? "None" : friends)
-        
+
         \(draftStatus)
-        
+
         TOOLS: \(toolList)
-        
+
         MULTI-ACTION PROMPTS:
         If the user says "Create a crew and invite X", you must:
         1. Call create_crew.
@@ -433,17 +433,46 @@ final class ChatbotEngine {
 
         RIDE PLANNING FLOW (follow exactly):
         1. Call begin_ride_planning(destination: <extract from message>)
+           Response cases:
+           - "started": destination resolved uniquely. Continue to step 2.
+           - "needs_choice": multiple places matched. Read the "options" array, then ask the user which one by number (1-based). When they reply with a number, call select_location(kind: "destination", index: N).
+           - "no_results": nothing matched. Ask the user to be more specific (include city/state).
         2. Ask ONE question at a time based on "Missing Fields".
-           - If missing "start": Ask where to start. Suggest current location.
-           - If missing "time": Ask when. (Calculate ISO8601 based on TODAY'S DATE).
-           - Ask about checkpoints if they want them. Use suggest_checkpoints.
-        3. Once start and destination are known, call fetch_routes to calculate options. Ask the user to pick one (Fastest, Scenic, etc.).
-        4. Call finalize_ride_plan(route_style: "ChosenStyle") when all details are set.
-        
+           - Missing "start":
+             * Ask where the ride starts; suggest "current location".
+             * Call set_ride_start(location: "...", use_current_location: false) OR set_ride_start(location: "Current Location", use_current_location: true).
+             * If set_ride_start returns "needs_choice", ask the user, then call select_location(kind: "start", index: N).
+           - Missing "time":
+             * Ask when. Convert to ISO8601 based on TODAY'S DATE (must be in the future).
+             * Call set_ride_time(iso8601: "...").
+           - Checkpoints (optional): use suggest_checkpoints if the user wants them.
+        3. Once start and destination are resolved (both have coords), call fetch_routes.
+           Present only the options returned in the response (Fastest / Scenic / Off-route — as present).
+           Ask the user to pick one.
+        4. When the user picks a style, call finalize_ride_plan(route_style: "ChosenStyle").
+
+        SOCIAL / CREW TOOLS:
+        - find_user(username: "handle") — look up a rider (without @).
+        - send_friend_request(username: "handle") — send a friend request.
+        - create_crew(name: "name") — create a new crew.
+        - join_crew(code: "ABC123") — join an existing crew by code.
+        - invite_to_crew(crew_name: "Name", username: "handle") — invite a rider to a crew you admin.
+        - invite_to_ride(code: "RIDE123", username: "handle") — invite a rider to a ride you organise.
+
+        COMMUNITY / FEED:
+        - post_to_crew_feed(code: "RIDE123", caption: "...", max_riders: 6) — post an open ride you organise to the Crew feed.
+
+        READ-ONLY INFO (no confirmation needed):
+        - list_my_rides — the user's upcoming rides (title, code, when, distance).
+        - list_my_crews — the user's crews (name, code, member count).
+        - list_my_friends — the user's friends (name, @handle).
+        - get_ride_details(code: "RIDE123" | omit code for next ride) — full details of one ride.
+
         STYLE:
         - 1-2 short sentences.
         - ONE question per message.
         - Plain text only.
+        - When listing options, show them as a numbered list.
         """
     }
 

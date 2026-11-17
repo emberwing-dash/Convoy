@@ -1,6 +1,6 @@
 // RallyCoordinator.swift
 // Group positioning: finds the rider at the centre of the convoy, draws an invisible
-// 500 m-radius circle (1 km across) around them, and nudges any rider who leaves it —
+// 15 m-radius circle around them, and nudges any rider who leaves it —
 // "slow down" when ahead, "catch up" when behind.
 //
 // It only *reads* positions: this device's GPS from `LocationService` and other riders
@@ -11,6 +11,9 @@
 // decides whether *they* are outside and alerts them (banner in the app, system notification
 // when the app is in the background). No extra GPS work is done: it reuses the location
 // stream navigation already has, and recomputes every few seconds.
+//
+// ⚠️  THE CONFIG BLOCK BELOW IS TUNED FOR 2–3 iPHONE TESTING (15 m radius).
+//     Restore the production values documented inline before shipping.
 import Foundation
 import CoreLocation
 import SwiftUI
@@ -110,7 +113,7 @@ enum PackGeometry {
     ///    With an even count the midpoint lies halfway between the two middle riders.
     /// 3. A rider further than `radius` (haversine) from the midpoint is outside — ahead when
     ///    they are further along than the centre, behind otherwise.
-    nonisolated static func analyze(_ fixes: [PackFix], radius: Double = 500,
+    nonisolated static func analyze(_ fixes: [PackFix], radius: Double = 15,
                                     route: [Coord] = [], cumulative: [Double] = [],
                                     destination: Coord? = nil,
                                     offRouteLimit: Double = 300) -> PackResult? {
@@ -169,25 +172,50 @@ final class RallyCoordinator {
     private init() {}
 
     // MARK: Configuration
+    //
+    // ─────────────────────────────────────────────────────────────────────────────
+    // TESTING VALUES (2–3 iPhones, close quarters).
+    // Restore the following production values before release:
+    //
+    //   radiusMeters       = 500
+    //   reentryMarginMeters = 60
+    //   sustainSeconds     = 15
+    //   rearmSeconds       = 20
+    //   repeatCooldown     = 300
+    //   minimumGap         = 60
+    //   tickInterval       = 5
+    //   staleAfter         = 45
+    //   maxAccuracyMeters  = 80
+    // ─────────────────────────────────────────────────────────────────────────────
 
-    /// Radius of the invisible circle around the centre rider (500 m ⇒ 1 km across).
-    var radiusMeters: Double = 500
+    /// Radius of the invisible circle around the centre rider.
+    /// TESTING: 15 m. PRODUCTION: 500 m (≈1 km circle across).
+    var radiusMeters: Double = 15
     /// Must be back inside by this much before a new exit counts — stops flicker at the edge.
-    var reentryMarginMeters: Double = 60
+    /// MUST stay strictly less than radiusMeters or re-entry can never re-arm.
+    /// TESTING: 3 m. PRODUCTION: 60 m.
+    var reentryMarginMeters: Double = 3
     /// Seconds a rider must stay outside before the first alert (rides out GPS spikes).
-    var sustainSeconds: TimeInterval = 15
+    /// TESTING: 3 s. PRODUCTION: 15 s.
+    var sustainSeconds: TimeInterval = 3
     /// Seconds a rider must be back inside before a later exit can alert again.
-    var rearmSeconds: TimeInterval = 20
+    /// TESTING: 5 s. PRODUCTION: 20 s.
+    var rearmSeconds: TimeInterval = 5
     /// While a rider stays outside, repeat the reminder at most this often.
-    var repeatCooldown: TimeInterval = 300
+    /// TESTING: 45 s. PRODUCTION: 300 s.
+    var repeatCooldown: TimeInterval = 45
     /// Never alert the same rider more often than this, even after re-entering.
-    var minimumGap: TimeInterval = 60
-    /// Recompute interval. Positions arrive every ~1.5 s; 5 s keeps CPU and battery low.
-    var tickInterval: TimeInterval = 5
+    /// TESTING: 10 s. PRODUCTION: 60 s.
+    var minimumGap: TimeInterval = 10
+    /// Recompute interval. Positions arrive every ~1.5 s; 2 s keeps the test responsive.
+    /// TESTING: 2 s. PRODUCTION: 5 s.
+    var tickInterval: TimeInterval = 2
     /// Ignore other riders whose last position is older than this.
-    var staleAfter: TimeInterval = 45
+    /// TESTING: 20 s. PRODUCTION: 45 s.
+    var staleAfter: TimeInterval = 20
     /// Ignore our own fix when GPS accuracy is worse than this.
-    var maxAccuracyMeters: Double = 80
+    /// TESTING: 100 m (relaxed). PRODUCTION: 80 m.
+    var maxAccuracyMeters: Double = 100
 
     // MARK: Published state
 
