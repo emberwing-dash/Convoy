@@ -5,7 +5,6 @@ import SwiftUI
 struct ConvoyTabBar: View {
     @Binding var selection: AppTab
     @Environment(AppState.self) private var app
-    @Namespace private var lensNamespace
     @State private var animatedTab: AppTab = .ride
 
     /// Unified height for the tab bar pill and the Ellis mascot container
@@ -26,7 +25,7 @@ struct ConvoyTabBar: View {
         }
         .onChange(of: selection) { _, newTab in
             if animatedTab != newTab {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.76, blendDuration: 0.08)) {
+                withAnimation(.smooth(duration: 0.3)) {
                     animatedTab = newTab
                 }
             }
@@ -35,11 +34,27 @@ struct ConvoyTabBar: View {
 
     // MARK: - Liquid Glass Tab Pill
 
+    private static let tabs: [AppTab] = [.ride, .discover, .crew]
+    private static let spacing: CGFloat = 2
+
     private var tabPill: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: Self.spacing) {
             tabButton(.ride,     "Ride",     "motorcycle")
             tabButton(.discover, "Discover", "map")
             tabButton(.crew,     "Crew",     "person.3")
+        }
+        // One glass lens that slides under the selected tab. (Two matched lenses cross-faded,
+        // which read as one stretched pill mid-move, and the spring overshot before settling.)
+        .background(alignment: .leading) {
+            GeometryReader { g in
+                let w = (g.size.width - Self.spacing * CGFloat(Self.tabs.count - 1)) / CGFloat(Self.tabs.count)
+                let i = CGFloat(Self.tabs.firstIndex(of: animatedTab) ?? 0)
+                LiquidGlassLens()
+                    .frame(width: w, height: 46)
+                    .frame(maxHeight: .infinity)
+                    .offset(x: i * (w + Self.spacing))
+            }
+            .allowsHitTesting(false)
         }
         .padding(4)
         .frame(maxWidth: 296)
@@ -51,7 +66,6 @@ struct ConvoyTabBar: View {
 
     private func tabButton(_ tab: AppTab, _ title: String, _ symbol: String) -> some View {
         let isSelected = selection == tab
-        let isLensHere = animatedTab == tab
 
         return Button {
             guard selection != tab else { return }
@@ -63,16 +77,11 @@ struct ConvoyTabBar: View {
                 selection = tab
             }
             // Smooth fluid animation for the liquid glass lens
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.76, blendDuration: 0.08)) {
+            withAnimation(.smooth(duration: 0.3)) {
                 animatedTab = tab
             }
         } label: {
             ZStack {
-                if isLensHere {
-                    LiquidGlassLens()
-                        .matchedGeometryEffect(id: "liquidGlassLens", in: lensNamespace)
-                }
-
                 VStack(spacing: 2) {
                     Image(systemName: isSelected ? symbol + ".fill" : symbol)
                         .font(.system(size: 18, weight: isSelected ? .semibold : .regular))

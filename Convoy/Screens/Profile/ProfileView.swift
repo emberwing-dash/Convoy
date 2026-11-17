@@ -279,13 +279,15 @@ struct ProfileView: View {
                             .buttonStyle(PressScale())
                         }
                     }
-                    .padding(.horizontal, 2)
+                    .padding(.horizontal, 16).padding(.vertical, 14)
                 }
-                .scrollClipDisabled()
+                // Scroll edge-to-edge inside the card but stay clipped to it.
+                .padding(.horizontal, -16).padding(.vertical, -14)
             }
         }
         .padding(16)
         .pxCard(radius: 24)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     // MARK: - Garage

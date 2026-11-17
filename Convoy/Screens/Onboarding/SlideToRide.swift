@@ -13,18 +13,22 @@ struct SlideToRide: View {
         GeometryReader { geo in
             let travel = geo.size.width - knob - pad * 2
             ZStack(alignment: .leading) {
+                // Dark text once the track turns white, so "Let's roll" stays readable;
+                // the hint fades as the knob is dragged over it.
                 Text(slid ? "Let's roll" : "Slide to get rolling")
-                    .cvText(17, .medium, tracking: -0.17, lineHeight: 22)
+                    .cvText(17, .medium, color: slid ? CV.onAccent : CV.text, tracking: -0.17, lineHeight: 22)
+                    .opacity(slid ? 1 : max(0.25, 1 - offset / max(travel, 1) * 1.2))
                     .frame(maxWidth: .infinity)
                     .padding(.leading, slid ? 0 : knob)
                     .padding(.trailing, slid ? knob : 0)
 
                 Circle()
-                    .fill(CV.accent)
+                    .fill(slid ? CV.onAccent : CV.accent)
                     .frame(width: knob, height: knob)
-                    .overlay(Image(systemName: "arrow.right")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(CV.onAccent))
+                    .overlay(Image(systemName: slid ? "checkmark" : "arrow.right")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(slid ? CV.accent : CV.onAccent)
+                        .contentTransition(.symbolEffect(.replace)))
                     .offset(x: pad + (slid ? travel : offset))
                     .gesture(
                         DragGesture()

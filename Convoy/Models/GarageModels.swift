@@ -948,43 +948,49 @@ final class GarageStore {
 
     // MARK: Persistence
 
+    /// Whose garage this is. Each account keeps its own bikes, gear, papers and costs on the
+    /// phone; a new account starts with an empty garage and adds everything itself.
+    private var owner: String? = UserDefaults.standard.string(forKey: "backendUserId")
+
+    private func scoped(_ key: String) -> String { "\(key)_\(owner ?? "signed_out")" }
+
+    /// Called when the signed-in account changes (sign in, sign out, account switch).
+    func setOwner(_ id: UUID?) {
+        let next = id?.uuidString
+        guard next != owner else { return }
+        owner = next
+        load()
+    }
+
     func load() {
+        migrateLegacyIfNeeded()
         bikes        = decode([GarageBike].self,      key: bikesKey)       ?? []
         gearItems    = decode([GearItem].self,        key: gearKey)        ?? []
         documents    = decode([BikeDocument].self,    key: docsKey)        ?? []
         services     = decode([ServiceEntry].self,    key: servicesKey)    ?? []
         accessories  = decode([AccessoryItem].self,   key: accessoriesKey) ?? []
         costs        = decode([CostEntry].self,       key: costsKey)       ?? []
+        // The garage starts empty; riders add their own bikes and gear.
+    }
 
-                // Garage starts empty
-        // if empty, user adds bikes from the catalog
-
-        if gearItems.isEmpty {
-            gearItems = [
-                GearItem(
-                    type: .helmet,
-                    name: "Shoei X-Fifteen",
-                    brand: "Shoei",
-                    size: "L",
-                    condition: .new,
-                    cost: 65000,
-                    quantity: 1,
-                    hasWarranty: true,
-                    warrantyExpiry: Calendar.current.date(byAdding: .year, value: 5, to: Date())
-                ),
-                GearItem(
-                    type: .jacket,
-                    name: "Alpinestars Missile V2",
-                    brand: "Alpinestars",
-                    size: "XL",
-                    condition: .likeNew,
-                    cost: 38000,
-                    quantity: 1,
-                    hasWarranty: true,
-                    warrantyExpiry: Calendar.current.date(byAdding: .year, value: 2, to: Date())
-                )
-            ]
-            save()
+    /// Older builds kept one garage per phone. Hand it to the first account that signs in
+    /// (once), minus the two sample gear items those builds added for everyone.
+    private func migrateLegacyIfNeeded() {
+        guard owner != nil else { return }
+        let d = UserDefaults.standard
+        let keys = [bikesKey, gearKey, docsKey, servicesKey, accessoriesKey, costsKey]
+        guard keys.contains(where: { d.data(forKey: $0) != nil }) else { return }
+        for key in keys {
+            guard let data = d.data(forKey: key) else { continue }
+            if d.data(forKey: scoped(key)) == nil {
+                var out = data
+                if key == gearKey, let gear = try? JSONDecoder().decode([GearItem].self, from: data) {
+                    let samples: Set<String> = ["Shoei X-Fifteen", "Alpinestars Missile V2"]
+                    out = (try? JSONEncoder().encode(gear.filter { !samples.contains($0.name) })) ?? data
+                }
+                d.set(out, forKey: scoped(key))
+            }
+            d.removeObject(forKey: key)
         }
     }
 
@@ -998,13 +1004,13 @@ final class GarageStore {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, key: String) -> T? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        guard let data = UserDefaults.standard.data(forKey: scoped(key)) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }
 
     private func encode<T: Encodable>(_ value: T, key: String) {
         guard let data = try? JSONEncoder().encode(value) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        UserDefaults.standard.set(data, forKey: scoped(key))
     }
 
     // MARK: - CRUD

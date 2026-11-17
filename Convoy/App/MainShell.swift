@@ -7,12 +7,14 @@ struct MainShell: View {
     var body: some View {
         @Bindable var app = app
         NavigationStack(path: $app.path) {
-            // TabView switches the screens (each keeps its state); the system bar is hidden and
-            // our Liquid Glass bar sits on top so Ellis can live beside it at the same height.
-            TabView(selection: $app.tab) {
-                HomeView().tag(AppTab.ride).toolbar(.hidden, for: .tabBar)
-                DiscoverView().tag(AppTab.discover).toolbar(.hidden, for: .tabBar)
-                CrewView().tag(AppTab.crew).toolbar(.hidden, for: .tabBar)
+            // All three tabs are built once at launch and kept alive (each keeps its state), so the
+            // first switch to Discover or Crew is instant and already laid out — no build on tap,
+            // no first-frame stretch, no stutter in the glass lens. Our Liquid Glass bar sits on top
+            // so Ellis can live beside it at the same height.
+            ZStack {
+                page(.ride) { HomeView() }
+                page(.discover) { DiscoverView() }
+                page(.crew) { CrewView() }
             }
             .overlay(alignment: .bottom) {
                 ConvoyTabBar(selection: $app.tab)
@@ -72,6 +74,18 @@ struct MainShell: View {
                 }
             }
         }
+    }
+}
+
+private extension MainShell {
+    /// One tab's screen: visible and interactive only while selected.
+    func page<V: View>(_ tab: AppTab, @ViewBuilder _ content: () -> V) -> some View {
+        let on = app.tab == tab
+        return content()
+            .opacity(on ? 1 : 0)
+            .allowsHitTesting(on)
+            .accessibilityHidden(!on)
+            .zIndex(on ? 1 : 0)
     }
 }
 

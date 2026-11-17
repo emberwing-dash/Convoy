@@ -113,52 +113,153 @@ final class SupabaseManager {
             return validId
         }
 
-        let cleanUsername = handle
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "@", with: "")
-            .lowercased()
-        let baseUsername = cleanUsername.isEmpty ? "rider" : cleanUsername
-        var candidateUsername = baseUsername
-        if let taken = try? await fetchProfile(username: candidateUsername), taken.id != validId {
-            candidateUsername = "\(baseUsername)_\(validId.uuidString.prefix(4).lowercased())"
-        }
-
-        let profile = ProfileInsert(
-            id: validId,
-            username: candidateUsername,
-            display_name: displayName.isEmpty ? "Rider" : displayName,
-            avatar_data: nil
-        )
+        // No profile yet (e.g. setup finished offline): create it on the server, which picks the
+        // asked handle or the closest free one, and keeps the rider's photo.
+        let avatar = AppStateResolver.shared.current?.avatarImageData
         do {
-            try await client.from("profiles").upsert(profile).execute()
+            _ = try await claimProfile(displayName: displayName, username: handle, avatarData: avatar)
         } catch {
-            print("⚠️ [ensureAuthenticatedUser] Profile upsert failed: \(error). Re-authenticating session...")
-            // Session was stale or unauthorized on server. Force a clean re-auth.
+            // Only a rejected session justifies a new sign-in; anything else is reported as is.
+            guard Self.isAuthError(error) else { throw error }
+            print("⚠️ [ensureAuthenticatedUser] Session rejected while creating profile: \(error). Re-authenticating...")
             _ = try? await client.auth.signOut()
             let freshId = try await signInAnonymously()
-            let retryCandidate = "\(baseUsername)_\(freshId.uuidString.prefix(4).lowercased())"
-            let freshProfile = ProfileInsert(
-                id: freshId,
-                username: retryCandidate,
-                display_name: displayName.isEmpty ? "Rider" : displayName,
-                avatar_data: nil
-            )
-            try await client.from("profiles").upsert(freshProfile).execute()
+            _ = try await claimProfile(displayName: displayName, username: handle, avatarData: avatar)
             return freshId
         }
-
         return validId
+    }
+
+    // MARK: - Handles
+    // profiles.id is the permanent account id; profiles.username is the unique, searchable @handle
+    // (lowercase a–z, 0–9, _; 3–20). The server decides the final handle so two riders never clash.
+
+    /// The same cleaning the server applies: lowercase, a–z 0–9 _, at most 20 characters.
+    nonisolated static func normalizeHandle(_ raw: String) -> String {
+        String(raw.lowercased().unicodeScalars
+            .filter { ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "_" }
+            .map(Character.init).prefix(20))
+    }
+
+    /// Creates or updates the signed-in rider's profile in one server step. Reuses the current
+    /// session (never makes a second account) and returns the user id and the handle actually saved.
+    @discardableResult
+    func claimProfile(displayName: String, username: String, avatarData: Data?) async throws -> (id: UUID, username: String) {
+        let userId: UUID
+        if let existing = await getOrRestoreUserId() { userId = existing } else { userId = try await signInAnonymously() }
+        nonisolated struct P: Encodable, Sendable { let p_display_name: String; let p_username: String; let p_avatar: String? }
+        nonisolated struct R: Decodable, Sendable { let id: UUID; let username: String }
+        let r: R = try await client.rpc("claim_profile", params: P(
+            p_display_name: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+            p_username: Self.normalizeHandle(username),
+            p_avatar: avatarData?.base64EncodedString())).execute().value
+        return (r.id == userId ? userId : r.id, r.username)
+    }
+
+    /// The current session's user id, signing in anonymously only when there is none
+    /// (so the same rider never ends up with two accounts). Nil when offline.
+    func ensureSession() async -> UUID? {
+        if let id = await getOrRestoreUserId() { return id }
+        return try? await signInAnonymously()
+    }
+
+    /// Whether a handle is free (your own current handle counts as free). Nil when it can't be checked.
+    func usernameAvailable(_ username: String) async -> Bool? {
+        nonisolated struct P: Encodable, Sendable { let p_username: String }
+        guard await getOrRestoreUserId() != nil else { return nil }
+        return try? await client.rpc("username_available", params: P(p_username: Self.normalizeHandle(username))).execute().value
+    }
+
+    /// The closest free handle to the one given.
+    func suggestUsername(_ base: String) async -> String? {
+        nonisolated struct P: Encodable, Sendable { let p_base: String }
+        guard await getOrRestoreUserId() != nil else { return nil }
+        return try? await client.rpc("suggest_username", params: P(p_base: Self.normalizeHandle(base))).execute().value
+    }
+
+    // MARK: - Log back in (MVP: @handle + 4-digit PIN)
+
+    enum HandleLoginError: LocalizedError {
+        case notFound, wrongPin(triesLeft: Int), locked, badPin, server
+        var errorDescription: String? {
+            switch self {
+            case .notFound: return "No rider with that @handle. Check the spelling."
+            case .wrongPin(let left):
+                return left > 0 ? "Wrong PIN. \(left) \(left == 1 ? "try" : "tries") left." : "Wrong PIN. Try again in 15 minutes."
+            case .locked: return "Too many wrong PINs. Try again in 15 minutes."
+            case .badPin: return "Enter your 4-digit PIN."
+            case .server: return "Couldn't log in right now. Check your connection and try again."
+            }
+        }
+    }
+
+    /// Signs this phone into an existing account. The `handle-login` function checks the handle and
+    /// PIN (the first login to an account sets its PIN) and hands back one-time sign-in details.
+    /// Returns the account's user id and whether this login created the PIN.
+    func loginWithHandle(_ handle: String, pin: String) async throws -> (id: UUID, pinCreated: Bool) {
+        nonisolated struct Req: Encodable, Sendable { let username: String; let pin: String }
+        nonisolated struct Res: Decodable, Sendable {
+            let status: String
+            let email: String?
+            let password: String?
+            let tries_left: Int?
+            let pin_created: Bool?
+        }
+        let res: Res
+        do {
+            res = try await client.functions.invoke(
+                "handle-login",
+                options: FunctionInvokeOptions(body: Req(username: Self.normalizeHandle(handle), pin: pin)))
+        } catch {
+            throw HandleLoginError.server
+        }
+        switch res.status {
+        case "ok": break
+        case "not_found": throw HandleLoginError.notFound
+        case "wrong_pin": throw HandleLoginError.wrongPin(triesLeft: res.tries_left ?? 0)
+        case "locked": throw HandleLoginError.locked
+        case "bad_pin_format": throw HandleLoginError.badPin
+        default: throw HandleLoginError.server
+        }
+        guard let email = res.email, let password = res.password else { throw HandleLoginError.server }
+        // Drop any temporary session this phone made (e.g. while checking handles) before switching.
+        _ = try? await client.auth.signOut()
+        let session = try await client.auth.signIn(email: email, password: password)
+        return (session.user.id, res.pin_created ?? false)
+    }
+
+    nonisolated static func isAuthError(_ error: Error) -> Bool {
+        let t = String(describing: error)
+        return t.contains("JWT") || t.contains("PGRST301") || t.contains("42501") || t.contains("401") || t.contains("unauthenticated")
     }
 
     func searchProfiles(query: String, limit: Int = 10) async throws -> [ProfileRow] {
         let clean = query.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "").lowercased()
         guard !clean.isEmpty else { return [] }
+        // Riders are found by their unique @handle or by name; handle matches come first,
+        // and every result shows its @handle so two riders with the same name are told apart.
+        let handleQ = Self.normalizeHandle(clean)
+        let nameQ = String(clean.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == " " }
+            .map(Character.init)).trimmingCharacters(in: .whitespaces)
         do {
-            let matches: [ProfileRow] = try await client.from("profiles")
-                .select().ilike("username", pattern: "%\(clean)%")
-                .limit(limit).execute().value
-            if !matches.isEmpty { return matches }
+            var filters: [String] = []
+            if !handleQ.isEmpty { filters.append("username.ilike.*\(handleQ)*") }
+            if !nameQ.isEmpty { filters.append("display_name.ilike.\"*\(nameQ)*\"") }
+            if !filters.isEmpty {
+                let matches: [ProfileRow] = try await client.from("profiles")
+                    .select().or(filters.joined(separator: ","))
+                    .limit(limit * 2).execute().value
+                if !matches.isEmpty {
+                    func rank(_ p: ProfileRow) -> Int {
+                        if p.username == handleQ { return 0 }
+                        if p.username.hasPrefix(handleQ) { return 1 }
+                        if p.username.contains(handleQ) { return 2 }
+                        return 3
+                    }
+                    return Array(matches.sorted { (rank($0), $0.username) < (rank($1), $1.username) }.prefix(limit))
+                }
+            }
         } catch { }
         if let exact = try await fetchProfile(username: clean) { return [exact] }
         return []

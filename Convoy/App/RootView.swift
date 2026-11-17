@@ -30,6 +30,9 @@ struct RootView: View {
             }
         }
         .onAppear {
+            // Read the weather while the opening animation plays, so Home has it ready.
+            if app.phase == .main { WeatherService.shared.warmUp() }
+            LandingArtCache.warmUp()
             let isTesting = ProcessInfo.processInfo.arguments.contains("-skipAnimation")
                 || ProcessInfo.processInfo.arguments.contains("-pushRoute")
                 || ProcessInfo.processInfo.arguments.contains("-initialTabDiscover")
@@ -105,6 +108,7 @@ struct RootView: View {
 // MARK: - Onboarding Navigation Flow
 enum OnboardingRoute: Hashable {
     case profile
+    case login
 }
 
 struct OnboardingFlow: View {
@@ -116,32 +120,6 @@ struct OnboardingFlow: View {
     var body: some View {
         NavigationStack(path: $path) {
             WelcomeView(
-                onGoogleSignIn: {
-                    Task {
-                        // Sign in with Google / Supabase
-                        do {
-                            let userId = try await SupabaseManager.shared.signInAnonymously()
-                            await MainActor.run {
-                                app.backendUserId = userId
-                                if let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
-                                    // Returning user restoring profile -> proceed to Home
-                                    app.completeOnboarding(
-                                        name: profile.displayName,
-                                        handle: profile.handle,
-                                        imageData: profile.avatarImageData
-                                    )
-                                } else {
-                                    // New user -> proceed to Name Entry
-                                    path.append(.profile)
-                                }
-                            }
-                        } catch {
-                            await MainActor.run {
-                                path.append(.profile)
-                            }
-                        }
-                    }
-                },
                 onContinueGuest: {
                     if hasExistingProfile, let profile = StorageService.shared.loadUserProfile(), profile.hasCompletedOnboarding {
                         app.completeOnboarding(
@@ -156,8 +134,10 @@ struct OnboardingFlow: View {
             )
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
+                case .login:
+                    LoginView(onBack: pop)
                 case .profile:
-                    ProfileSetupView(onBack: pop) {
+                    ProfileSetupView(onBack: pop, onLogin: { path.append(.login) }) {
                         // After name entry and profile completion:
                         // Complete onboarding and navigate directly to Home.
                         // (NO opening animation replay here).

@@ -185,6 +185,7 @@ final class AppState {
             } else {
                 UserDefaults.standard.removeObject(forKey: "backendUserId")
             }
+            GarageStore.shared.setOwner(backendUserId)
         }
     }
 
@@ -908,6 +909,10 @@ final class AppState {
         try? await SupabaseManager.shared.signOut()
 
         backendUserId = nil
+        // The next person to set up on this phone starts blank: no name, handle or photo carried over.
+        displayName = "Rider"
+        handle = "rider"
+        avatarImageData = nil
         friends = []
         crews = []
         notifications = []

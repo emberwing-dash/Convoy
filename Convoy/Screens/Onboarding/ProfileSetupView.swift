@@ -5,6 +5,8 @@ import PhotosUI
 struct ProfileSetupView: View {
     @Environment(AppState.self) private var app
     var onBack: () -> Void
+    /// "Already have an account?" — opens the log-in screen.
+    var onLogin: (() -> Void)? = nil
     var onContinue: () -> Void
 
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
@@ -18,6 +20,10 @@ struct ProfileSetupView: View {
     @State private var isHandleCustom = false
     @State private var isUpdatingProgrammatically = false
     
+    // Live check that the @handle is free on the server.
+    private enum HandleStatus: Equatable { case idle, checking, available, taken(String?), invalid }
+    @State private var handleStatus: HandleStatus = .idle
+
     // State for submission
     @State private var isSubmitting = false
     @State private var errorMessage: String? = nil
@@ -25,6 +31,7 @@ struct ProfileSetupView: View {
 
     private var canContinue: Bool {
         !app.displayName.trimmingCharacters(in: .whitespaces).isEmpty && !isSubmitting
+            && handleStatus != .invalid   // a busy/offline check never blocks: the server confirms on Continue
     }
 
     private var photoButtonTitle: String {
@@ -141,29 +148,42 @@ struct ProfileSetupView: View {
                             Text("@").cvText(17, tracking: -0.17, lineHeight: 24)
                             Rectangle().fill(CV.glassStroke).frame(width: 1, height: 24)
                             
-                            TextField("handle", text: $app.handle)
+                            // Handles are lowercase a–z, 0–9 and _ (max 20); the "@" is rendered by the
+                            // HStack, not stored. What's typed is never rewritten mid-typing (that drops
+                            // letters); the status line shows the cleaned handle and the field is tidied
+                            // when editing ends. The server applies the same cleaning.
+                            TextField("handle", text: Binding(
+                                get: { app.handle },
+                                set: { newValue in
+                                    app.handle = newValue
+                                    if !isUpdatingProgrammatically { isHandleCustom = true }
+                                }), onEditingChanged: { editing in
+                                    if !editing { tidyHandle() }
+                                })
+                                .onSubmit { tidyHandle() }
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
                                 .cvText(17, tracking: -0.17)
-                                .onChange(of: app.handle) { _, newValue in
-                                    // The "@" prefix is rendered by the HStack, not stored.
-                                    if newValue.hasPrefix("@") {
-                                        app.handle = String(newValue.dropFirst())
-                                        return
-                                    }
-                                    if !isUpdatingProgrammatically {
-                                        isHandleCustom = true
-                                    }
-                                }
                         }
                         .padding(.horizontal, 18).frame(height: 60)
                         .glassRounded(18)
 
-                        if !app.handle.isEmpty {
-                            Text("Nice, @\(app.handle.replacingOccurrences(of: "@", with: "")) is all yours.")
-                                .cvText(13, color: CV.green, lineHeight: 18)
-                                .padding(.leading, 4)
+                        handleStatusLine.padding(.leading, 4)
+                    }
+
+                    if let onLogin {
+                        Button(action: onLogin) {
+                            HStack(spacing: 6) {
+                                Text("Already have an account?").cvText(15, color: CV.muted, inter: true)
+                                Text("Log in").cvText(15, .semibold, color: CV.text, inter: true)
+                                Image(systemName: "arrow.right").font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(CV.text)
+                            }
+                            .frame(maxWidth: .infinity).frame(height: 48)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .padding(.top, 4)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -263,6 +283,8 @@ struct ProfileSetupView: View {
                 updateHandleFromName(app.displayName)
             }
         }
+        // Check the handle on the server a moment after typing stops.
+        .task(id: app.handle) { await checkHandle(app.handle) }
         // ✅ Live update handle as the user types their name
         .onChange(of: app.displayName) { _, newName in
             if !isHandleCustom {
@@ -272,7 +294,7 @@ struct ProfileSetupView: View {
         .alert("Couldn't finish setup", isPresented: $showError) {
             Button("Retry") { handleContinue() }
             Button("Continue offline", role: .cancel) {
-                app.completeOnboarding(name: app.displayName, handle: app.handle, imageData: app.avatarImageData)
+                app.completeOnboarding(name: app.displayName, handle: SupabaseManager.normalizeHandle(app.handle), imageData: app.avatarImageData)
                 onContinue()
             }
         } message: {
@@ -284,9 +306,7 @@ struct ProfileSetupView: View {
     private func updateHandleFromName(_ name: String) {
         isUpdatingProgrammatically = true
         
-        let clean = name.lowercased()
-            .replacingOccurrences(of: " ", with: "")
-            .filter { $0.isLetter || $0.isNumber }
+        let clean = SupabaseManager.normalizeHandle(name.replacingOccurrences(of: "_", with: ""))
         
         let base = clean.isEmpty ? "rider" : String(clean.prefix(12))
         
@@ -302,6 +322,71 @@ struct ProfileSetupView: View {
         }
     }
 
+    private func tidyHandle() {
+        let clean = SupabaseManager.normalizeHandle(app.handle)
+        if clean != app.handle { app.handle = clean }
+    }
+
+    @ViewBuilder private var handleStatusLine: some View {
+        let h = SupabaseManager.normalizeHandle(app.handle)
+        switch handleStatus {
+        case .available:
+            Label("@\(h) is yours", systemImage: "checkmark.circle.fill")
+                .font(.system(size: 13, weight: .medium)).foregroundStyle(CV.green)
+        case .checking:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini).tint(CV.muted)
+                Text("Checking @\(h)…").cvText(13, color: CV.muted, lineHeight: 18)
+            }
+        case .taken(let suggestion):
+            HStack(spacing: 8) {
+                Label("@\(h) is taken", systemImage: "xmark.circle.fill")
+                    .font(.system(size: 13, weight: .medium)).foregroundStyle(CV.warning)
+                if let suggestion {
+                    Button {
+                        isHandleCustom = true
+                        app.handle = suggestion
+                    } label: {
+                        Text("Use @\(suggestion)").cvText(13, .semibold, color: CV.text, inter: true)
+                            .padding(.horizontal, 10).frame(height: 26)
+                            .background(Color.white.opacity(0.1), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        case .invalid:
+            Text("3–20 characters: letters, numbers or _")
+                .cvText(13, color: CV.warning, lineHeight: 18)
+        case .idle:
+            if !h.isEmpty {
+                Text("We'll confirm @\(h) when you continue").cvText(13, color: CV.muted, lineHeight: 18)
+            }
+        }
+    }
+
+    /// Debounced check that the handle is free; suggests the closest free one when it isn't.
+    private func checkHandle(_ raw: String) async {
+        let h = SupabaseManager.normalizeHandle(raw)
+        guard h.count >= 3 else { handleStatus = h.isEmpty ? .idle : .invalid; return }
+        handleStatus = .checking
+        try? await Task.sleep(for: .milliseconds(450))
+        guard !Task.isCancelled else { return }
+        // One session per phone: created here once, reused when the profile is saved.
+        guard await SupabaseManager.shared.ensureSession() != nil,
+              let free = await SupabaseManager.shared.usernameAvailable(h) else {
+            if !Task.isCancelled { handleStatus = .idle }   // offline: confirmed on Continue
+            return
+        }
+        guard !Task.isCancelled else { return }
+        if free {
+            handleStatus = .available
+        } else {
+            let suggestion = await SupabaseManager.shared.suggestUsername(h)
+            guard !Task.isCancelled else { return }
+            handleStatus = .taken(suggestion)
+        }
+    }
+
     private func handleContinue() {
         guard !isSubmitting else { return }
         isSubmitting = true
@@ -309,27 +394,16 @@ struct ProfileSetupView: View {
 
         Task {
             do {
-                // 1. Sign in anonymously
-                let userId = try await SupabaseManager.shared.signInAnonymously()
-
-                // 2. Clean username for Supabase (remove @)
-                let cleanUsername = app.handle
-                    .trimmingCharacters(in: .whitespaces)
-                    .replacingOccurrences(of: "@", with: "")
-                    .lowercased()
-
-                // 3. Save to Supabase
-                try await SupabaseManager.shared.createProfile(
-                    id: userId,
-                    username: cleanUsername,
+                // One server step: reuses this phone's session (or signs in once), then creates the
+                // profile with the asked handle — or the closest free one if someone just took it.
+                let claimed = try await SupabaseManager.shared.claimProfile(
                     displayName: app.displayName,
+                    username: app.handle,
                     avatarData: app.avatarImageData
                 )
-
-                // 4. Advance to InConvoyView
                 await MainActor.run {
-                    app.backendUserId = userId
-                    app.handle = cleanUsername
+                    app.backendUserId = claimed.id
+                    app.handle = claimed.username
                     isSubmitting = false
                     onContinue()
                 }

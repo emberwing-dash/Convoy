@@ -78,13 +78,41 @@ struct LandingArt: View {
     let fallback: BrandedArt.Style
     var body: some View {
         Color.clear.overlay {
-            if let image = assets.lazy.compactMap({ UIImage(named: $0) }).first {
+            if let image = assets.lazy.compactMap({ LandingArtCache.image(named: $0) }).first {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
                 BrandedArt(style: fallback)
             }
         }
         .clipped()
+    }
+}
+
+/// The Discover landing photos are ~1400 px JPEGs; decoding them on the main thread the first time
+/// Discover opens made the tab switch stutter. They're downsized to tile size and decoded once,
+/// off the main thread, at launch.
+nonisolated enum LandingArtCache {
+    static let names = ["dm_kolli", "discover_routes", "dm_munnar", "discover_scenic",
+                        "discover_places", "dm_shore", "discover_surprise", "dm_sonamarg"]
+    nonisolated(unsafe) private static var store: [String: UIImage] = [:]
+    private static let lock = NSLock()
+
+    static func image(named name: String) -> UIImage? {
+        lock.lock(); let hit = store[name]; lock.unlock()
+        return hit ?? UIImage(named: name)
+    }
+
+    /// Decode every landing photo at roughly 2× the tile size in the background.
+    static func warmUp() {
+        Task.detached(priority: .utility) {
+            for name in names {
+                guard let full = UIImage(named: name) else { continue }
+                let scale = min(1, 640 / max(full.size.width, full.size.height))
+                let target = CGSize(width: full.size.width * scale, height: full.size.height * scale)
+                guard let small = await full.byPreparingThumbnail(ofSize: target) else { continue }
+                lock.lock(); store[name] = small; lock.unlock()
+            }
+        }
     }
 }
 

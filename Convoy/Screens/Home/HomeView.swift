@@ -46,8 +46,16 @@ struct HomeView: View {
         .background { TopoBackground(glow: false) }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
-        .task(id: sorted.first?.id) {
+        // Re-read the weather whenever there is something new to read it for: a new next ride,
+        // location just allowed, the first location fix, or a city picked in Discover. (On a fresh
+        // install the first read happens before location is allowed, so it used to stay empty.)
+        .task(id: weatherTrigger) {
             await refreshWeather(force: false)
+        }
+        .onAppear {
+            if LocationService.shared.authorizationStatus == .notDetermined {
+                LocationService.shared.requestPermission()
+            }
         }
         .task {
             await app.refreshRides(force: false)
@@ -64,10 +72,20 @@ struct HomeView: View {
 
     // MARK: Header
 
+    private var weatherTrigger: String {
+        let loc = LocationService.shared
+        return [app.openRides.first?.id.uuidString ?? "-",
+                loc.isAuthorized ? "on" : "off",
+                loc.currentLocation == nil ? "nofix" : "fix",
+                DiscoverStore.shared.origin?.name ?? "-"].joined(separator: "|")
+    }
+
     private func refreshWeather(force: Bool) async {
-        // Prefer where the phone is; otherwise where the next ride starts.
+        // Prefer where the phone is; otherwise where the next ride starts; otherwise the city
+        // chosen in Discover.
         let rides = app.sortedRides
         var fallback = rides.lazy.compactMap { $0.plan.startCoord ?? $0.plan.endCoord }.first?.cl
+            ?? DiscoverStore.shared.origin?.coord.cl
         if fallback == nil, let from = rides.first?.plan.from, !from.isEmpty {
             fallback = await RideCoverService.shared.coordinate(named: from)?.cl
         }
@@ -103,37 +121,17 @@ struct HomeView: View {
 
     private var newUserContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .bottomLeading) {
-                // The photo fills the card but never decides its width: a fill-scaled landscape
-                // image is wider than the screen, which pushed the whole Home tab sideways.
-                Color.clear
-                    .frame(maxWidth: .infinity).frame(height: 400)
-                    .overlay {
-                        Image("no_upcomming_rides").resizable().scaledToFill()
-                    }
-                    .clipped()
-                    .allowsHitTesting(false)
-                LinearGradient(stops: [
-                    .init(color: .black.opacity(0.25), location: 0),
-                    .init(color: .clear, location: 0.3),
-                    .init(color: .black.opacity(0.5), location: 0.62),
-                    .init(color: .black.opacity(0.92), location: 1)
-                ], startPoint: .top, endPoint: .bottom)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Ride together.").cvText(36, .bold, color: .white, tracking: -1, inter: true)
-                    Text("Plan it. Bring the crew. Roll out.")
-                        .cvText(16, .medium, color: .white.opacity(0.72), inter: true)
-                }
-                .padding(22)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 400)
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 32, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-            .shadow(color: .black.opacity(0.35), radius: 24, y: 14)
-            .padding(.top, 26)
+            sectionTitle("Up next").padding(.top, 26)
+            EmptyNextRideCard { app.startNewPlan(); app.push(.planWho) }
+                .padding(.top, 12)
 
-            HowItWorks().padding(.top, 20)
+            MonthSummaryCard(logs: RideRecorder.shared.logs.filter { $0.rejectedReason == nil }) {
+                app.crewSection = .leaderboard
+                app.tab = .crew
+            }
+            .padding(.top, 34)
+
+            LevelTeaserCard().padding(.top, 20)
 
             RideQuoteCard().padding(.top, 36)
         }
@@ -293,38 +291,6 @@ private struct HeaderControls: View {
         .padding(4)
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
-    }
-}
-
-// MARK: - How it works (first run)
-
-private struct HowItWorks: View {
-    private let steps: [(String, String)] = [
-        ("map.fill", "Plan"),
-        ("person.2.fill", "Invite"),
-        ("motorcycle", "Ride"),
-    ]
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(steps.enumerated()), id: \.offset) { i, step in
-                VStack(spacing: 8) {
-                    IconBadge(symbol: step.0, color: [Hue.periwinkle, Hue.lavender, Hue.ember][i % 3], size: 50)
-                    Text(step.1).cvText(13, .semibold, color: CV.text, inter: true)
-                }
-                .frame(maxWidth: .infinity)
-                if i < steps.count - 1 {
-                    Capsule()
-                        .fill(LinearGradient(colors: [CV.accent.opacity(0.6), CV.accent.opacity(0.15)],
-                                             startPoint: .leading, endPoint: .trailing))
-                        .frame(width: 28, height: 2)
-                        .offset(y: -12)
-                }
-            }
-        }
-        .padding(.vertical, 18).padding(.horizontal, 8)
-        .background(CV.surface.opacity(0.9), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(CV.stroke, lineWidth: 1))
     }
 }
 

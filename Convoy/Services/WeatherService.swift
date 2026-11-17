@@ -3,7 +3,7 @@
 import Foundation
 import CoreLocation
 
-struct LiveWeather: Equatable {
+struct LiveWeather: Equatable, Codable {
     let temperature: Double
     let code: Int
     let isDay: Bool
@@ -94,6 +94,30 @@ final class WeatherService {
     private var lastFetch: Date?
     private var lastCoord: CLLocationCoordinate2D?
     private let manager = CLLocationManager()
+    private var inFlight: Task<Void, Never>?
+
+    private static let cacheKey = "weather_cache_v1"
+    private struct Cache: Codable { let weather: LiveWeather; let place: String?; let at: Date; let lat: Double; let lon: Double }
+
+    /// The last reading is kept on the phone so Home shows it the instant the app opens;
+    /// a fresh one replaces it in the background. Readings older than 12 hours are dropped.
+    init() {
+        if let data = UserDefaults.standard.data(forKey: Self.cacheKey),
+           let c = try? JSONDecoder().decode(Cache.self, from: data),
+           Date().timeIntervalSince(c.at) < 12 * 3600 {
+            current = c.weather
+            place = c.place
+            lastFetch = c.at
+            lastCoord = CLLocationCoordinate2D(latitude: c.lat, longitude: c.lon)
+        }
+    }
+
+    /// Starts reading the weather as early as possible (app launch, behind the opening animation)
+    /// so Home doesn't wait for it. Uses only a position the app is already allowed to read.
+    func warmUp() {
+        guard inFlight == nil, let c = bestCoordinate(fallback: nil) else { return }
+        inFlight = Task { await refresh(near: c); inFlight = nil }
+    }
 
     /// The best place to read the weather for without prompting: the phone's last known
     /// position if location is already allowed, otherwise the given fallback (e.g. a ride's start).
@@ -141,6 +165,10 @@ final class WeatherService {
         if let mark = try? await CLGeocoder().reverseGeocodeLocation(
             CLLocation(latitude: coord.latitude, longitude: coord.longitude)).first {
             place = mark.locality ?? mark.subAdministrativeArea ?? mark.administrativeArea
+        }
+        if let w = current, let data = try? JSONEncoder().encode(
+            Cache(weather: w, place: place, at: .now, lat: coord.latitude, lon: coord.longitude)) {
+            UserDefaults.standard.set(data, forKey: Self.cacheKey)
         }
     }
 

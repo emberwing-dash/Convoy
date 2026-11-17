@@ -1,10 +1,9 @@
 import SwiftUI
 
 // WelcomeView.swift
-// Step 1 of Onboarding: Google Authentication & Welcome to Convoy
+// Step 1 of Onboarding: Welcome to Convoy
 
 struct WelcomeView: View {
-    var onGoogleSignIn: () -> Void
     var onContinueGuest: () -> Void
 
     var body: some View {
@@ -19,7 +18,7 @@ struct WelcomeView: View {
                 .frame(width: 393, height: 480 + 60)
                 .at(0, 340)
                 .allowsHitTesting(false)
-            content.at(20, 485)
+            content.at(20, 549)   // sits where it did with the old two-button stack
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
@@ -35,13 +34,16 @@ struct WelcomeView: View {
             Image("rider_white").resizable().frame(width: 18, height: 18).offset(x: 239, y: 296)
             Image("rider_white").resizable().frame(width: 18, height: 18).offset(x: 156, y: 329)
             Image("rider_grey").resizable().frame(width: 18, height: 18).offset(x: 87, y: 406)
-            HStack(spacing: 8) {
-                Image("dot_green").resizable().frame(width: 6, height: 6)
-                Text("LIVE · 4 RIDERS").cvText(11, .medium, tracking: 0.6, lineHeight: 14, mono: true)
+            // Where the lead rider is heading: an illustration, not live data.
+            HStack(spacing: 6) {
+                Image(systemName: "flag.checkered")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Hue.ember)
+                Text("NEXT STOP").cvText(11, .medium, tracking: 0.6, lineHeight: 14, mono: true)
             }
             .padding(.leading, 10).padding(.trailing, 12).padding(.vertical, 7)
             .glassCapsule()
-            .offset(x: 200, y: 150)
+            .offset(x: 216, y: 150)
         }
         .frame(width: 393, height: 620, alignment: .topLeading)
     }
@@ -64,28 +66,7 @@ struct WelcomeView: View {
                     .cvText(15, color: CV.muted, tracking: -0.17, lineHeight: 22)
             }
 
-            VStack(spacing: 12) {
-                // Primary: Continue with Google
-                Button(action: onGoogleSignIn) {
-                    HStack(spacing: 12) {
-                        Image("logo_google")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                        Text("Continue with Google")
-                            .cvText(16, .semibold, tracking: -0.2)
-                            .foregroundStyle(Color.white)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Color.white.opacity(0.12), in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-
-                // Secondary: Slide to get rolling
-                SlideToRide(onComplete: onContinueGuest)
-            }
+            SlideToRide(onComplete: onContinueGuest)
         }
         .frame(width: 353, alignment: .leading)
     }
@@ -93,7 +74,7 @@ struct WelcomeView: View {
 
 #Preview {
     NavigationStack {
-        WelcomeView(onGoogleSignIn: {}, onContinueGuest: {})
+        WelcomeView(onContinueGuest: {})
     }
     .environment(AppState())
     .preferredColorScheme(.dark)

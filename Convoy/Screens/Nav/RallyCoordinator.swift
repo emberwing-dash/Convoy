@@ -1,6 +1,7 @@
 // RallyCoordinator.swift
 // Group positioning: finds the rider at the centre of the convoy, draws an invisible
-// 500 m-radius circle (1 km across) around them, and nudges any rider who leaves it —
+// circle around them (500 m radius on the road, 15 m when testing with 2–3 phones), and nudges
+// any rider who leaves it —
 // "slow down" when ahead, "catch up" when behind.
 //
 // It only *reads* positions: this device's GPS from `LocationService` and other riders
@@ -11,6 +12,10 @@
 // decides whether *they* are outside and alerts them (banner in the app, system notification
 // when the app is in the background). No extra GPS work is done: it reuses the location
 // stream navigation already has, and recomputes every few seconds.
+//
+// Test vs production values: see `RallyProfile` below. Debug builds (run from Xcode onto the
+// test phones) use the close-quarters test values; Release builds (TestFlight / App Store)
+// always use the road values, so test values can never ship by accident.
 import Foundation
 import CoreLocation
 import SwiftUI
@@ -170,24 +175,57 @@ final class RallyCoordinator {
 
     // MARK: Configuration
 
-    /// Radius of the invisible circle around the centre rider (500 m ⇒ 1 km across).
-    var radiusMeters: Double = 500
+    /// One switch for every tuning value. `.testing` is for 2–3 iPhones a few metres apart;
+    /// `.road` is for real rides. Debug builds use `.testing`, Release builds always `.road`.
+    /// To try road values in a Debug build, set `RallyProfile.active = .road`.
+    enum RallyProfile {
+        case testing, road
+
+        #if DEBUG
+        static var active: RallyProfile = .testing
+        #else
+        static let active: RallyProfile = .road
+        #endif
+
+        //                                             testing   road
+        var radius: Double              { pick(15,      500) }   // circle radius around the centre rider (m)
+        var reentryMargin: Double       { pick(3,       60) }    // must be this far back inside to re-arm (m)
+        var sustain: TimeInterval       { pick(3,       15) }    // outside this long before the first alert (s)
+        var rearm: TimeInterval         { pick(5,       20) }    // back inside this long before a new exit can alert (s)
+        var repeatCooldown: TimeInterval { pick(45,     300) }   // repeat while still outside at most this often (s)
+        var minimumGap: TimeInterval    { pick(10,      60) }    // never alert the same rider more often (s)
+        var tick: TimeInterval          { pick(2,       5) }     // recompute interval (s)
+        var staleAfter: TimeInterval    { pick(20,      45) }    // ignore other riders' positions older than this (s)
+        /// Our own fix is ignored when GPS accuracy is worse than this. It has to be well inside the
+        /// circle: with a 15 m circle, a 100 m-accuracy fix is pure noise and would fire
+        /// "catch up / slow down" while everyone stands still. Outdoors iPhones report ~5–15 m.
+        var maxAccuracy: Double         { pick(15,      80) }
+
+        private func pick<T>(_ testing: T, _ road: T) -> T { self == .testing ? testing : road }
+    }
+
+    private var profile: RallyProfile { RallyProfile.active }
+
+    /// Radius of the invisible circle around the centre rider.
+    var radiusMeters: Double { profile.radius }
     /// Must be back inside by this much before a new exit counts — stops flicker at the edge.
-    var reentryMarginMeters: Double = 60
+    /// Always strictly less than the radius, or re-entry could never re-arm.
+    var reentryMarginMeters: Double { min(profile.reentryMargin, radiusMeters * 0.5) }
     /// Seconds a rider must stay outside before the first alert (rides out GPS spikes).
-    var sustainSeconds: TimeInterval = 15
+    /// Never shorter than one recompute, so a single noisy tick can't alert.
+    var sustainSeconds: TimeInterval { max(profile.sustain, tickInterval) }
     /// Seconds a rider must be back inside before a later exit can alert again.
-    var rearmSeconds: TimeInterval = 20
+    var rearmSeconds: TimeInterval { profile.rearm }
     /// While a rider stays outside, repeat the reminder at most this often.
-    var repeatCooldown: TimeInterval = 300
+    var repeatCooldown: TimeInterval { profile.repeatCooldown }
     /// Never alert the same rider more often than this, even after re-entering.
-    var minimumGap: TimeInterval = 60
-    /// Recompute interval. Positions arrive every ~1.5 s; 5 s keeps CPU and battery low.
-    var tickInterval: TimeInterval = 5
+    var minimumGap: TimeInterval { profile.minimumGap }
+    /// Recompute interval. Positions arrive every ~1.5 s.
+    var tickInterval: TimeInterval { profile.tick }
     /// Ignore other riders whose last position is older than this.
-    var staleAfter: TimeInterval = 45
-    /// Ignore our own fix when GPS accuracy is worse than this.
-    var maxAccuracyMeters: Double = 80
+    var staleAfter: TimeInterval { profile.staleAfter }
+    /// Ignore our own fix when GPS accuracy is worse than this (never looser than the circle).
+    var maxAccuracyMeters: Double { min(profile.maxAccuracy, radiusMeters) }
 
     // MARK: Published state
 
