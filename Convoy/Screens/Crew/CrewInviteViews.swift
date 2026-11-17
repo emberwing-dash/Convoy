@@ -300,9 +300,7 @@ struct CrewInviteView: View {
 
     private var emptyCard: some View {
         VStack(spacing: 10) {
-            Image(systemName: "person.2")
-                .font(.system(size: 22))
-                .foregroundStyle(CV.text.opacity(0.45))
+            IconBadge(symbol: "person.2.fill", color: Hue.lavender, size: 52)
             Text(searchText.isEmpty ? "No friends yet" : "No matches")
                 .cvText(15, .semibold, inter: true)
             Text(searchText.isEmpty

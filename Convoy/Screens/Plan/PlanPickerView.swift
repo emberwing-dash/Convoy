@@ -55,11 +55,7 @@ struct PlanPickerView: View {
                 case .friends:
                     if app.friends.isEmpty {
                         VStack(spacing: 8) {
-                            Image(systemName: "person.3")
-                                .font(.system(size: 26))
-                                .foregroundStyle(CV.text.opacity(0.5))
-                                .frame(width: 60, height: 60)
-                                .background(Color.white.opacity(0.06), in: Circle())
+                            IconBadge(symbol: "person.3.fill", color: Hue.lavender, size: 60)
                             Text("No friends yet")
                                 .cvText(15, .semibold, inter: true)
                             Text("Invite the people you ride with from the Crew tab.")

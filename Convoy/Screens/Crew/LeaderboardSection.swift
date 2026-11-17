@@ -133,8 +133,7 @@ struct LeaderboardSection: View {
 
     private func ruleRow(icon: String, tint: Color, title: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundStyle(tint)
-                .frame(width: 30, height: 30).background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            IconBadge(symbol: icon, color: tint, size: 34)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).cvText(14, .semibold, color: CV.text, inter: true)
                 Text(text).cvText(12, color: CV.muted, inter: true).fixedSize(horizontal: false, vertical: true)
@@ -314,9 +313,7 @@ private struct BoardCard: View {
 
     private func header(_ board: LeaderboardBoard?) -> some View {
         HStack(alignment: .top, spacing: 14) {
-            Image(systemName: metric.icon).font(.system(size: 20, weight: .semibold)).foregroundStyle(accent)
-                .frame(width: 50, height: 50)
-                .background(accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            IconBadge(symbol: metric.icon, color: accent, size: 50)
             VStack(alignment: .leading, spacing: 3) {
                 Text(metric.title).cvText(21, .bold, color: CV.text, inter: true)
                 Text(period.subtitle()).cvText(13, .semibold, color: CV.muted, inter: true)

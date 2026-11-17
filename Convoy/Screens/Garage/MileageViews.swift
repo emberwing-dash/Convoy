@@ -116,7 +116,7 @@ struct LogFillUpView: View {
                         HStack(alignment: .top) {
                             Text("ODOMETER").cvText(11, .semibold, color: CV.text.opacity(0.55), tracking: 0.5, inter: true)
                             Spacer()
-                            Image(systemName: "gauge.medium").font(.system(size: 16)).foregroundStyle(CV.text.opacity(0.7)).frame(width: 38, height: 38).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            IconBadge(symbol: "gauge.medium", color: Hue.sky, size: 38)
                         }
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             TextField("", text: $odo, prompt: Text(second ? "18,420" : "18,058").foregroundColor(CV.text.opacity(0.25))).keyboardType(.numberPad).focused($focus, equals: .odo).tint(CV.accent)
@@ -139,7 +139,7 @@ struct LogFillUpView: View {
                     HStack { Text("Total paid").cvText(14, color: CV.text.opacity(0.55), inter: true); Spacer(); Text("₹\(total.formatted())").cvText(15, .bold, inter: true) }
                         .padding(.horizontal, 18).frame(height: 48).background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 18, style: .continuous)).padding(.top, 14)
                     HStack(spacing: 12) {
-                        Image(systemName: "fuelpump").foregroundStyle(CV.accent).frame(width: 40, height: 40).background(CV.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        IconBadge(symbol: "fuelpump.fill", color: Hue.ember, size: 40)
                         VStack(alignment: .leading, spacing: 3) { Text("Filled to full tank").cvText(15, .semibold, inter: true); Text("Needed for an accurate km/l").cvText(12, color: CV.text.opacity(0.55), inter: true) }
                         Spacer(); Toggle("", isOn: $fullTank).labelsHidden().tint(CV.green)
                     }.padding(.horizontal, 16).frame(height: 72).background(panel, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -188,7 +188,7 @@ struct LogFillUpView: View {
     }
     private func detail(_ icon: String, _ t: String, _ v: String, dim: Bool = false) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 15)).foregroundStyle(CV.text.opacity(0.6)).frame(width: 20)
+            IconBadge(symbol: icon, size: 32)
             Text(t).cvText(15, .semibold, inter: true); Spacer()
             Text(v).cvText(14, color: dim ? CV.text.opacity(0.4) : CV.text.opacity(0.7), inter: true)
             Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(CV.text.opacity(0.5))
@@ -210,7 +210,7 @@ struct MileageProgressView: View {
                     Text("One more fill-up\nand you’re set").cvText(28, .bold, color: CV.text, tracking: -0.5, lineHeight: 34, inter: true).padding(.top, 14)
                     Text("Ride as usual. Next time you fill the tank to full, log it here and your km/l shows up.").cvText(15, color: CV.text.opacity(0.55), lineHeight: 21, inter: true).padding(.top, 8)
                     HStack(spacing: 12) {
-                        Image(systemName: "fuelpump").foregroundStyle(CV.accent).frame(width: 40, height: 40).background(CV.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        IconBadge(symbol: "fuelpump.fill", color: Hue.ember, size: 40)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Fill-up 1 · Today, 9:41 AM").cvText(15, .semibold, inter: true)
                             Text("\((first?.odo ?? 18058).formatted()) km · \(String(format: "%.1f", first?.litres ?? 12.4)) L · ₹\(Int(((first?.litres ?? 12.4) * (first?.price ?? 102.9)).rounded()).formatted())").cvText(12, color: CV.text.opacity(0.5), inter: true)
@@ -311,7 +311,7 @@ struct MileageResultsView: View {
     }
     private func row(_ t: String, _ s: String, _ v: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "fuelpump").font(.system(size: 15)).foregroundStyle(CV.text.opacity(0.8)).frame(width: 40, height: 40).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            IconBadge(symbol: "fuelpump.fill", color: Hue.ember, size: 40)
             VStack(alignment: .leading, spacing: 3) { Text(t).cvText(14, .semibold, inter: true); Text(s).cvText(12, color: CV.text.opacity(0.5), inter: true) }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) { Text(v).cvText(15, .bold, inter: true); Text("km/l").cvText(11, color: CV.text.opacity(0.5), inter: true) }

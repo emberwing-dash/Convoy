@@ -500,8 +500,7 @@ struct ListRow<Trailing: View>: View {
 
     var body: some View {
         let row = HStack(spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(CV.text)
-                .frame(width: 36, height: 36).background(CV.glassFill, in: Circle())
+            IconBadge(symbol: symbol, size: 38)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).cvText(15, .semibold, inter: true).lineLimit(1)
                 if let subtitle { Text(subtitle).cvText(12, color: CV.muted, inter: true).lineLimit(1) }

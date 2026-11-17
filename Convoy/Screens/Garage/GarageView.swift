@@ -366,8 +366,7 @@ struct GarageView: View {
 
     private func statTile(_ icon: String, _ val: String, _ unit: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: icon).font(.system(size: 13, weight: .semibold)).foregroundStyle(activeTint.color)
-                .frame(width: 28, height: 28).background(activeTint.color.opacity(0.16), in: Circle())
+            IconBadge(symbol: icon, size: 32)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(val).cvText(22, .bold, tracking: -0.4, inter: true).monospacedDigit()
                     .lineLimit(1).minimumScaleFactor(0.7)
@@ -547,7 +546,7 @@ struct GarageView: View {
 
     private func infoRow(_ icon: String, _ label: String, _ value: String, missing: Bool = false) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundStyle(activeTint.color).frame(width: 28)
+            IconBadge(symbol: icon, size: 30)
             Text(label).cvText(14, color: CV.muted, inter: true)
             Spacer()
             Text(value).cvText(15, .semibold, color: missing ? activeTint.color : CV.text, inter: true)
@@ -631,8 +630,7 @@ struct GarageView: View {
             return ("Valid till \(d.expiryDate?.formatted(.dateTime.day().month(.abbreviated).year()) ?? "")", CV.success)
         }()
         return HStack(spacing: 14) {
-            Image(systemName: icon).font(.system(size: 17, weight: .semibold)).foregroundStyle(color)
-                .frame(width: 46, height: 46).background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            IconBadge(symbol: icon, color: color, size: 46)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).cvText(15, .semibold, inter: true)
                 HStack(spacing: 5) {
@@ -666,9 +664,7 @@ struct GarageView: View {
             if let last = items.first, last.nextDueKM != nil || last.nextDueDate != nil {
                 // Only what was actually logged with the last service.
                 HStack(spacing: 14) {
-                    Image(systemName: "calendar.badge.clock").font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(activeTint.color)
-                        .frame(width: 46, height: 46).background(activeTint.color.opacity(0.16), in: Circle())
+                    IconBadge(symbol: "calendar.badge.clock", color: Hue.honey, size: 46)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Next service").cvText(16, .bold, inter: true)
                         Text([last.nextDueKM.map { "at \($0.formatted()) km" },
@@ -711,8 +707,7 @@ struct GarageView: View {
         let items = store.accessories(for: b.id)
         if items.isEmpty {
             VStack(spacing: 12) {
-                Image(systemName: "puzzlepiece.extension.fill").font(.system(size: 30)).foregroundStyle(activeTint.color)
-                    .frame(width: 64, height: 64).background(activeTint.color.opacity(0.14), in: Circle())
+                IconBadge(symbol: "puzzlepiece.extension.fill", color: Hue.lavender, size: 64)
                 Text("No accessories yet").cvText(17, .bold, inter: true)
                 Text("Phone mounts, lights, crash guards, exhausts…").cvText(13, color: CV.muted, inter: true)
                     .multilineTextAlignment(.center)
@@ -730,8 +725,7 @@ struct GarageView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { i, acc in
                         HStack(spacing: 12) {
-                            Image(systemName: "puzzlepiece.extension.fill").font(.system(size: 14)).foregroundStyle(activeTint.color)
-                                .frame(width: 36, height: 36).background(activeTint.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            IconBadge(symbol: "puzzlepiece.extension.fill", color: Hue.lavender, size: 38)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(acc.name).cvText(15, .semibold, inter: true)
                                 if let br = acc.brand { Text(br).cvText(12, color: CV.muted, inter: true) }
@@ -832,8 +826,7 @@ struct GarageView: View {
     private func gearCard(_ g: GearItem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Image(systemName: g.type.sfIcon).font(.system(size: 20, weight: .semibold)).foregroundStyle(CV.accentLight)
-                    .frame(width: 46, height: 46).background(CV.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                IconBadge(symbol: g.type.sfIcon, color: Hue.teal, size: 46)
                 Spacer()
                 Text(g.condition.rawValue).cvText(11, .semibold, color: CV.text.opacity(0.8), inter: true)
                     .padding(.horizontal, 8).frame(height: 22)
@@ -865,8 +858,7 @@ struct GarageView: View {
 
     private func emptyBlock(_ icon: String, _ title: String, _ sub: String) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: icon).font(.system(size: 26)).foregroundStyle(CV.muted)
-                .frame(width: 60, height: 60).background(Color.white.opacity(0.06), in: Circle())
+            IconBadge(symbol: icon, size: 60)
             Text(title).cvText(16, .semibold, inter: true)
             Text(sub).cvText(13, color: CV.muted, inter: true).multilineTextAlignment(.center).padding(.horizontal, 20)
         }
@@ -1451,8 +1443,7 @@ struct DocumentView: View {
                     }.padding(.top, 8)
 
                     HStack(spacing: 12) {
-                        Image(systemName: "bell").font(.system(size: 16)).foregroundStyle(amber)
-                            .frame(width: 40, height: 40).background(amber.opacity(0.18), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        IconBadge(symbol: "bell.fill", color: Hue.honey, size: 40)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Renewal reminder").cvText(15, .semibold, inter: true)
                             Text("30 days before · 12 Feb 2027").cvText(12, color: CV.text.opacity(0.55), inter: true)

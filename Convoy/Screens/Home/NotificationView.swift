@@ -411,14 +411,7 @@ struct NotificationView: View {
             }
         } label: {
             HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(CV.accent.opacity(0.12))
-                        .frame(width: 36, height: 36)
-                    Image(systemName: "flag.2.crossed.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(CV.accent)
-                }
+                IconBadge(symbol: "flag.2.crossed.fill", color: Hue.ember, size: 38)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(rideTitle)

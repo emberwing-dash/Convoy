@@ -129,6 +129,7 @@ enum SearchContext: Hashable { case friends, crew(UUID) }
 
 enum Route: Hashable {
     case profile, joinFound, myRides, garage
+    case achievements, level
     case joinCode(String? = nil)
     case joinCrew(String? = nil)
     case notificationSettings

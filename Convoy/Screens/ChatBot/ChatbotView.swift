@@ -321,11 +321,7 @@ struct ChatbotView: View {
                     ForEach(Array(starters.enumerated()), id: \.offset) { _, item in
                         Button { input = item.0; focused = true } label: {
                             HStack(spacing: 10) {
-                                Image(systemName: item.1)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(CV.accent)
-                                    .frame(width: 32, height: 32)
-                                    .background(CV.accent.opacity(0.12), in: Circle())
+                                IconBadge(symbol: item.1, size: 34)
                                 Text(item.0).cvText(14, .medium, inter: true).lineLimit(1)
                                 Spacer()
                                 Image(systemName: "arrow.up.right")

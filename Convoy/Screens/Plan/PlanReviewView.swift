@@ -379,9 +379,7 @@ struct PlanReviewView: View {
                     showingDatePicker = true
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(CV.accent)
+                        IconBadge(symbol: "calendar", color: Hue.honey, size: 30)
                         Text(app.draft.starts.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
                             .cvText(15, .semibold, inter: true)
                             .lineLimit(1)
@@ -400,9 +398,7 @@ struct PlanReviewView: View {
                     showingTimePicker = true
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(CV.accent)
+                        IconBadge(symbol: "clock.fill", color: Hue.periwinkle, size: 30)
                         Text(app.draft.starts.formatted(.dateTime.hour().minute()))
                             .cvText(15, .semibold, inter: true)
                             .lineLimit(1)
@@ -421,8 +417,8 @@ struct PlanReviewView: View {
     private func pillContent(icon: String, text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(CV.accent)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Hue.of(icon))
             Text(text).cvText(14, .semibold, inter: true)
         }
         .padding(.horizontal, 12)

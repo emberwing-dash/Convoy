@@ -134,10 +134,7 @@ struct MyRidesView: View {
     private func pastCard(_ p: PersistedRideEntity) -> some View {
         Button { app.push(.pastRide(p.id)) } label: {
             HStack(spacing: 12) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 22)).foregroundStyle(CV.green)
-                    .frame(width: 52, height: 52)
-                    .background(CV.green.opacity(0.15), in: Circle())
+                IconBadge(symbol: "checkmark.circle.fill", color: Hue.sage, size: 52)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(p.title).cvText(15, .semibold, inter: true)
                     Text(p.displayDate).cvText(12, color: CV.text.opacity(0.5), inter: true)
@@ -159,10 +156,7 @@ struct MyRidesView: View {
 
     private func emptyState(icon: String, title: String, subtitle: String) -> some View {
         VStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 22))
-                .foregroundStyle(CV.text.opacity(0.5))
-                .frame(width: 52, height: 52)
-                .background(Color.white.opacity(0.06), in: Circle())
+            IconBadge(symbol: icon, size: 54)
             Text(title).cvText(16, .semibold, inter: true)
             Text(subtitle).cvText(13, color: CV.text.opacity(0.5), inter: true)
                 .multilineTextAlignment(.center)

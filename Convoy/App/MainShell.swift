@@ -32,6 +32,8 @@ struct MainShell: View {
                 case .pastRide(let id):   PastRideView(pastID: id)
                 case .shareCard:          ShareCardView()
                 case .profile:            ProfileView()
+                case .achievements:       AchievementsView()
+                case .level:              LevelView()
                 case .joinCode(let code): JoinCodeView(initialCode: code)
                 case .joinCrew(let code): JoinCrewView(initialCode: code)
                 case .notificationSettings: NotificationSettingsView()

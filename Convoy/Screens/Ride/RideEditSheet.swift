@@ -264,7 +264,7 @@ struct RideEditSheet: View {
                 .padding(.horizontal, 16).frame(height: 56)
                 divider
                 HStack {
-                    rowLabel("clock", "Time")
+                    rowLabel("clock.fill", "Time")
                     Spacer()
                     DatePicker("", selection: $date, displayedComponents: .hourAndMinute).labelsHidden()
                 }
@@ -276,8 +276,7 @@ struct RideEditSheet: View {
 
     private func rowLabel(_ symbol: String, _ title: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(CV.text)
-                .frame(width: 30, height: 30).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            IconBadge(symbol: symbol, size: 32)
             Text(title).font(.system(size: 16, weight: .medium)).foregroundStyle(CV.text)
         }
     }

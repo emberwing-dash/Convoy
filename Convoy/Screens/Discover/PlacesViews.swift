@@ -254,7 +254,7 @@ struct PlaceDetailView: View {
 
     @ViewBuilder private func rideCard(_ p: DiscoverPlace) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "motorcycle").font(.system(size: 18)).foregroundStyle(CV.text)
+            IconBadge(symbol: "motorcycle", color: Hue.ember, size: 42)
             VStack(alignment: .leading, spacing: 2) {
                 if let d = store.rideDetail(p) {
                     Text(d.title).cvText(18, .semibold, inter: true)

@@ -73,8 +73,7 @@ struct CrewComposeSheet: View {
     private func row(icon: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: icon).font(.system(size: 15)).foregroundStyle(CV.accent)
-                    .frame(width: 40, height: 40).background(CV.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                IconBadge(symbol: icon, size: 42)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).cvText(15, .semibold, color: CV.text, inter: true).lineLimit(1)
                     Text(subtitle).cvText(12, color: CV.muted, inter: true).lineLimit(1)

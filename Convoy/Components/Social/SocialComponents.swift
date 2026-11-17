@@ -19,11 +19,7 @@ struct EmptyStateCard: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(CV.text.opacity(0.7))
-                .frame(width: 54, height: 54)
-                .background(Color.white.opacity(0.06), in: Circle())
+            IconBadge(symbol: icon, size: 56)
             Text(title)
                 .cvText(17, .bold, color: CVSocial.headline, inter: true)
                 .multilineTextAlignment(.center)

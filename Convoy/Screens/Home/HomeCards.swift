@@ -117,10 +117,9 @@ struct WeatherCard: View {
     private func reading(_ symbol: String, _ label: String, _ value: String) -> some View {
         VStack(spacing: 3) {
             HStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
-                Text(label.uppercased()).font(.system(size: 10, weight: .semibold)).tracking(0.6)
+                Image(systemName: symbol).font(.system(size: 10, weight: .semibold)).foregroundStyle(Hue.of(symbol))
+                Text(label.uppercased()).font(.system(size: 10, weight: .semibold)).tracking(0.6).foregroundStyle(CV.dim)
             }
-            .foregroundStyle(CV.dim)
             Text(value).font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(CV.text)
         }
         .frame(maxWidth: .infinity)
@@ -158,11 +157,7 @@ struct HomeQuickActions: View {
     private func tile(icon: String, title: String, subtitle: String, primary: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(primary ? Color.white : CV.text)
-                    .frame(width: 40, height: 40)
-                    .background(primary ? CV.onAccent : Color.white.opacity(0.1), in: Circle())
+                IconBadge(symbol: icon, color: primary ? Hue.ember : Hue.periwinkle, size: 42)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(primary ? CV.onAccent : CV.text)
@@ -257,7 +252,7 @@ struct MonthSummaryCard: View {
 
                 Button(action: onLeaderboard) {
                     HStack(spacing: 10) {
-                        Image(systemName: "trophy").font(.system(size: 14, weight: .semibold))
+                        IconBadge(symbol: "trophy.fill", color: Hue.honey, size: 30)
                         Text("See this month's leaderboard").font(.system(size: 14, weight: .semibold))
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(CV.dim)
@@ -319,10 +314,9 @@ struct MonthSummaryCard: View {
     private func metric(_ symbol: String, _ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
-                Text(label.uppercased()).font(.system(size: 11, weight: .semibold)).tracking(0.6)
+                Image(systemName: symbol).font(.system(size: 11, weight: .semibold)).foregroundStyle(Hue.of(symbol))
+                Text(label.uppercased()).font(.system(size: 11, weight: .semibold)).tracking(0.6).foregroundStyle(CV.dim)
             }
-            .foregroundStyle(CV.dim)
             Text(value).font(.system(size: 16, weight: .semibold)).monospacedDigit().foregroundStyle(CV.text)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

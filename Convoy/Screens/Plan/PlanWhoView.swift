@@ -295,11 +295,7 @@ struct PlanWhoView: View {
 
     private var noCrewsCard: some View {
         VStack(spacing: 0) {
-            Image(systemName: "person.3")
-                .font(.system(size: 24))
-                .foregroundStyle(CV.accent)
-                .frame(width: 56, height: 56)
-                .background(CV.accent.opacity(0.15), in: Circle())
+            IconBadge(symbol: "person.3.fill", color: Hue.lavender, size: 56)
                 .padding(.top, 16)
 
             Text("No crews yet")
@@ -455,11 +451,7 @@ struct PlanWhoView: View {
 
     private var noFriendsCard: some View {
         VStack(spacing: 0) {
-            Image(systemName: "person.3")
-                .font(.system(size: 26))
-                .foregroundStyle(CV.accent)
-                .frame(width: 60, height: 60)
-                .background(CV.accent.opacity(0.15), in: Circle())
+            IconBadge(symbol: "person.3.fill", color: Hue.lavender, size: 60)
                 .padding(.top, 18)
 
             Text("No friends yet")

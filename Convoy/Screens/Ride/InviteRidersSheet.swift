@@ -80,12 +80,7 @@ struct InviteRidersSheet: View {
 
     private var scheduleCard: some View {
         HStack(spacing: 14) {
-            Image(systemName: "calendar.badge.clock")
-                .font(.system(size: 20, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(statusTint)
-                .frame(width: 46, height: 46)
-                .background(statusTint.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            IconBadge(symbol: "calendar.badge.clock", color: statusTint == CV.muted ? Hue.sky : statusTint, size: 48)
             VStack(alignment: .leading, spacing: 3) {
                 Text("SCHEDULED RIDE")
                     .font(.system(size: 11, weight: .semibold)).tracking(0.8)

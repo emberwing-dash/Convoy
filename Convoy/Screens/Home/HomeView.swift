@@ -230,11 +230,7 @@ struct HomeView: View {
 
     private func pendingRideCard(_ ride: Ride) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "hourglass")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(CV.warning)
-                .frame(width: 46, height: 46)
-                .background(CV.warning.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            IconBadge(symbol: "hourglass.bottomhalf.filled", color: Hue.honey, size: 46)
             VStack(alignment: .leading, spacing: 3) {
                 Text(ride.title).cvText(15, .semibold, inter: true).lineLimit(1)
                 Text("Waiting for \(ride.organiser) to accept")
@@ -306,18 +302,14 @@ private struct HowItWorks: View {
     private let steps: [(String, String)] = [
         ("map.fill", "Plan"),
         ("person.2.fill", "Invite"),
-        ("motorcycle.fill", "Ride"),
+        ("motorcycle", "Ride"),
     ]
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Array(steps.enumerated()), id: \.offset) { i, step in
                 VStack(spacing: 8) {
-                    Image(systemName: step.0)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(i == 0 ? CV.onAccent : CV.accentLight)
-                        .frame(width: 48, height: 48)
-                        .background(i == 0 ? AnyShapeStyle(CV.accent) : AnyShapeStyle(CV.accentSoft), in: Circle())
+                    IconBadge(symbol: step.0, color: [Hue.periwinkle, Hue.lavender, Hue.ember][i % 3], size: 50)
                     Text(step.1).cvText(13, .semibold, color: CV.text, inter: true)
                 }
                 .frame(maxWidth: .infinity)
@@ -506,10 +498,7 @@ struct RideCountdownPanel: View {
 
     private var overdue: some View {
         glass(HStack(spacing: 12) {
-            Image(systemName: "calendar.badge.clock").font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(CV.warning)
-                .frame(width: 38, height: 38)
-                .background(CV.warning.opacity(0.18), in: Circle())
+            IconBadge(symbol: "calendar.badge.clock", color: Hue.honey, size: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Was planned for \(ride.displayDate)").cvText(15, .semibold, color: .white, inter: true)
                 Text("Open it to start, reschedule or wrap it up")

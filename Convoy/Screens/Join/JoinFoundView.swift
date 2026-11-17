@@ -32,8 +32,7 @@ struct JoinFoundView: View {
                 }.buttonStyle(.plain).at(24, 720)
             } else {
                 VStack(spacing: 10) {
-                    Image(systemName: "questionmark.circle").font(.system(size: 30))
-                        .foregroundStyle(CV.text.opacity(0.5))
+                    IconBadge(symbol: "questionmark.circle.fill", color: Hue.honey, size: 56)
                     Text("No ride with that code").cvText(17, .semibold, inter: true)
                     Text("Ask your friend for the code again.").cvText(14, color: CV.muted, inter: true)
                 }.frame(width: 353).at(20, 380)

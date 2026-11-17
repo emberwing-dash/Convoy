@@ -122,9 +122,7 @@ struct CrewDetailView: View {
                         // MARK: empty hint
                         if crew.memberCount == 1 {
                             VStack(spacing: 0) {
-                                Image(systemName: "person.3")
-                                    .font(.system(size: 26))
-                                    .foregroundStyle(CV.text.opacity(0.6))
+                                IconBadge(symbol: "person.3.fill", color: Hue.lavender, size: 56)
                                     .padding(.top, 28)
 
                                 Text("No one else here yet")

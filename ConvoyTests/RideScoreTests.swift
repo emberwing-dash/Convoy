@@ -101,3 +101,32 @@ struct RideScoreTests {
         #expect(RideScore.gain(adding: ride(25), to: existing) == 25 + 10 + 3 + 15)
     }
 }
+
+@Suite("Rider XP and levels")
+struct RiderXPTests {
+    @Test func levelThresholds() {
+        #expect(RiderLevel.level(xp: 0) == 1)
+        #expect(RiderLevel.level(xp: 99) == 1)
+        #expect(RiderLevel.level(xp: 100) == 2)
+        #expect(RiderLevel.level(xp: 365) == 3)
+        #expect(RiderLevel.start(4) == 600)
+        let s = LevelSummary.local(xp: 365)
+        #expect(s.level == 3 && s.xpToNext == 235 && s.xpIntoLevel == 65)
+    }
+
+    @Test func historyGainsAddUpToTheRideScore() {
+        let cal = RideScore.calendar
+        let base = cal.date(bySettingHour: 6, minute: 0, second: 0, of: cal.startOfDay(for: .now))!
+        let rows: [OwnRideLogRow] = [(2, 120_000, 1, false), (1, 30_000, 3, true), (0, 20_000, 2, false)].enumerated().map { i, v in
+            let start = cal.date(byAdding: .day, value: -v.0, to: base)!
+            let iso = ISO8601DateFormatter()
+            return OwnRideLogRow(id: UUID(), ride_id: nil, title: "Ride \(i)", started_at: iso.string(from: start),
+                                 ended_at: iso.string(from: start.addingTimeInterval(10_800)),
+                                 distance_m: v.1, moving_s: 9_000, rider_count: v.2, is_host: v.3)
+        }
+        let events = RiderProgress.buildHistory(rides: rows, achievements: [])
+        // Same three rides as the server smoke test: Ride Score 315.
+        #expect(events.reduce(0) { $0 + $1.xp } == 315)
+        #expect(events.count == 3)
+    }
+}

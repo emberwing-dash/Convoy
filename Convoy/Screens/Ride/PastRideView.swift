@@ -204,7 +204,7 @@ struct InfoBanner: View {
     var text: String
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon).foregroundStyle(color)
+            IconBadge(symbol: icon, color: color, size: 30)
             Text(text).cvText(13, color: CV.text.opacity(0.85), lineHeight: 18, inter: true)
             Spacer(minLength: 0)
         }

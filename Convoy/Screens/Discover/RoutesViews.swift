@@ -354,9 +354,7 @@ struct RouteDetailView: View {
                     if let e = r.estimate, let st = activeStops {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
-                                Image(systemName: "gauge.with.needle")
-                                    .foregroundStyle(CV.text)
-                                    .font(.system(size: 13, weight: .semibold))
+                                IconBadge(symbol: "gauge.with.needle.fill", color: Hue.sky, size: 28)
                                 Text("Journey Breakdown")
                                     .cvText(13, .semibold, color: CV.text, inter: true)
                                 Spacer()
@@ -444,9 +442,7 @@ struct RouteDetailView: View {
                     if let e = r.estimate {
                         if let avoided = e.avoidedExpressway {
                             HStack(alignment: .top, spacing: 10) {
-                                Image(systemName: "checkmark.shield.fill")
-                                    .foregroundStyle(CV.accent)
-                                    .font(.system(size: 18))
+                                IconBadge(symbol: "checkmark.shield.fill", color: Hue.teal, size: 34)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("2W Safe Route · \(avoided) Avoided")
                                         .cvText(13, .semibold, color: CV.text, inter: true)

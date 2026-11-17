@@ -105,6 +105,7 @@ final class SocialStore {
         feed = []; feedState = .idle; feedHasMore = true; feedLoadedAt = nil
         suggestions = []; suggestionsState = .idle; following = []
         boards = [:]; boardState = [:]
+        RiderProgress.shared.reset()
         incoming = []; inbox = []; inboxState = .idle
     }
 
@@ -344,7 +345,12 @@ final class SocialStore {
     /// Uploads every recorded ride the server hasn't confirmed yet. Safe to call repeatedly.
     func uploadPendingRideLogs() async {
         var uploaded = false
-        defer { if uploaded { scheduleBoardRefresh(after: .milliseconds(200)) } }
+        defer {
+            if uploaded {
+                scheduleBoardRefresh(after: .milliseconds(200))
+                Task { await RiderProgress.shared.load(force: true) }   // new XP and achievements
+            }
+        }
         for log in recorder.logs where log.needsUpload {
             do {
                 let r = try await repo.record(log)

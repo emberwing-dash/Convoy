@@ -185,14 +185,8 @@ struct RideDetailsView: View {
         let isPosted = post != nil
 
         return HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(CV.accentSoft)
-                    .frame(width: 42, height: 42)
-                Image(systemName: isPosted ? "person.2.badge.gearshape.fill" : "megaphone.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(CV.accent)
-            }
+            IconBadge(symbol: isPosted ? "person.2.badge.gearshape.fill" : "megaphone.fill",
+                      color: isPosted ? Hue.lavender : Hue.rose, size: 44)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {

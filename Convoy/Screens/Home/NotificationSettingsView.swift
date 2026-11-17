@@ -29,22 +29,22 @@ struct NotificationSettingsView: View {
 
                     if let binding = Binding($prefs) {
                         section("PUSH") {
-                            row("Allow push notifications", "bell.badge", binding.push_enabled)
+                            row("Allow push notifications", "bell.badge.fill", binding.push_enabled)
                         }
                         section("WHAT TO SEND") {
-                            row("Rides", "flag.2.crossed", binding.rides,
+                            row("Rides", "flag.2.crossed.fill", binding.rides,
                                 note: "Invites, changes to time or route, start, cancel, reminders")
                             divider
-                            row("Crews", "person.3", binding.crews, note: "Crew invites and members joining or leaving")
+                            row("Crews", "person.3.fill", binding.crews, note: "Crew invites and members joining or leaving")
                             divider
-                            row("Friends", "person.2", binding.friends, note: "Friend requests and accepted requests")
+                            row("Friends", "person.2.fill", binding.friends, note: "Friend requests and accepted requests")
                             divider
-                            row("Community", "bubble.left.and.bubble.right", binding.community, note: "Likes, comments and new posts")
+                            row("Community", "bubble.left.and.bubble.right.fill", binding.community, note: "Likes, comments and new posts")
                             divider
-                            row("Navigation alerts", "location.north.line", binding.navigation,
+                            row("Navigation alerts", "location.north.line.fill", binding.navigation,
                                 note: "“Slow down” / “Catch up” when you drift from the group")
                             divider
-                            row("Achievements", "trophy", binding.achievements, note: "Milestones and monthly leaderboard")
+                            row("Achievements", "trophy.fill", binding.achievements, note: "Milestones and monthly leaderboard")
                         }
                         .opacity(binding.push_enabled.wrappedValue ? 1 : 0.45)
                         .disabled(!binding.push_enabled.wrappedValue)
@@ -123,15 +123,12 @@ struct NotificationSettingsView: View {
         .padding(.top, 24)
     }
 
-    private var divider: some View { Rectangle().fill(CV.separator).frame(height: 0.5).padding(.leading, 56) }
+    private var divider: some View { Rectangle().fill(CV.separator).frame(height: 0.5).padding(.leading, 64) }
 
     private func row(_ title: String, _ icon: String, _ value: Binding<Bool>, note: String? = nil) -> some View {
         Toggle(isOn: value) {
             HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(CV.text)
-                    .frame(width: 26)
+                IconBadge(symbol: icon, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).cvText(15, .semibold, color: CV.text, inter: true)
                     if let note { Text(note).cvText(12, color: CV.muted, lineHeight: 16, inter: true) }

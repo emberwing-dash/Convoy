@@ -267,6 +267,31 @@ final class SocialRepository {
         catch { throw SocialError.from(error) }
     }
 
+    // MARK: Achievements & level
+
+    func myAchievements() async throws -> [Achievement] {
+        let rows: [AchievementDTO] = try await call("my_achievements", NoParams())
+        return rows.compactMap(\.model)
+    }
+
+    func myLevel() async throws -> LevelSummary {
+        let r: LevelRow = try await call("my_level", NoParams())
+        return LevelSummary(xp: r.xp, rideScore: r.ride_score, achievementXP: r.achievement_xp, level: r.level,
+                            levelStart: r.level_start, nextLevelAt: r.next_level_at, unlocked: r.unlocked,
+                            totalAchievements: r.total_achievements, metrics: r.metrics)
+    }
+
+    /// The signed-in rider's own recorded rides (row-level security returns only theirs).
+    func myRideLogs(limit: Int = 500) async throws -> [OwnRideLogRow] {
+        do {
+            return try await client.from("ride_logs")
+                .select("id,ride_id,title,started_at,ended_at,distance_m,moving_s,rider_count,is_host")
+                .order("started_at", ascending: true)
+                .limit(limit)
+                .execute().value
+        } catch { throw SocialError.from(error) }
+    }
+
     // MARK: Leaderboard
 
     func leaderboard(_ metric: LeaderboardMetric, period: LeaderboardPeriod, limit: Int = 10) async throws -> LeaderboardBoard {
@@ -415,5 +440,34 @@ nonisolated private struct RosterRow: Decodable, Sendable {
                      status: status == "accepted" ? .accepted : status == "declined" ? .declined : .invited,
                      source: RideMemberSource(raw: source), crewId: crew_id, crewName: crew_name,
                      joinedAt: RideFormat.parse(joined_at), iFollow: i_follow, isMe: is_me)
+    }
+}
+
+nonisolated private struct AchievementDTO: Decodable, Sendable {
+    let id: String; let category: String; let title: String; let detail: String; let icon: String; let tier: String
+    let metric: String; let target: Double; let points: Int; let sort: Int; let progress: Double; let unlocked_at: String?
+    var model: Achievement? {
+        guard let c = AchievementCategory(rawValue: category), let t = AchievementTier(rawValue: tier) else { return nil }
+        return Achievement(id: id, category: c, title: title, detail: detail, icon: icon, tier: t, metric: metric,
+                           target: target, points: points, progress: progress, unlockedAt: RideFormat.parse(unlocked_at))
+    }
+}
+
+nonisolated private struct LevelRow: Decodable, Sendable {
+    let xp: Int; let ride_score: Int; let achievement_xp: Int; let level: Int; let level_start: Int
+    let next_level_at: Int; let unlocked: Int; let total_achievements: Int; let metrics: RiderMetrics
+}
+
+nonisolated struct OwnRideLogRow: Decodable, Sendable {
+    let id: UUID; let ride_id: UUID?; let title: String; let started_at: String; let ended_at: String
+    let distance_m: Int; let moving_s: Int; let rider_count: Int; let is_host: Bool
+
+    var start: Date { RideFormat.parse(started_at) ?? .distantPast }
+    var end: Date { RideFormat.parse(ended_at) ?? start }
+
+    var scoreRide: RideScore.Ride {
+        RideScore.Ride(id: id, rideId: ride_id, startedAt: start, endedAt: end,
+                       distanceKm: Double(distance_m) / 1000, movingS: Double(moving_s),
+                       riderCount: rider_count, isHost: is_host)
     }
 }
