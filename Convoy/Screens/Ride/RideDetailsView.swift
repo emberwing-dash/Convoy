@@ -64,11 +64,15 @@ struct RideDetailsView: View {
     @State private var heroMinY: CGFloat = 0
 
     var body: some View {
-        if let ride = app.rides.first(where: { $0.id == rideID }) {
-            content(ride: ride)
-        } else {
-            notFound
+        Group {
+            if let ride = app.rides.first(where: { $0.id == rideID }) {
+                content(ride: ride)
+            } else {
+                notFound
+            }
         }
+        // Pick up riders who accepted (or were invited) since this phone last loaded the ride.
+        .task(id: rideID) { await app.refreshRides(force: true) }
     }
 
     private func content(ride: Ride) -> some View {
@@ -100,7 +104,8 @@ struct RideDetailsView: View {
                         RouteSummaryCard(draft: ride.plan, numberedStops: false)
                         riders(ride: ride, solo: solo, isRideDay: isRideDay,
                                organisedByYou: organisedByYou)
-                        if !solo { RideRosterCard(ride: ride) }
+                        // Everyone on the ride, including crew members still deciding.
+                        if ride.riders.count > 1 { RideRosterCard(ride: ride) }
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 10)
@@ -416,7 +421,8 @@ struct RideDetailsView: View {
                     .padding(.leading, 2)
                     .padding(.trailing, 12)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Just you so far").cvText(15, .semibold, inter: true)
+                    Text(ride.invitedRiders.isEmpty ? "Just you so far" : "You + \(ride.invitedRiders.count) invited")
+                        .cvText(15, .semibold, inter: true)
                     if !ride.invitedRiders.isEmpty {
                         Text("\(ride.invitedRiders.count) rider\(ride.invitedRiders.count == 1 ? "" : "s") invited · waiting for response")
                             .cvText(12, color: CV.text.opacity(0.45), inter: true)
@@ -484,7 +490,7 @@ struct RideDetailsView: View {
         } else if invited {
             HStack(spacing: 12) {
                 Button {
-                    app.pop()
+                    Task { if await app.declineRideInvitation(rideId: ride.id) { app.pop() } }
                 } label: {
                     Text("Decline")
                         .cvText(15, .semibold, color: CV.text.opacity(0.6), inter: true)
@@ -509,7 +515,7 @@ struct RideDetailsView: View {
             HStack(spacing: 10) {
                 if isRideDay {
                     // Active: Start ride
-                    Button { app.push(.rideStart) } label: {
+                    Button { app.startRide(id: ride.id); app.push(.rideStart) } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "play.fill").font(.system(size: 15, weight: .semibold))
                             Text("Start ride")

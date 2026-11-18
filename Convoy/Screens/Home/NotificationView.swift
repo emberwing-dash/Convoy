@@ -12,6 +12,8 @@ enum NotificationFilter: String, CaseIterable, Identifiable {
 struct NotificationView: View {
     @Environment(AppState.self) private var app
     @State private var filter: NotificationFilter = .all
+    /// Ride invite being answered (shows a spinner on its row).
+    @State private var answeringInvite: UUID?
 
     private var pendingCount: Int {
         app.unreadNotificationCount
@@ -72,7 +74,9 @@ struct NotificationView: View {
             await app.refreshNotifications(force: true)
         }
         .task {
-            await app.refreshNotifications(force: true)
+            async let n: () = app.refreshNotifications(force: true)
+            async let r: () = app.refreshRides(force: true)   // so each invite row knows if you've answered it
+            _ = await (n, r)
         }
         // Live inserts (Realtime) rebuild the list; nothing to poll.
         .onDisappear {
@@ -389,18 +393,58 @@ struct NotificationView: View {
             }
         case .postLike, .postComment, .newPost:
             pillButton("View post", filled: false) { app.popToRoot(); app.tab = .crew }
-        case .rideInvite, .rideUpdated, .rideStarted, .rideCompleted, .sos:
+        case .rideInvite:
+            if let id = notif.rideId { inviteActions(id) }
+        case .rideUpdated, .rideStarted, .rideCompleted, .sos:
             if let id = notif.rideId {
                 pillButton(notif.type == .sos ? "Open ride" : notif.type == .rideStarted ? "Open live map" : "Open ride",
                            filled: notif.type == .sos || notif.type == .rideStarted) {
                     Task {
                         await app.refreshRides(force: true)
-                        if app.rides.contains(where: { $0.id == id }) { app.push(.rideDetails(id)) }
+                        guard app.rides.contains(where: { $0.id == id }) else { return }
+                        if notif.type == .rideStarted {
+                            // Joins the live ride straight away: sharing starts and the map opens.
+                            app.startRide(id: id)
+                            app.push(.rideNav)
+                        } else {
+                            app.push(.rideDetails(id))
+                        }
                     }
                 }
             }
         default:
             EmptyView()
+        }
+    }
+
+    /// Ride invite: answer it right here. Once you're on the ride, the button opens it.
+    @ViewBuilder
+    private func inviteActions(_ id: UUID) -> some View {
+        let ride = app.rides.first { $0.id == id }
+        if answeringInvite == id {
+            ProgressView().tint(CV.text).frame(height: 40)
+        } else if let ride, !ride.isPendingInvite {
+            pillButton("Open ride", filled: true) { app.push(.rideDetails(id)) }
+        } else {
+            HStack(spacing: 8) {
+                pillButton("Decline", filled: false) {
+                    answeringInvite = id
+                    Task { await app.declineRideInvitation(rideId: id); answeringInvite = nil }
+                }
+                pillButton("Accept", filled: true) {
+                    answeringInvite = id
+                    Task {
+                        var ok = await app.acceptRideInvitation(rideId: id)
+                        if !ok {
+                            // Already answered on another device: just open it if you're on it.
+                            await app.refreshRides(force: true)
+                            ok = app.rides.contains { $0.id == id && !$0.isPendingInvite }
+                        }
+                        answeringInvite = nil
+                        if ok { app.push(.rideDetails(id)) }
+                    }
+                }
+            }
         }
     }
 

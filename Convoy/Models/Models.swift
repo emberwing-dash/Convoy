@@ -119,6 +119,16 @@ struct Ride: Identifiable, Hashable {
         return String((0..<6).compactMap { _ in chars.randomElement() })
     }
 
+    /// Same ride under a new id and a new organiser (used when a ride saved on this phone turns out
+    /// to belong to another account on the server). Only the organiser rides along; nobody is invited.
+    func reissued(to organiserId: UUID, name: String, avatar: Data?) -> Ride {
+        let me = Rider(id: organiserId, name: name, avatarData: avatar, status: .accepted, role: "organiser", source: "admin")
+        return Ride(title: title, place: place, subtitle: subtitle, tag: tag, departs: departs, riders: [me], plan: plan,
+                    distance: distance, duration: duration, displayDate: displayDate, displayTime: displayTime,
+                    organiser: "you", organiserId: organiserId, rsvp: .organizing, whenTag: whenTag,
+                    lockText: lockText, ridersGoing: 1, listMeta: listMeta, media: media)
+    }
+
     init(id: UUID = UUID(), title: String, place: String, subtitle: String,
          tag: String, departs: Date, riders: [Rider], plan: PlanDraft = PlanDraft(),
          distance: String, duration: String, displayDate: String, displayTime: String,
@@ -165,6 +175,8 @@ struct Ride: Identifiable, Hashable {
     }
 
     var isSolo: Bool { acceptedRiders.count <= 1 }
+    /// You've been invited and haven't answered yet.
+    var isPendingInvite: Bool { if case .invited = rsvp { return true } else { return false } }
 }
 
 enum RideMediaType: String, Codable, Hashable { case photo, video }

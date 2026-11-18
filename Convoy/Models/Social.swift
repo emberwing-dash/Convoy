@@ -66,6 +66,8 @@ struct FeedPost: Identifiable, Hashable, Sendable {
     /// Destination photo of the ride this post is about, and an area-level point (≈1 km) for satellite fallback.
     var cover: RideCover? = nil
     var destination: Coord? = nil
+    /// The card the author designed in Share Studio, when they posted one.
+    var cardURL: URL? = nil
 }
 
 struct SuggestedRider: Identifiable, Hashable, Sendable {

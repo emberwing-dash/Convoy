@@ -87,6 +87,14 @@ struct ConvoyTabBar: View {
                         .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
                         .scaleEffect(isSelected ? 1.05 : 0.96)
                         .frame(height: 22)
+                        // A ride in progress: a small live dot on the Ride tab (green = sharing,
+                        // amber/red = a sharing problem).
+                        .overlay(alignment: .topTrailing) {
+                            if tab == .ride, ActiveRideSession.shared.isActive {
+                                LiveTabDot(color: ActiveRideSession.shared.trackingStatus.hue)
+                                    .offset(x: 8, y: -2)
+                            }
+                        }
                     Text(title)
                         .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
                         .lineLimit(1)
@@ -267,5 +275,22 @@ struct EllisTabBarButton: View {
             controller.stop()
         }
         .accessibilityLabel("Ask Ellis")
+    }
+}
+
+/// Pulsing dot on the Ride tab while a ride is live.
+private struct LiveTabDot: View {
+    let color: Color
+    @State private var pulse = false
+
+    var body: some View {
+        ZStack {
+            Circle().fill(color.opacity(0.35)).frame(width: 14, height: 14)
+                .scaleEffect(pulse ? 1.3 : 0.7).opacity(pulse ? 0 : 1)
+            Circle().fill(color).frame(width: 8, height: 8)
+                .overlay(Circle().strokeBorder(Color.black.opacity(0.6), lineWidth: 1.5))
+        }
+        .onAppear { withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { pulse = true } }
+        .accessibilityLabel("Ride in progress")
     }
 }

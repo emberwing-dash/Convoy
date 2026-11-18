@@ -235,13 +235,16 @@ struct RoundIconButton: View {
     let symbol: String
     var dark = true
     var size: CGFloat = 44
+    /// Optional colour (app badge style: tinted circle, coloured symbol). nil keeps the plain look.
+    var tint: Color? = nil
     var action: () -> Void
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(CV.text)
+                .foregroundStyle(tint ?? CV.text)
                 .frame(width: size, height: size)
+                .background(tint.map { $0.opacity(0.2) } ?? .clear, in: Circle())
                 .background(dark ? CV.elevated.opacity(0.94) : CV.glassFill, in: Circle())
                 .overlay(Circle().strokeBorder(CV.stroke, lineWidth: 1))
                 .shadow(color: .black.opacity(dark ? 0.3 : 0), radius: 8, y: 4)

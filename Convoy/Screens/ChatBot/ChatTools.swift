@@ -616,7 +616,7 @@ enum ChatTools {
             return jsonEncode(["error": "No ride found with code \(code)."])
         }
         do {
-            try await app.social.postOpenRide(ride: ride, caption: caption, maxRiders: maxRiders)
+            try await app.social.postOpenRide(ride: ride, caption: caption, maxRiders: maxRiders, app: app)
             return jsonEncode(["status": "posted", "ride": ride.title, "ride_code": ride.code])
         } catch {
             return jsonEncode(["error": "Couldn't post: \(error.localizedDescription)"])

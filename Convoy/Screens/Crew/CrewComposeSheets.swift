@@ -196,7 +196,7 @@ struct OpenRideForm: View {
             defer { posting = false }
             do {
                 try await app.social.postOpenRide(ride: ride, caption: caption.trimmingCharacters(in: .whitespacesAndNewlines),
-                                                  maxRiders: maxRiders)
+                                                  maxRiders: maxRiders, app: app)
                 app.crewSection = .feed
                 onDone()
             } catch { self.error = SocialError.from(error).message }

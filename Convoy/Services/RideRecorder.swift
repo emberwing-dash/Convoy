@@ -178,6 +178,21 @@ enum RiderScore {
     }
 }
 
+/// A rider who actually rode (sent live positions during the ride).
+struct RideParticipant: Codable, Hashable, Sendable {
+    var id: UUID
+    var name: String
+}
+
+/// A stop added during the ride (from the shared stops on the ride map).
+struct RideStop: Codable, Hashable, Sendable {
+    var name: String
+    var kind: String
+    var lat: Double
+    var lon: Double
+    var addedByName: String
+}
+
 /// A finished ride as measured on the device.
 struct RideLog: Codable, Identifiable, Hashable, Sendable {
     let id: UUID                 // client id; the server de-duplicates uploads on it
@@ -199,6 +214,14 @@ struct RideLog: Codable, Identifiable, Hashable, Sendable {
     var postId: UUID?
     /// Set when the server refused the log (implausible GPS data); it stays on the device only.
     var rejectedReason: String?
+    // Recorded on this phone during the ride (optional — older logs don't have them).
+    /// Everyone who actually rode: this rider plus anyone whose live location reached this phone.
+    var participants: [RideParticipant]? = nil
+    /// Stops the group added during the ride.
+    var stops: [RideStop]? = nil
+    /// Where this phone was when the ride ended (used when the track is too short to draw).
+    var endLat: Double? = nil
+    var endLon: Double? = nil
 
     var elapsedS: Int { max(0, Int(endedAt.timeIntervalSince(startedAt).rounded())) }
     var distanceKm: Double { Double(distanceM) / 1000 }
@@ -260,16 +283,22 @@ final class RideRecorder {
     }
 
     /// Ends the ride and returns its log. Returns nil when nothing was being recorded for this ride.
-    func finish(rideId: UUID, endName: String, now: Date = .now) -> RideLog? {
+    func finish(rideId: UUID, endName: String, now: Date = .now,
+                participants: [RideParticipant]? = nil, stops: [RideStop]? = nil,
+                endCoord: Coord? = nil) -> RideLog? {
         guard let s = session, s.rideId == rideId else { return nil }
         let t = s.totals
-        let log = RideLog(
+        var log = RideLog(
             id: UUID(), rideId: s.rideId, title: s.title, startName: s.startName, endName: endName,
             startedAt: s.startedAt, endedAt: max(now, s.startedAt),
             distanceM: Int(t.distanceM.rounded()), movingS: Int(t.movingS.rounded()),
             maxSpeedKmh: (t.maxSpeed * 3.6 * 10).rounded() / 10,
             polyline: RideMath.encode(RideMath.compact(t.path)),
             riderCount: s.riderCount, isHost: s.isHost)
+        log.participants = participants
+        log.stops = stops
+        log.endLat = endCoord?.lat
+        log.endLon = endCoord?.lon
         session = nil
         try? FileManager.default.removeItem(at: sessionFile)
         logs.insert(log, at: 0)

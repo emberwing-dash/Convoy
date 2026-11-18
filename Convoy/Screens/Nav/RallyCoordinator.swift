@@ -1,21 +1,19 @@
-// RallyCoordinator.swift
-// Group positioning: finds the rider at the centre of the convoy, draws an invisible
-// circle around them (500 m radius on the road, 15 m when testing with 2–3 phones), and nudges
-// any rider who leaves it —
-// "slow down" when ahead, "catch up" when behind.
+// RallyCoordinator.swift — keeps the convoy together.
 //
-// It only *reads* positions: this device's GPS from `LocationService` and other riders
-// from `RideLiveLocationManager`. Live-location sharing and the map are untouched, and
-// the circle is never drawn.
+// Algorithm v2 ("gap chain", see docs/group-ride/ARCHITECTURE_AND_PLAN.md §3): riders are ordered by
+// distance along the planned route; wherever the gap between two consecutive riders is larger than
+// the split gap, the convoy is split into groups. The largest group (tie → the organiser's, then the
+// front-most) is the main group; riders in a group behind it are "behind", in front "ahead", and a
+// rider far to the side of everyone (parallel road) is "apart".
 //
-// Every phone runs the same maths on the same shared positions, so each rider's own phone
-// decides whether *they* are outside and alerts them (banner in the app, system notification
-// when the app is in the background). No extra GPS work is done: it reuses the location
-// stream navigation already has, and recomputes every few seconds.
+// Every phone runs the same maths on the same shared positions:
+//   • the rider concerned is told (banner + voice + time-sensitive notification),
+//   • the organiser is told who has dropped back,
+//   • everyone sees each rider's status in the Riders panel and on the map.
 //
-// Test vs production values: see `RallyProfile` below. Debug builds (run from Xcode onto the
-// test phones) use the close-quarters test values; Release builds (TestFlight / App Store)
-// always use the road values, so test values can never ship by accident.
+// Profiles: `.testing` (15 m — two phones a few metres apart) and `.road` (800 m). Release builds are
+// always `.road`. Debug builds remember the choice in a hidden developer setting (default `.testing`).
+// `PackGeometry.analyze` (v1 circle) is kept for reference and its tests.
 import Foundation
 import CoreLocation
 import SwiftUI
@@ -29,6 +27,8 @@ struct PackFix: Hashable, Sendable {
     let coord: Coord
     /// Course over ground in degrees (0 = north), or nil when unknown / standing still.
     let course: Double?
+    /// GPS horizontal accuracy in metres (nil = unknown, treated as exact).
+    var accuracy: Double? = nil
 }
 
 /// Where a rider sits relative to the pack.
@@ -165,7 +165,123 @@ enum PackGeometry {
     }
 }
 
-// MARK: - Coordinator (runs during a ride)
+// MARK: - Gap-chain analysis (v2, pure, unit-tested)
+
+/// A rider's place relative to the main group.
+enum PackStatus: Hashable, Sendable {
+    case withGroup
+    case behind(gap: Double)
+    case ahead(gap: Double)
+    /// Far from the group sideways (e.g. on a parallel road) rather than ahead or behind.
+    case apart(gap: Double)
+
+    var gap: Double {
+        switch self {
+        case .withGroup: return 0
+        case .behind(let g), .ahead(let g), .apart(let g): return g
+        }
+    }
+    var isWithGroup: Bool { if case .withGroup = self { return true } else { return false } }
+}
+
+struct PackChainResult: Sendable {
+    /// Riders from the back of the convoy to the front.
+    let order: [UUID]
+    /// Groups from back to front.
+    let groups: [[UUID]]
+    let mainGroupIndex: Int
+    let status: [UUID: PackStatus]
+    /// Distance along the route (or along the direction of travel) per rider, metres.
+    let progress: [UUID: Double]
+    let usedRoute: Bool
+}
+
+extension PackGeometry {
+    /// Splits the convoy wherever two consecutive riders are more than `gap` apart.
+    ///
+    /// - The gap between neighbours is the larger of the along-route difference and the straight
+    ///   line between them, so riders on a parallel road are not "together" just because they
+    ///   project onto the same point of the route.
+    /// - The main group is the largest group; ties go to the group with the organiser, then to the
+    ///   front-most group.
+    nonisolated static func chain(_ fixes: [PackFix], gap: Double,
+                                  route: [Coord] = [], cumulative: [Double] = [],
+                                  destination: Coord? = nil, organiserId: UUID? = nil,
+                                  routeLimit: Double = 3_000,
+                                  noiseFactor: Double = 0) -> PackChainResult? {
+        guard fixes.count >= 2 else { return nil }
+
+        // 1. Progress along the route when everyone is reasonably near it, else along the heading.
+        var routeS: [UUID: Double] = [:]
+        if route.count > 1 {
+            for f in fixes {
+                if let p = project(f.coord, onto: route, cumulative: cumulative), p.off <= routeLimit { routeS[f.id] = p.s }
+            }
+        }
+        let usedRoute = routeS.count == fixes.count
+        let centroid = Coord(lat: fixes.map(\.coord.lat).reduce(0, +) / Double(fixes.count),
+                             lon: fixes.map(\.coord.lon).reduce(0, +) / Double(fixes.count))
+        let heading = meanHeading(fixes.compactMap(\.course))
+            ?? destination.map { bearing(centroid, $0) }
+            ?? 0
+        var progress: [UUID: Double] = [:]
+        for f in fixes {
+            progress[f.id] = usedRoute ? routeS[f.id]! : alongTrack(f.coord, from: centroid, heading: heading)
+        }
+
+        // 2. Order back → front and split on big gaps.
+        let ordered = fixes.sorted {
+            let a = progress[$0.id]!, b = progress[$1.id]!
+            return a == b ? $0.id.uuidString < $1.id.uuidString : a < b
+        }
+        // GPS noise: two phones in the same spot can report positions tens of metres apart. The part
+        // of a gap that could be explained by both fixes' reported accuracy is not counted.
+        func separation(_ a: PackFix, _ b: PackFix) -> (total: Double, along: Double) {
+            let along = abs(progress[b.id]! - progress[a.id]!)
+            let raw = max(along, distance(a.coord, b.coord))
+            let ea = a.accuracy ?? 0, eb = b.accuracy ?? 0
+            let noise = noiseFactor * (ea * ea + eb * eb).squareRoot()
+            return (max(0, raw - noise), max(0, along - noise))
+        }
+        var groups: [[PackFix]] = [[ordered[0]]]
+        for i in 1..<ordered.count {
+            if separation(ordered[i - 1], ordered[i]).total > gap { groups.append([ordered[i]]) }
+            else { groups[groups.count - 1].append(ordered[i]) }
+        }
+
+        // 3. Main group.
+        var main = 0
+        for (i, g) in groups.enumerated() {
+            let best = groups[main]
+            let hasOrg = organiserId.map { id in g.contains { $0.id == id } } ?? false
+            let bestHasOrg = organiserId.map { id in best.contains { $0.id == id } } ?? false
+            if g.count > best.count || (g.count == best.count && hasOrg && !bestHasOrg)
+                || (g.count == best.count && hasOrg == bestHasOrg && i > main) {
+                main = i
+            }
+        }
+
+        // 4. Status per rider.
+        var status: [UUID: PackStatus] = [:]
+        let mainGroup = groups[main]
+        for (i, g) in groups.enumerated() {
+            for f in g {
+                if i == main { status[f.id] = .withGroup; continue }
+                // Gap to the nearest rider of the main group.
+                let nearest = mainGroup.map { separation(f, $0) }.min { $0.total < $1.total }!
+                if nearest.along < gap * 0.5 && nearest.total > gap {
+                    status[f.id] = .apart(gap: nearest.total)
+                } else {
+                    status[f.id] = i < main ? .behind(gap: nearest.total) : .ahead(gap: nearest.total)
+                }
+            }
+        }
+        return PackChainResult(order: ordered.map(\.id), groups: groups.map { $0.map(\.id) },
+                               mainGroupIndex: main, status: status, progress: progress, usedRoute: usedRoute)
+    }
+}
+
+// MARK: - Coordinator (runs for the whole ride session, whatever screen is open)
 
 @MainActor
 @Observable
@@ -175,92 +291,80 @@ final class RallyCoordinator {
 
     // MARK: Configuration
 
-    /// One switch for every tuning value. `.testing` is for 2–3 iPhones a few metres apart;
-    /// `.road` is for real rides. Debug builds use `.testing`, Release builds always `.road`.
-    /// To try road values in a Debug build, set `RallyProfile.active = .road`.
-    enum RallyProfile {
+    enum RallyProfile: String, CaseIterable {
         case testing, road
 
         #if DEBUG
-        static var active: RallyProfile = .testing
+        private static let key = "rally.profile.debug"
+        /// Debug builds: hidden developer setting (long-press the TEST chip on the map). Default: testing.
+        static var active: RallyProfile {
+            get { UserDefaults.standard.string(forKey: key).flatMap(RallyProfile.init(rawValue:)) ?? .testing }
+            set { UserDefaults.standard.set(newValue.rawValue, forKey: key) }
+        }
         #else
         static let active: RallyProfile = .road
         #endif
 
-        //                                             testing   road
-        var radius: Double              { pick(15,      500) }   // circle radius around the centre rider (m)
-        var reentryMargin: Double       { pick(3,       60) }    // must be this far back inside to re-arm (m)
-        var sustain: TimeInterval       { pick(3,       15) }    // outside this long before the first alert (s)
-        var rearm: TimeInterval         { pick(5,       20) }    // back inside this long before a new exit can alert (s)
-        var repeatCooldown: TimeInterval { pick(45,     300) }   // repeat while still outside at most this often (s)
-        var minimumGap: TimeInterval    { pick(10,      60) }    // never alert the same rider more often (s)
-        var tick: TimeInterval          { pick(2,       5) }     // recompute interval (s)
-        var staleAfter: TimeInterval    { pick(20,      45) }    // ignore other riders' positions older than this (s)
-        /// Our own fix is ignored when GPS accuracy is worse than this. It has to be well inside the
-        /// circle: with a 15 m circle, a 100 m-accuracy fix is pure noise and would fire
-        /// "catch up / slow down" while everyone stands still. Outdoors iPhones report ~5–15 m.
-        var maxAccuracy: Double         { pick(15,      80) }
+        //                                              testing   road
+        var splitGap: Double             { pick(25,      800) }   // neighbours further apart than this = split (m)
+        var rejoinMargin: Double         { pick(5,       150) }   // must be this much closer to count as rejoined (m)
+        var sustain: TimeInterval        { pick(3,       15) }    // apart this long before the first alert (s)
+        var rearm: TimeInterval          { pick(5,       20) }    // together this long before a new split can alert (s)
+        var repeatCooldown: TimeInterval { pick(45,      300) }   // repeat while still apart at most this often (s)
+        var minimumGap: TimeInterval     { pick(10,      60) }    // never alert about the same rider more often (s)
+        var tick: TimeInterval           { pick(2,       4) }     // recompute interval (s)
+        var maxAccuracy: Double          { pick(100,     150) }   // ignore fixes worse than this (m); smaller errors are allowed for (noiseFactor)
+        /// How much of the two riders' combined GPS error is discounted from a gap.
+        var noiseFactor: Double          { 0.7 }
 
+        var label: String { self == .testing ? "TEST \(Int(splitGap)) m" : "Road \(Int(splitGap)) m" }
         private func pick<T>(_ testing: T, _ road: T) -> T { self == .testing ? testing : road }
     }
 
-    private var profile: RallyProfile { RallyProfile.active }
-
-    /// Radius of the invisible circle around the centre rider.
-    var radiusMeters: Double { profile.radius }
-    /// Must be back inside by this much before a new exit counts — stops flicker at the edge.
-    /// Always strictly less than the radius, or re-entry could never re-arm.
-    var reentryMarginMeters: Double { min(profile.reentryMargin, radiusMeters * 0.5) }
-    /// Seconds a rider must stay outside before the first alert (rides out GPS spikes).
-    /// Never shorter than one recompute, so a single noisy tick can't alert.
-    var sustainSeconds: TimeInterval { max(profile.sustain, tickInterval) }
-    /// Seconds a rider must be back inside before a later exit can alert again.
-    var rearmSeconds: TimeInterval { profile.rearm }
-    /// While a rider stays outside, repeat the reminder at most this often.
-    var repeatCooldown: TimeInterval { profile.repeatCooldown }
-    /// Never alert the same rider more often than this, even after re-entering.
-    var minimumGap: TimeInterval { profile.minimumGap }
-    /// Recompute interval. Positions arrive every ~1.5 s.
-    var tickInterval: TimeInterval { profile.tick }
-    /// Ignore other riders whose last position is older than this.
-    var staleAfter: TimeInterval { profile.staleAfter }
-    /// Ignore our own fix when GPS accuracy is worse than this (never looser than the circle).
-    var maxAccuracyMeters: Double { min(profile.maxAccuracy, radiusMeters) }
+    /// Observable copy of the active profile, so the chip and Riders panel update when another
+    /// phone changes it.
+    private(set) var currentProfile: RallyProfile = RallyProfile.active
+    var profile: RallyProfile { currentProfile }
+    /// Positions older than this are ignored (same window as "Offline" on the map).
+    let staleAfter: TimeInterval = LiveFreshness.offlineAfter
 
     // MARK: Published state
 
-    /// Warning shown as a banner in `RideNavView`.
+    /// Banner shown on the ride map.
     var activeBanner: RallyWarning?
-    /// Latest classification of every rider (for the riders sheet / debugging; never drawn as a circle).
-    private(set) var lastResult: PackResult?
+    private(set) var lastResult: PackChainResult?
+    /// Status shown for every rider (with hysteresis, so it doesn't flicker).
+    private(set) var displayStatus: [UUID: PackStatus] = [:]
 
-    enum Direction: Hashable, Sendable { case ahead, behind }
+    enum Direction: Hashable, Sendable { case ahead, behind, apart }
 
     struct RallyWarning: Identifiable, Hashable {
+        enum Audience: Hashable { case me, organiser(names: [String]) }
         let id = UUID()
         let direction: Direction
-        let riderId: UUID
+        let audience: Audience
         let gapMeters: Double
         let firedAt: Date
     }
 
-    /// Per-rider alert state. Only this device's rider is ever alerted by this device.
+    /// Alert state per rider (me, and — on the organiser's phone — everyone else).
     private struct Track {
-        var outsideSince: Date?
-        var outsideDirection: Direction?
-        var insideSince: Date?
+        var apartSince: Date?
+        var direction: Direction?
+        var togetherSince: Date?
         var armed = true
         var lastAlert: Date = .distantPast
+        var shownApart = false
     }
 
     // MARK: Internal state
 
     private weak var app: AppState?
     private var rideId: UUID?
+    private var organiserId: UUID?
     private var tickTask: Task<Void, Never>?
     private var bannerTask: Task<Void, Never>?
-    private var me = Track()
-    /// Light smoothing of positions so one bad GPS sample can't flip a rider outside.
+    private var tracks: [UUID: Track] = [:]
     private var smoothed: [UUID: Coord] = [:]
     private var route: [Coord] = []
     private var cumulative: [Double] = []
@@ -273,9 +377,9 @@ final class RallyCoordinator {
         self.app = app
         self.rideId = rideId
         loadRoute()
-        let interval = tickInterval
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
+                let interval = self?.profile.tick ?? 4
                 try? await Task.sleep(for: .seconds(interval))
                 guard !Task.isCancelled else { return }
                 self?.tick()
@@ -286,9 +390,19 @@ final class RallyCoordinator {
     func stop() {
         tickTask?.cancel(); tickTask = nil
         bannerTask?.cancel(); bannerTask = nil
-        rideId = nil; app = nil
-        activeBanner = nil; lastResult = nil
-        me = Track(); smoothed = [:]; route = []; cumulative = []
+        rideId = nil; app = nil; organiserId = nil
+        activeBanner = nil; lastResult = nil; displayStatus = [:]
+        tracks = [:]; smoothed = [:]; route = []; cumulative = []
+    }
+
+    /// Switches the profile (Debug builds only) and starts the hysteresis fresh.
+    func setProfile(_ p: RallyProfile) {
+        #if DEBUG
+        guard p != currentProfile else { return }
+        RallyProfile.active = p
+        currentProfile = p
+        tracks = [:]; displayStatus = [:]; activeBanner = nil
+        #endif
     }
 
     func dismissBanner() {
@@ -298,6 +412,7 @@ final class RallyCoordinator {
 
     private func loadRoute() {
         guard let app, let rideId, let ride = app.rides.first(where: { $0.id == rideId }) else { return }
+        organiserId = ride.organiserId ?? (ride.organiser == "you" ? app.backendUserId : nil)
         route = ride.plan.selected?.coords ?? ride.plan.routes[ride.plan.style]?.coords ?? []
         cumulative = PackGeometry.cumulativeLengths(route)
     }
@@ -306,89 +421,155 @@ final class RallyCoordinator {
 
     private func tick() {
         guard let app, let rideId else { return }
-        if route.isEmpty { loadRoute() }
+        if route.isEmpty || organiserId == nil { loadRoute() }
         guard let myId = app.backendUserId else { return }
+        let p = profile
+        let now = Date()
+        let live = RideLiveLocationManager.shared
 
         var fixes: [PackFix] = []
-        let now = Date()
-
         if let loc = LocationService.shared.currentLocation,
-           loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= maxAccuracyMeters,
+           loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= p.maxAccuracy,
            now.timeIntervalSince(loc.timestamp) < staleAfter {
             fixes.append(PackFix(id: myId, name: app.displayName, coord: smooth(myId, Coord(loc.coordinate)),
-                                 course: loc.course >= 0 && loc.speed > 1.5 ? loc.course : nil))
+                                 course: loc.course >= 0 && loc.speed > 1.5 ? loc.course : nil,
+                                 accuracy: loc.horizontalAccuracy))
         }
-        for (uid, r) in RideLiveLocationManager.shared.otherRidersLocations where uid != myId {
-            guard now.timeIntervalSince1970 - r.timestamp < staleAfter else { continue }
+        for (uid, r) in live.otherRidersLocations where uid != myId {
+            guard let age = live.secondsSinceHeard(uid), age < staleAfter else { continue }
+            if let acc = r.accuracy, acc > p.maxAccuracy { continue }
             fixes.append(PackFix(id: uid, name: r.name, coord: smooth(uid, Coord(lat: r.latitude, lon: r.longitude)),
-                                 course: r.speedKmh > 5 ? r.heading : nil))
+                                 course: r.course ?? (r.speedKmh > 5 ? r.heading : nil),
+                                 accuracy: r.accuracy))
         }
 
         let ride = app.rides.first { $0.id == rideId }
         guard fixes.contains(where: { $0.id == myId }),
-              let result = PackGeometry.analyze(fixes, radius: radiusMeters, route: route, cumulative: cumulative,
-                                                destination: ride?.plan.endCoord) else {
+              let result = PackGeometry.chain(fixes, gap: p.splitGap, route: route, cumulative: cumulative,
+                                              destination: ride?.plan.endCoord, organiserId: organiserId,
+                                              noiseFactor: p.noiseFactor) else {
             lastResult = nil
-            me.outsideSince = nil; me.outsideDirection = nil
+            displayStatus = [:]
+            for id in tracks.keys { tracks[id]?.apartSince = nil; tracks[id]?.direction = nil }
             return
         }
         lastResult = result
-        evaluateMe(result: result, myId: myId, now: now)
+
+        // Hysteresis for every rider (display), alerts for me and — if I'm the organiser — others.
+        var display: [UUID: PackStatus] = [:]
+        var organiserAlerts: [(name: String, direction: Direction, gap: Double)] = []
+        let names = Dictionary(fixes.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        for (id, raw) in result.status {
+            let (shown, fire) = evaluate(id: id, raw: raw, now: now, profile: p)
+            display[id] = shown
+            guard let fire else { continue }
+            if id == myId {
+                deliverToMe(direction: fire.direction, gap: fire.gap)
+            } else if organiserId == myId {
+                organiserAlerts.append((names[id] ?? "A rider", fire.direction, fire.gap))
+            }
+        }
+        displayStatus = display
+        if !organiserAlerts.isEmpty { deliverToOrganiser(organiserAlerts) }
     }
 
     private func smooth(_ id: UUID, _ c: Coord) -> Coord {
         guard let prev = smoothed[id], PackGeometry.distance(prev, c) < 250 else { smoothed[id] = c; return c }
-        // A big jump is taken as-is (new ride, tunnel exit); small ones are blended.
+        // A big jump is taken as-is (tunnel exit, new ride); small ones are blended.
         let s = Coord(lat: prev.lat * 0.4 + c.lat * 0.6, lon: prev.lon * 0.4 + c.lon * 0.6)
         smoothed[id] = s
         return s
     }
 
-    /// Hysteresis + cooldown for this device's rider.
-    private func evaluateMe(result: PackResult, myId: UUID, now: Date) {
-        let d = result.distance[myId] ?? 0
-        let raw = result.position[myId] ?? .inside
-        let direction: Direction? = raw == .ahead ? .ahead : raw == .behind ? .behind : nil
+    /// Hysteresis + cooldown for one rider. Returns what to show and, when due, an alert to fire.
+    private func evaluate(id: UUID, raw: PackStatus, now: Date, profile p: RallyProfile)
+        -> (shown: PackStatus, fire: (direction: Direction, gap: Double)?) {
+        var t = tracks[id] ?? Track()
+        defer { tracks[id] = t }
+        let direction: Direction? = {
+            switch raw {
+            case .withGroup: return nil
+            case .behind: return .behind
+            case .ahead: return .ahead
+            case .apart: return .apart
+            }
+        }()
 
-        // Back inside (with a margin) → re-arm after a short while.
-        if direction == nil || d <= radiusMeters - reentryMarginMeters {
-            if direction == nil && d > radiusMeters - reentryMarginMeters { return } // in the margin band: hold state
-            me.outsideSince = nil; me.outsideDirection = nil
-            if me.insideSince == nil { me.insideSince = now }
-            if now.timeIntervalSince(me.insideSince!) >= rearmSeconds { me.armed = true }
-            if activeBanner != nil { dismissBanner() }
-            return
+        guard let direction else {
+            // Together again — but only "rejoined" once clearly back (margin), else hold the last state.
+            t.apartSince = nil
+            if t.togetherSince == nil { t.togetherSince = now }
+            if now.timeIntervalSince(t.togetherSince!) >= p.rearm { t.armed = true }
+            if t.shownApart, now.timeIntervalSince(t.togetherSince!) < 2 * p.tick {
+                return (displayStatus[id] ?? .withGroup, nil)
+            }
+            t.shownApart = false
+            return (.withGroup, nil)
+        }
+        // Inside the margin band just past the split gap: keep the previous state.
+        if raw.gap < p.splitGap + p.rejoinMargin, !t.shownApart, t.apartSince == nil {
+            return (.withGroup, nil)
         }
 
-        guard let direction else { return }
-        me.insideSince = nil
-        if me.outsideDirection != direction { me.outsideDirection = direction; me.outsideSince = now }
-        guard let since = me.outsideSince, now.timeIntervalSince(since) >= sustainSeconds else { return }
+        t.togetherSince = nil
+        if t.direction != direction { t.direction = direction; t.apartSince = t.apartSince ?? now }
+        if t.apartSince == nil { t.apartSince = now }
+        guard now.timeIntervalSince(t.apartSince!) >= max(p.sustain, p.tick) else {
+            return (t.shownApart ? raw : .withGroup, nil)
+        }
+        t.shownApart = true
 
-        let sinceLast = now.timeIntervalSince(me.lastAlert)
-        let shouldFire = (me.armed && sinceLast >= minimumGap) || sinceLast >= repeatCooldown
-        guard shouldFire else { return }
-        me.armed = false
-        me.lastAlert = now
-        fire(direction: direction, riderId: myId, gap: d)
+        let sinceLast = now.timeIntervalSince(t.lastAlert)
+        let shouldFire = (t.armed && sinceLast >= p.minimumGap) || sinceLast >= p.repeatCooldown
+        guard shouldFire else { return (raw, nil) }
+        t.armed = false
+        t.lastAlert = now
+        return (raw, (direction, raw.gap))
     }
 
     // MARK: Delivery
 
-    private func fire(direction: Direction, riderId: UUID, gap: Double) {
-        let warning = RallyWarning(direction: direction, riderId: riderId, gapMeters: gap, firedAt: .now)
+    private func deliverToMe(direction: Direction, gap: Double) {
+        show(RallyWarning(direction: direction, audience: .me, gapMeters: gap, firedAt: .now))
+        let kind: ConvoyNotificationKind = switch direction {
+        case .ahead: .rallyAhead(meters: Int(gap))
+        case .behind: .rallyBehind(meters: Int(gap))
+        case .apart: .rallyApart(meters: Int(gap))
+        }
+        speak(direction == .behind ? "You've fallen behind the group." :
+              direction == .ahead ? "You're ahead of the group. Ease off." : "You've split from the group.")
+        Task { await NotificationService.shared.post(kind, id: "rally_me") }
+    }
+
+    private func deliverToOrganiser(_ alerts: [(name: String, direction: Direction, gap: Double)]) {
+        let behind = alerts.contains { $0.direction == .behind }
+        let gap = alerts.map(\.gap).max() ?? 0
+        let names = alerts.map(\.name)
+        // My own alert wins the banner if both fire in the same tick.
+        if activeBanner?.audience != .me || activeBanner == nil {
+            show(RallyWarning(direction: behind ? .behind : alerts[0].direction,
+                              audience: .organiser(names: names), gapMeters: gap, firedAt: .now))
+        }
+        speak(names.count == 1 ? "\(names[0]) is \(behind ? "falling behind" : "away from the group")."
+                               : "\(names.count) riders are away from the group.")
+        Task { await NotificationService.shared.post(.rallyOrganiser(names: names, behind: behind, meters: Int(gap)),
+                                                     id: "rally_organiser") }
+    }
+
+    private func show(_ warning: RallyWarning) {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { activeBanner = warning }
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
         bannerTask?.cancel()
         bannerTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(10))
             guard !Task.isCancelled, self?.activeBanner?.id == warning.id else { return }
             self?.dismissBanner()
         }
-        // System notification: shows on the lock screen when the app is in the background,
-        // and as a banner in the foreground. One fixed id per direction, so a repeat replaces
-        // the previous alert instead of stacking duplicates.
-        let kind: ConvoyNotificationKind = direction == .ahead ? .rallyAhead(meters: Int(gap)) : .rallyBehind(meters: Int(gap))
-        Task { await NotificationService.shared.post(kind, id: "rally_\(direction == .ahead ? "ahead" : "behind")") }
+    }
+
+    private func speak(_ text: String) {
+        guard UIApplication.shared.applicationState == .active || ActiveRideSession.shared.isActive else { return }
+        NavigationVoice.shared.speak(text)
     }
 }
 
@@ -398,35 +579,71 @@ struct RallyBannerView: View {
     let warning: RallyCoordinator.RallyWarning
     var onDismiss: () -> Void
 
-    private var ahead: Bool { warning.direction == .ahead }
+    private var hue: Color {
+        switch warning.direction {
+        case .behind: return Hue.honey
+        case .ahead: return Hue.sky
+        case .apart: return Hue.rose
+        }
+    }
+    private var symbol: String {
+        if case .organiser = warning.audience { return "person.2.badge.gearshape.fill" }
+        switch warning.direction {
+        case .behind: return "hare.fill"
+        case .ahead: return "gauge.with.dots.needle.33percent"
+        case .apart: return "arrow.triangle.branch"
+        }
+    }
     private var gapText: String {
-        warning.gapMeters < 1000 ? "\(Int(warning.gapMeters / 10) * 10) m" : String(format: "%.1f km", warning.gapMeters / 1000)
+        warning.gapMeters < 1000 ? "\(max(10, Int(warning.gapMeters / 10) * 10)) m"
+                                 : String(format: "%.1f km", warning.gapMeters / 1000)
+    }
+    private var title: String {
+        switch warning.audience {
+        case .me:
+            switch warning.direction {
+            case .behind: return "Catch up — you're behind"
+            case .ahead: return "Slow down — you're ahead"
+            case .apart: return "You've split from the group"
+            }
+        case .organiser(let names):
+            if names.count > 1 { return "\(names.count) riders are away from the group" }
+            return "\(names.first ?? "A rider") is \(warning.direction == .behind ? "falling behind" : "away from the group")"
+        }
+    }
+    private var detail: String {
+        switch warning.audience {
+        case .me:
+            switch warning.direction {
+            case .behind: return "\(gapText) behind the group. Close the gap when it's safe."
+            case .ahead: return "\(gapText) ahead of the group. Ease off so they can regroup."
+            case .apart: return "\(gapText) from the group. Check you're on the route."
+            }
+        case .organiser(let names):
+            let who = names.count > 1 ? names.joined(separator: ", ") + " · " : ""
+            return "\(who)\(gapText) from the group. Consider waiting at a safe spot."
+        }
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image(systemName: ahead ? "gauge.with.dots.needle.33percent" : "hare.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(CV.onAccent)
-                .frame(width: 34, height: 34)
-                .background(CV.warning, in: Circle())
+            IconBadge(symbol: symbol, color: hue, size: 40)
             VStack(alignment: .leading, spacing: 2) {
-                Text(ahead ? "Slow down — you're ahead" : "Catch up — you're behind")
-                    .cvText(14, .semibold, color: CV.text, inter: true)
-                Text(ahead ? "\(gapText) from the middle of the group. Ease off so they can regroup."
-                           : "\(gapText) from the middle of the group. Close the gap when it's safe.")
-                    .cvText(12, color: CV.muted, lineHeight: 16, inter: true)
+                Text(title).cvText(14, .semibold, color: CV.text, inter: true).lineLimit(2)
+                Text(detail).cvText(12, color: CV.muted, lineHeight: 16, inter: true).lineLimit(2)
             }
             Spacer(minLength: 4)
             Button(action: onDismiss) {
                 Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(CV.muted).frame(width: 28, height: 28)
-            }.buttonStyle(.plain)
+                    .foregroundStyle(CV.muted).frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
             .accessibilityLabel("Dismiss")
         }
         .padding(12)
-        .background(CV.surface.opacity(0.96), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(CV.warning.opacity(0.45), lineWidth: 1))
+        .pxCard(radius: 18, tint: hue)
+        .background(Color(hex: 0x131316), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: .black.opacity(0.4), radius: 14, y: 6)
     }
 }

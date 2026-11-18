@@ -62,8 +62,8 @@ struct DiscoverView: View {
                 Text("Discover").cvText(34, .bold, tracking: -0.8, inter: true)
                 Spacer()
                 HStack(spacing: 10) {
-                    RoundIconButton(symbol: "map", size: 40) { app.push(.discoverMap) }.accessibilityLabel("Explore on map")
-                    RoundIconButton(symbol: "bookmark", size: 40) { app.push(.discoverSaved) }.accessibilityLabel("Saved")
+                    RoundIconButton(symbol: "map.fill", size: 40, tint: Hue.periwinkle) { app.push(.discoverMap) }.accessibilityLabel("Explore on map")
+                    RoundIconButton(symbol: "bookmark.fill", size: 40, tint: Hue.honey) { app.push(.discoverSaved) }.accessibilityLabel("Saved")
                 }
             }
             Text("Roads, viewpoints and places riders love — with real motorcycle distances.")
@@ -80,13 +80,13 @@ struct DiscoverView: View {
     private var tiles: some View {
         let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
         return LazyVGrid(columns: cols, spacing: 10) {
-            CategoryTile(title: "Routes", subtitle: "Journeys worth riding", symbol: "point.topleft.down.to.point.bottomright.curvepath",
+            CategoryTile(title: "Routes", subtitle: "Journeys worth riding", symbol: "point.topleft.down.to.point.bottomright.curvepath", tint: Hue.periwinkle,
                          art: LandingArt(assets: ["dm_kolli", "discover_routes"], fallback: .routes)) { app.push(.discoverRoutes(nil)) }
-            CategoryTile(title: "Scenic", subtitle: "Views, lakes and forest roads", symbol: "mountain.2",
+            CategoryTile(title: "Scenic", subtitle: "Views, lakes and forest roads", symbol: "mountain.2.fill", tint: Hue.sage,
                          art: LandingArt(assets: ["dm_munnar", "discover_scenic"], fallback: .scenic)) { app.push(.scenic) }
-            CategoryTile(title: "Places", subtitle: "Destinations near and far", symbol: "mappin.circle",
+            CategoryTile(title: "Places", subtitle: "Destinations near and far", symbol: "mappin.and.ellipse", tint: Hue.rose,
                          art: LandingArt(assets: ["discover_places", "dm_shore"], fallback: .places)) { app.push(.discoverPlaces) }
-            CategoryTile(title: "Surprise me", subtitle: "Swipe to find somewhere new", symbol: "sparkles",
+            CategoryTile(title: "Surprise me", subtitle: "Swipe to find somewhere new", symbol: "sparkles", tint: Hue.honey,
                          art: LandingArt(assets: ["discover_surprise", "dm_sonamarg"], fallback: .surprise)) { app.push(.surprise) }
         }
     }
@@ -125,7 +125,7 @@ struct DiscoverView: View {
                     Text("Every place and route around you").cvText(12, color: CV.muted, inter: true)
                 }
                 Spacer()
-                Image(systemName: "map").foregroundStyle(CV.text).frame(width: 36, height: 36).background(CV.glassFill, in: Circle())
+                IconBadge(symbol: "map.fill", color: Hue.periwinkle, size: 38)
             }
             .padding(16)
             .background(MapThumb(center: store.origin?.coord, pin: false).opacity(0.35))
@@ -153,7 +153,7 @@ struct DiscoverView: View {
 
     private var locationCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: "location.slash").foregroundStyle(CV.text)
+            IconBadge(symbol: "location.slash.fill", color: Hue.periwinkle, size: 40)
             Text("Pick a city to see what's near it").cvText(16, .semibold, inter: true)
             Text("We need a start to measure ride times. Everything else still works — famous places, collections and Surprise me (Anywhere).")
                 .cvText(13, color: CV.muted, inter: true)

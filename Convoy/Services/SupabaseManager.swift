@@ -70,6 +70,13 @@ final class SupabaseManager {
         try await client.from("profiles").insert(profile).execute()
     }
 
+    /// Replaces your profile photo (only your own row can be changed).
+    func updateAvatar(userId: UUID, avatarData: Data?) async throws {
+        nonisolated struct Patch: Encodable, Sendable { let avatar_data: String? }
+        try await client.from("profiles").update(Patch(avatar_data: avatarData?.base64EncodedString()))
+            .eq("id", value: userId).execute()
+    }
+
     func fetchProfile(username: String) async throws -> ProfileRow? {
         let clean = username.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "@", with: "")
@@ -874,8 +881,9 @@ final class SupabaseManager {
 
     /// Rides the user is an accepted member of. Loud on member-fetch errors.
     func fetchUserRides(userId: UUID) async throws -> [Ride] {
+        // Rides you're going on, plus rides you've been invited to (shown as invitations until you accept).
         let memberships: [RideMemberRow] = try await client.from("ride_members")
-            .select().eq("user_id", value: userId).eq("status", value: "accepted")
+            .select().eq("user_id", value: userId).in("status", values: ["accepted", "invited"])
             .execute().value
         let rideIds = memberships.map { $0.ride_id }
         guard !rideIds.isEmpty else { return [] }
@@ -1286,7 +1294,8 @@ extension RideRow {
             displayDate: display_date ?? "", displayTime: display_time ?? "",
             organiser: organiserName,
             organiserId: organiser_id,
-            rsvp: isOrganiser ? .organizing : .going,
+            rsvp: isOrganiser ? .organizing
+                : (members.first { $0.user_id == effectiveUserId }?.status == "invited" ? .invited(by: organiserName) : .going),
             lockText: "Start ride", ridersGoing: max(1, riders.count),
             listMeta: "\(distance ?? "") · \(from_location ?? "") → \(to_location ?? "")",
             code: code

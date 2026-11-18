@@ -115,7 +115,8 @@ final class SocialStore {
         if !force, let at = feedLoadedAt, Date().timeIntervalSince(at) < 60, !feed.isEmpty { return }
         if feed.isEmpty { feedState = .loading }
         do {
-            let page = try await repo.feed(before: nil)
+            var page = try await repo.feed(before: nil)
+            await attachCards(&page)
             feed = page
             feedHasMore = page.count == 20
             feedState = .loaded
@@ -128,7 +129,8 @@ final class SocialStore {
     func loadMoreFeed() async {
         guard feedHasMore, feedState != .loading, let last = feed.last else { return }
         do {
-            let page = try await repo.feed(before: last.createdAt)
+            var page = try await repo.feed(before: last.createdAt)
+            await attachCards(&page)
             let known = Set(feed.map(\.id))
             feed += page.filter { !known.contains($0.id) }
             feedHasMore = page.count == 20
@@ -164,14 +166,11 @@ final class SocialStore {
 
     // MARK: Open rides
 
-    func postOpenRide(ride: Ride, caption: String, maxRiders: Int) async throws {
-        let authId = try await SupabaseManager.shared.ensureAuthenticatedUser()
-        do {
-            _ = try await SupabaseManager.shared.createRide(ride, userId: authId)
-        } catch {
-            print("[SocialStore] Ensure ride in Supabase note: \(error)")
-        }
-        _ = try await repo.postOpenRide(rideId: ride.id, caption: caption, maxRiders: maxRiders)
+    /// Posts a ride you planned. `app` makes sure the server has it under your account first, so whoever
+    /// made the ride can always post it (see `AppState.ensureOwnRideOnServer`).
+    func postOpenRide(ride: Ride, caption: String, maxRiders: Int, app: AppState) async throws {
+        let mine = try await app.ensureOwnRideOnServer(ride)
+        _ = try await repo.postOpenRide(rideId: mine.id, caption: caption, maxRiders: maxRiders)
         await loadFeed(force: true)
     }
 
@@ -368,6 +367,25 @@ final class SocialStore {
     }
 
     /// Uploads (if needed) and posts a recorded ride to the Crew feed.
+    /// Fills in the designed card images for a page of posts.
+    private func attachCards(_ posts: inout [FeedPost]) async {
+        let cards = await repo.postCards(ids: posts.filter { $0.kind == .rideLog }.map(\.id))
+        for i in posts.indices { if let url = cards[posts[i].id] { posts[i].cardURL = url } }
+    }
+
+    /// Attaches the card designed in Share Studio to the rider's post of this ride.
+    func attachCard(to log: RideLog, png: Data) async throws {
+        guard let postId = recorder.logs.first(where: { $0.id == log.id })?.postId ?? log.postId else {
+            throw SocialError(message: "Post the ride first.")
+        }
+        // The storage folder must be the signed-in user's own id (bucket policy).
+        guard let me = try? await SupabaseManager.shared.client.auth.session.user.id else {
+            throw SocialError(message: "Sign in again to post your card.")
+        }
+        let url = try await repo.attachCard(postId: postId, png: png, userId: me)
+        for i in feed.indices where feed[i].id == postId { feed[i].cardURL = url }
+    }
+
     func share(_ log: RideLog, caption: String) async throws -> RideLog {
         _ = try? await SupabaseManager.shared.ensureAuthenticatedUser()
 

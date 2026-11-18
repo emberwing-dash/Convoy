@@ -150,7 +150,15 @@ struct HomeView: View {
             if let next {
                 sectionTitle(next.departs > .now ? "Up next" : "Ready to roll")
                     .padding(.top, 26)
-                HeroRideCard(ride: next) { app.push(.rideDetails(next.id)) }
+                HeroRideCard(ride: next) {
+                    // A ride in progress opens straight onto the live map.
+                    if ActiveRideSession.shared.isActive, ActiveRideSession.shared.rideId == next.id {
+                        ActiveRideSession.shared.markFeedSeen()
+                        app.push(.rideNav)
+                    } else {
+                        app.push(.rideDetails(next.id))
+                    }
+                }
                     .padding(.top, 12)
             }
 
@@ -420,7 +428,9 @@ struct HeroRideCard: View {
                         .background(Circle().fill(CV.surface))
                 }
             }
-            Text(ride.isSolo ? "Just you so far · invite your crew" : "\(ride.acceptedRiders.count) riders · by \(ride.organiser)")
+            Text(ride.isSolo
+                 ? (ride.invitedRiders.isEmpty ? "Just you so far · invite your crew" : "\(ride.invitedRiders.count) invited · waiting to accept")
+                 : "\(ride.acceptedRiders.count) riders · by \(ride.organiser)")
                 .cvText(13, .medium, color: .white.opacity(0.75), inter: true).lineLimit(1)
             Spacer(minLength: 8)
             Image(systemName: "arrow.up.right")
@@ -435,13 +445,15 @@ struct HeroRideCard: View {
 /// The live part of the hero card: a ticking countdown before departure,
 /// a "ride day" state once the start time has passed, and a calm note for older rides.
 struct RideCountdownPanel: View {
+    @Environment(AppState.self) private var app
     let ride: Ride
     let now: Date
 
     var body: some View {
         let s = Int(ride.departs.timeIntervalSince(now))
         Group {
-            if s > 0 { countdown(s) }
+            if ActiveRideSession.shared.isActive, ActiveRideSession.shared.rideId == ride.id { ridingNow }
+            else if s > 0 { countdown(s) }
             else if now.timeIntervalSince(ride.departs) < 24 * 3600 || Calendar.current.isDateInToday(ride.departs) { rideDay(-s) }
             else { overdue }
         }
@@ -506,6 +518,43 @@ struct RideCountdownPanel: View {
             .background(CV.accent, in: Capsule())
         }
         .padding(.horizontal, 14).frame(height: 68), tint: CV.accent)
+    }
+
+    /// The ride is in progress on this phone: live status and a way back to the map.
+    private var ridingNow: some View {
+        let session = ActiveRideSession.shared
+        let status = session.trackingStatus
+        let live = RideLiveLocationManager.shared.visibleRiders.count + 1
+        let me = app.backendUserId.flatMap { RallyCoordinator.shared.displayStatus[$0] }
+        let detail: String = {
+            if status.isProblem { return status.label }
+            if let me, let tag = RiderStatusTag.text(me) { return "You're \(tag.lowercased())" }
+            if status == .gpsOnly { return "Riding · location on this phone only" }
+            return "\(live) rider\(live == 1 ? "" : "s") live on the map"
+        }()
+        let hue = status.isProblem ? status.hue : (me.map { RiderStatusTag.hue($0) } ?? Hue.sage)
+        return glass(HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(hue.opacity(0.25)).frame(width: 40, height: 40)
+                Image(systemName: status.isProblem ? status.symbol : "location.fill")
+                    .font(.system(size: 15, weight: .bold)).foregroundStyle(hue)
+                    .symbolEffect(.pulse, isActive: !status.isProblem)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Riding now").cvText(17, .bold, color: .white, tracking: -0.2, inter: true)
+                Text(detail).cvText(12, .medium, color: status.isProblem ? hue : .white.opacity(0.7), inter: true)
+                    .lineLimit(1).minimumScaleFactor(0.85)
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 6) {
+                Image(systemName: "map.fill").font(.system(size: 11, weight: .bold))
+                Text("Open map").cvText(14, .bold, color: CV.onAccent, inter: true)
+            }
+            .foregroundStyle(CV.onAccent)
+            .padding(.horizontal, 14).frame(height: 40)
+            .background(Hue.sage, in: Capsule())
+        }
+        .padding(.horizontal, 14).frame(height: 68), tint: hue)
     }
 
     private var overdue: some View {

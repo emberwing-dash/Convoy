@@ -4,6 +4,7 @@
 // an XP strip into the level screen; achievements, garage, riding stats, Medical ID (soon),
 // recent rides and account. Graphite glass cards with a soft amber–ember accent.
 import SwiftUI
+import PhotosUI
 
 struct ProfileView: View {
     @Environment(AppState.self) private var app
@@ -11,6 +12,11 @@ struct ProfileView: View {
     @State private var garage = GarageStore.shared
     @State private var showSignOutConfirm = false
     @State private var showAddBike = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var pickingPhoto = false
+    @State private var photoToCrop: UIImage?
+    @State private var savingPhoto = false
+    @State private var photoError: String?
     @State private var scrollY: CGFloat = 0
 
     private var summary: LevelSummary {
@@ -74,6 +80,26 @@ struct ProfileView: View {
             await app.loadCrews()
         }
         .sheet(isPresented: $showAddBike) { AddBikeFlowView { b in garage.addBike(b) } }
+        .photosPicker(isPresented: $pickingPhoto, selection: $photoItem, matching: .images)
+        .onChange(of: photoItem) { _, item in
+            guard let item else { return }
+            Task {
+                if let d = try? await item.loadTransferable(type: Data.self), let img = UIImage(data: d) {
+                    photoToCrop = img
+                }
+                photoItem = nil
+            }
+        }
+        .sheet(isPresented: Binding(get: { photoToCrop != nil }, set: { if !$0 { photoToCrop = nil } })) {
+            if let photoToCrop {
+                ImageCropAdjustView(originalImage: photoToCrop,
+                                    onCrop: { _, data in self.photoToCrop = nil; savePhoto(data) },
+                                    onCancel: { self.photoToCrop = nil })
+            }
+        }
+        .alert("Photo not synced", isPresented: Binding(get: { photoError != nil }, set: { if !$0 { photoError = nil } })) {
+            Button("OK", role: .cancel) { photoError = nil }
+        } message: { Text(photoError ?? "") }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .background(SwipeBackEnabler())
@@ -136,6 +162,7 @@ struct ProfileView: View {
                 Button { app.push(.level) } label: { avatar }
                     .buttonStyle(PressScale())
                     .accessibilityLabel("Level \(summary.level). Open level")
+                    .overlay(alignment: .bottomTrailing) { editPhotoButton }
                 Spacer()
                 HStack(spacing: 8) {
                     ShareLink(item: shareText) {
@@ -152,6 +179,32 @@ struct ProfileView: View {
             .offset(y: 30)
         }
         .padding(.bottom, 30)
+    }
+
+    /// Small pencil on the avatar: pick a photo, crop it, save it.
+    private var editPhotoButton: some View {
+        Button { pickingPhoto = true } label: {
+            ZStack {
+                if savingPhoto { ProgressView().controlSize(.small).tint(CV.onAccent) }
+                else { Image(systemName: "pencil").font(.system(size: 13, weight: .bold)).foregroundStyle(CV.onAccent) }
+            }
+            .frame(width: 32, height: 32)
+            .background(PX.accent, in: Circle())
+            .overlay(Circle().strokeBorder(Color.black, lineWidth: 3))
+        }
+        .buttonStyle(PressScale())
+        .disabled(savingPhoto)
+        .offset(x: 2, y: 2)
+        .accessibilityLabel("Change profile photo")
+    }
+
+    private func savePhoto(_ data: Data) {
+        savingPhoto = true
+        Task {
+            let ok = await app.updateAvatar(data)
+            savingPhoto = false
+            if !ok { photoError = "Your new photo is saved on this phone, but it couldn't be sent to your profile. Check your connection and try again." }
+        }
     }
 
     /// Avatar on a black rim; the warm arc around it is progress to the next level.

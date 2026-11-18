@@ -38,6 +38,16 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     var locationError: String?
     var isTracking = false
 
+    // MARK: Ride mode (owned by ActiveRideSession)
+    /// True while a ride session owns GPS: background updates on, screens can't stop or downgrade it.
+    private(set) var rideMode = false
+    /// iOS paused updates (should not happen in ride mode, but reported honestly if it does).
+    private(set) var isPausedBySystem = false
+    /// Called on the main actor with every new fix while a ride session is active.
+    @ObservationIgnored var onRideLocation: ((CLLocation) -> Void)?
+    /// Keeps When-In-Use location running in the background (iOS 17+) and shows the blue indicator.
+    @ObservationIgnored private var backgroundSession: CLBackgroundActivitySession?
+
     // Route progress
     private(set) var routePolyline: [CLLocationCoordinate2D] = []
     private(set) var routeProgressIndex: Int = 0
@@ -114,6 +124,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     func startTracking() {
+        guard !rideMode else { return }   // a ride owns GPS: never downgrade it from another screen
         requestPermission()
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = 5
@@ -123,6 +134,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     func startNavigationTracking() {
+        guard !rideMode else { return }
         requestPermission()
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.distanceFilter = 2
@@ -132,10 +144,52 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     func stopTracking() {
+        guard !rideMode else { return }   // only the ride session may stop ride GPS
         manager.stopUpdatingLocation()
         manager.stopUpdatingHeading()
         isTracking = false
     }
+
+    /// Ride GPS: navigation accuracy, keeps running when the phone is locked or another app is open
+    /// (UIBackgroundModes `location` + `allowsBackgroundLocationUpdates` + a background activity
+    /// session). iOS can still stop it if the user turns location off or force-quits the app.
+    func beginRideTracking() {
+        requestPermission()
+        rideMode = true
+        isPausedBySystem = false
+        manager.activityType = .automotiveNavigation
+        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        // Every fix (~1 per second), also while standing still: a rider stopped at a light must keep
+        // sending heartbeats or the group would see them go offline. Sending is throttled elsewhere.
+        manager.distanceFilter = kCLDistanceFilterNone
+        manager.pausesLocationUpdatesAutomatically = false
+        manager.allowsBackgroundLocationUpdates = true
+        manager.showsBackgroundLocationIndicator = true
+        if backgroundSession == nil { backgroundSession = CLBackgroundActivitySession() }
+        manager.startUpdatingLocation()
+        manager.startUpdatingHeading()
+        isTracking = true
+    }
+
+    /// Ends ride GPS and turns background updates off again.
+    func endRideTracking() {
+        guard rideMode else { return }
+        rideMode = false
+        onRideLocation = nil
+        backgroundSession?.invalidate()
+        backgroundSession = nil
+        manager.allowsBackgroundLocationUpdates = false
+        manager.showsBackgroundLocationIndicator = false
+        manager.pausesLocationUpdatesAutomatically = true
+        manager.activityType = .other
+        manager.stopUpdatingLocation()
+        manager.stopUpdatingHeading()
+        isTracking = false
+        isPausedBySystem = false
+    }
+
+    /// Whether precise location is available (needed for useful pack alerts).
+    var hasPreciseLocation: Bool { manager.accuracyAuthorization == .fullAccuracy }
 
     // MARK: - Route progress
     func setRoute(_ coords: [CLLocationCoordinate2D]) {
@@ -261,7 +315,9 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         Task { @MainActor in
             self.currentLocation = latest
             self.locationError = nil
+            self.isPausedBySystem = false
             self.updateRouteProgress(location: latest)
+            self.onRideLocation?(latest)
             // Every fix counts towards the distance actually ridden, not only the newest one.
             for fix in locations { RideRecorder.shared.ingest(fix) }
         }
@@ -269,6 +325,18 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
         Task { @MainActor in self.currentHeading = newHeading }
+    }
+
+    nonisolated func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
+        Task { @MainActor in
+            self.isPausedBySystem = true
+            // In ride mode we never want iOS to pause: ask again right away.
+            if self.rideMode { self.manager.startUpdatingLocation() }
+        }
+    }
+
+    nonisolated func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
+        Task { @MainActor in self.isPausedBySystem = false }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {

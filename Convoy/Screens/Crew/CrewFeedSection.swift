@@ -308,7 +308,10 @@ struct FeedPostCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             authorRow
-            if !mediaPages.isEmpty { FeedMediaCarousel(post: post, pages: mediaPages) }
+            if let card = post.cardURL {
+                // The exact card the rider designed in Share Studio.
+                postedCard(card)
+            } else if !mediaPages.isEmpty { FeedMediaCarousel(post: post, pages: mediaPages) }
             if let ride = post.openRide { openRideBody(ride) } else if let recap = post.recap { recapBody(recap) }
         }
         .background(CV.surface.opacity(0.94), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -379,38 +382,90 @@ struct FeedPostCard: View {
         }
     }
 
+    private func postedCard(_ url: URL) -> some View {
+        AsyncImage(url: url) { phase in
+            switch phase {
+            case .success(let img): img.resizable().scaledToFit()
+            case .failure: Color(hex: 0x141416).overlay(Image(systemName: "photo").foregroundStyle(CV.muted))
+            default: Color(hex: 0x141416).overlay(ProgressView().tint(CV.text))
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(maxHeight: 560)
+        .background(Color.black)
+    }
+
     // MARK: Ride recap
 
     @ViewBuilder
     private func recapBody(_ r: RideRecap) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if mediaPages.isEmpty {
-                Text(r.title).cvText(17, .bold, color: CV.text, inter: true).lineLimit(2)
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(r.title).cvText(18, .bold, color: CV.text, inter: true).lineLimit(2)
+                let from = r.startName.components(separatedBy: ",").first ?? ""
+                let to = r.endName.components(separatedBy: ",").first ?? ""
+                if !from.isEmpty || !to.isEmpty {
+                    HStack(spacing: 5) {
+                        Image(systemName: "flag.checkered").font(.system(size: 10, weight: .bold)).foregroundStyle(Hue.sage)
+                        Text([from, to].filter { !$0.isEmpty }.joined(separator: " → ")).cvText(12, color: CV.muted, inter: true).lineLimit(1)
+                    }
+                }
             }
-            HStack(spacing: 8) {
-                FactPill(icon: "point.topleft.down.to.point.bottomright.curvepath", text: "\(RideFormat.km(Double(r.distanceM) / 1000)) km")
-                FactPill(icon: "clock", text: RideFormat.duration(r.movingS))
-                if r.avgSpeedKmh > 0 { FactPill(icon: "speedometer", text: "\(Int(r.avgSpeedKmh.rounded())) km/h") }
-                if r.riderCount > 1 { FactPill(icon: "person.2.fill", text: "\(r.riderCount)") }
+            // The numbers people look for, big — like the cards.
+            HStack(alignment: .top, spacing: 0) {
+                heroStat(RideCardData(recap: r, author: post.author).kmText, "km", Hue.periwinkle)
+                heroStat(RideFormat.duration(r.movingS), "riding", Hue.honey)
+                heroStat(r.avgSpeedKmh > 0 ? "\(Int(r.avgSpeedKmh.rounded()))" : "—", "avg km/h", Hue.sage)
+                if r.riderCount > 1 { heroStat("\(r.riderCount)", "riders", Hue.lavender) }
             }
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             if !post.caption.isEmpty {
-                Text(post.caption).cvText(14, color: CV.text.opacity(0.85), lineHeight: 19, inter: true).lineLimit(3)
+                Text(post.caption).cvText(14, color: CV.text.opacity(0.88), lineHeight: 20, inter: true).lineLimit(4)
             }
         }
         .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 12)
         actionsRow
     }
 
+    private func heroStat(_ value: String, _ label: String, _ hue: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value).cvText(19, .bold, inter: true).lineLimit(1).minimumScaleFactor(0.6)
+            HStack(spacing: 4) {
+                Circle().fill(hue).frame(width: 5, height: 5)
+                Text(label).cvText(11, color: CV.muted, inter: true)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Shares the ride as a Convoy Classic card image (falls back to text for open-ride posts).
+    private func shareCard() {
+        guard let r = post.recap else { ShareSheetPresenter.present(items: [shareText]); return }
+        let data = RideCardData(recap: r, author: post.author)
+        let canvas = RideCardCanvas(design: .classic, data: data, options: CardOptions(), format: .story)
+        if let img = CardExporter.render(canvas, scale: CardFormat.story.exportScale, transparent: false) {
+            ShareSheetPresenter.present(items: [img, shareText])
+        } else {
+            ShareSheetPresenter.present(items: [shareText])
+        }
+    }
+
     private var actionsRow: some View {
         VStack(spacing: 0) {
             Rectangle().fill(Color.white.opacity(0.1)).frame(height: 1)
             HStack(spacing: 18) {
-                Button { Task { await app.social.toggleLike(post) } } label: {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    Task { await app.social.toggleLike(post) }
+                } label: {
                     HStack(spacing: 6) {
                         Image(systemName: post.likedByMe ? "heart.fill" : "heart").font(.system(size: 20))
-                            .foregroundStyle(post.likedByMe ? CV.accent : CV.text)
+                            .foregroundStyle(post.likedByMe ? Color(hex: 0xFF3B30) : CV.text)
+                            .symbolEffect(.bounce, value: post.likedByMe)
                         if post.likeCount > 0 {
-                            Text("\(post.likeCount)").cvText(14, .semibold, color: post.likedByMe ? CV.accent : CV.text, inter: true)
+                            Text("\(post.likeCount)").cvText(14, .semibold, color: post.likedByMe ? Color(hex: 0xFF3B30) : CV.text, inter: true)
+                                .contentTransition(.numericText())
                         }
                     }
                 }.buttonStyle(.plain)
@@ -423,9 +478,15 @@ struct FeedPostCard: View {
                 }.buttonStyle(.plain)
                 .accessibilityLabel("Comments")
                 Spacer()
-                ShareLink(item: shareText) {
-                    Image(systemName: "square.and.arrow.up").font(.system(size: 18)).foregroundStyle(CV.text)
+                Button { shareCard() } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
+                        if post.recap != nil { Text("Card").cvText(13, .semibold, inter: true) }
+                    }
+                    .foregroundStyle(CV.text)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Share as a card")
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
         }

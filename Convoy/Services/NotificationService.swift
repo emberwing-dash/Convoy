@@ -75,31 +75,69 @@ final class NotificationService {
     }
 }
 
-/// Notifications this phone creates itself.
+/// Notifications this phone creates itself during a ride.
 enum ConvoyNotificationKind: Hashable, Sendable {
     case rallyAhead(meters: Int)
     case rallyBehind(meters: Int)
+    /// Off to the side of the group (e.g. a parallel road) rather than ahead or behind.
+    case rallyApart(meters: Int)
+    /// To the organiser: one rider (or several) left the group.
+    case rallyOrganiser(names: [String], behind: Bool, meters: Int)
+    case stopAdded(by: String, stop: String, kind: String)
+    case rideEnded(by: String, title: String)
+    case riderArrived(name: String)
+    case riderLeft(name: String)
+    case trackingProblem(message: String)
 
     var kind: String {
         switch self {
         case .rallyAhead: return "rally_ahead"
         case .rallyBehind: return "rally_behind"
+        case .rallyApart: return "rally_apart"
+        case .rallyOrganiser: return "rally_organiser"
+        case .stopAdded: return "ride_stop_added"
+        case .rideEnded: return "ride_session_ended"
+        case .riderArrived: return "ride_rider_arrived"
+        case .riderLeft: return "ride_rider_left"
+        case .trackingProblem: return "ride_tracking_problem"
         }
     }
     var isNavigation: Bool { true }
+
+    private static func gap(_ m: Int) -> String {
+        m < 1000 ? "\(max(10, m / 10 * 10)) m" : String(format: "%.1f km", Double(m) / 1000)
+    }
 
     var title: String {
         switch self {
         case .rallyAhead: return "Slow down — you're ahead of the group"
         case .rallyBehind: return "Catch up — you've fallen behind"
+        case .rallyApart: return "You've split from the group"
+        case .rallyOrganiser(let names, let behind, _):
+            if names.count > 1 { return "\(names.count) riders are \(behind ? "behind" : "away from the group")" }
+            return "\(names.first ?? "A rider") is \(behind ? "falling behind" : "ahead of the group")"
+        case .stopAdded(let by, _, let kind): return "\(by) added a \(kind.lowercased()) stop"
+        case .rideEnded(let by, _): return "\(by) ended the ride"
+        case .riderArrived(let name): return "\(name) has arrived"
+        case .riderLeft(let name): return "\(name) left the ride"
+        case .trackingProblem: return "Your location isn't being shared"
         }
     }
 
     var body: String {
-        func gap(_ m: Int) -> String { m < 1000 ? "\(m / 10 * 10) m" : String(format: "%.1f km", Double(m) / 1000) }
         switch self {
-        case .rallyAhead(let m): return "You're \(gap(m)) from the middle of the convoy. Ease off so everyone can regroup."
-        case .rallyBehind(let m): return "You're \(gap(m)) from the middle of the convoy. Close the gap when it's safe."
+        case .rallyAhead(let m): return "You're \(Self.gap(m)) ahead of the group. Ease off so everyone can regroup."
+        case .rallyBehind(let m): return "You're \(Self.gap(m)) behind the group. Close the gap when it's safe."
+        case .rallyApart(let m): return "You're \(Self.gap(m)) from the group. Check the route when it's safe."
+        case .rallyOrganiser(let names, let behind, let m):
+            let who = names.count > 1 ? names.joined(separator: ", ") : (names.first ?? "A rider")
+            return behind ? "\(who) — \(Self.gap(m)) behind. Consider waiting at a safe spot."
+                          : "\(who) — \(Self.gap(m)) from the group."
+        case .stopAdded(_, let stop, _): return "\(stop) is on the map. Open Convoy to see it."
+        case .rideEnded(_, let title): return "'\(title)' is complete. Your ride summary is ready."
+        case .riderArrived: return "They reached the destination."
+        case .riderLeft: return "They stopped sharing their location for this ride."
+        case .trackingProblem(let message): return message
         }
     }
 }
@@ -182,12 +220,15 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
         let kind = info["kind"] as? String ?? ""
         Task { @MainActor in
             // A server event arrived while the app is open: refresh the in-app list right away.
-            if !kind.hasPrefix("rally"), kind != "ride_reminder" {
+            if !kind.hasPrefix("rally"), !kind.hasPrefix("ride_"), kind != "ride_reminder" {
                 await AppStateResolver.shared.current?.refreshNotifications(force: true)
             }
         }
-        // The in-ride banner already shows pack alerts; don't double up with a system banner.
-        if kind.hasPrefix("rally"), UIApplication.shared.applicationState == .active {
+        // The ride map shows these itself; only suppress the system banner while it is on screen.
+        let isRideKind = kind.hasPrefix("rally") || kind.hasPrefix("ride_stop") || kind.hasPrefix("ride_rider")
+            || kind == "ride_session_ended" || kind == "ride_tracking_problem"
+        let navVisible = ActiveRideSession.navVisibleFlag
+        if isRideKind, UIApplication.shared.applicationState == .active, navVisible {
             completionHandler([])
         } else {
             completionHandler([.banner, .list, .sound])

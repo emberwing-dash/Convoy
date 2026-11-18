@@ -431,16 +431,23 @@ struct AppleMapsBottomSheet: View {
 struct ConvoyRiderMapMarker: View {
     let rider: RiderLiveLocation
     let avatarData: Data?
+    var freshness: LiveFreshness = .live
+    var status: PackStatus? = nil
 
     var body: some View {
         VStack(spacing: 3) {
             HStack(spacing: 4) {
-                Circle().fill(CV.green).frame(width: 6, height: 6)
+                Circle().fill(freshness == .live ? CV.green : Hue.honey).frame(width: 6, height: 6)
                 Text(rider.name)
                     .cvText(11, .bold, color: .white, inter: true)
-                if rider.speedKmh > 0 {
+                if freshness == .live, rider.speedKmh > 0 {
                     Text("· \(rider.speedKmh) km/h")
                         .cvText(10, .medium, color: CV.text, inter: true)
+                } else if freshness == .delayed {
+                    Text("· delayed").cvText(10, .medium, color: Hue.honey, inter: true)
+                }
+                if let status, let tag = RiderStatusTag.text(status) {
+                    Text("· \(tag)").cvText(10, .bold, color: RiderStatusTag.hue(status), inter: true)
                 }
             }
             .padding(.horizontal, 8)

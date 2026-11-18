@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MainShell: View {
     @Environment(AppState.self) private var app
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         @Bindable var app = app
@@ -19,6 +20,7 @@ struct MainShell: View {
             .overlay(alignment: .bottom) {
                 ConvoyTabBar(selection: $app.tab)
             }
+            .task { await app.resumeActiveRideIfNeeded() }
             .navigationBarBackButtonHidden()
             .toolbar(.hidden, for: .navigationBar)
             .task { await app.handlePendingNotificationTap() }
@@ -73,6 +75,20 @@ struct MainShell: View {
                 case .placeholder(let t): PlaceholderScreen(title: t, canPop: true)
                 }
             }
+        }
+        // A ride keeps running on every screen. Tabs: a live dot on the Ride tab and a "Riding now"
+        // state on the Home ride card. Pushed screens: a small round button back to the ride map.
+        .overlay(alignment: .bottomTrailing) {
+            if ActiveRideSession.shared.isActive, !app.path.isEmpty, app.path.last != .rideNav {
+                RideLiveMiniButton()
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 120)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: ActiveRideSession.shared.isActive)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await ActiveRideSession.shared.resync() } }
         }
     }
 }

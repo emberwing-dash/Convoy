@@ -202,16 +202,8 @@ final class RoutePlanner {
             req.requestsAlternateRoutes = true
             let res = try await MKDirections(request: req).calculate()
             return res.routes.map { r in
-                let steps = r.steps.compactMap { step -> NavStep? in
-                    let inst = step.instructions.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !inst.isEmpty else { return nil }
-                    return NavStep(
-                        instructions: inst,
-                        notice: step.notice,
-                        distance: step.distance,
-                        coordinate: Coord(step.polyline.coordinate),
-                        symbol: Self.symbolForInstruction(inst))
-                }
+                // Each maneuver sits at the start of its step (NavStep.from), not the step's middle.
+                let steps = r.steps.compactMap(NavStep.from)
                 return Candidate(
                     coords: r.polyline.coords,
                     distance: r.distance,
@@ -242,17 +234,7 @@ final class RoutePlanner {
             dist += r.distance
             time += r.expectedTravelTime
 
-            for step in r.steps {
-                let inst = step.instructions.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !inst.isEmpty {
-                    allSteps.append(NavStep(
-                        instructions: inst,
-                        notice: step.notice,
-                        distance: step.distance,
-                        coordinate: Coord(step.polyline.coordinate),
-                        symbol: Self.symbolForInstruction(inst)))
-                }
-            }
+            allSteps += r.steps.compactMap(NavStep.from)
         }
         return Candidate(coords: coords, distance: dist, time: time, kind: kind, steps: allSteps)
     }

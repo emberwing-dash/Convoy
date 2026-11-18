@@ -271,7 +271,7 @@ struct OriginPill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: "location.fill").font(.system(size: 11, weight: .semibold))
+                Image(systemName: "location.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(Hue.periwinkle)
                 Text(title).cvText(13, .medium, inter: true).lineLimit(1)
                 Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
             }
@@ -343,6 +343,8 @@ struct CategoryTile: View {
     let title: String
     let subtitle: String
     var symbol: String? = nil
+    /// Badge colour; defaults to the app's hue for the symbol.
+    var tint: Color? = nil
     var photo: PhotoRef?
     var art: LandingArt? = nil
     var height: CGFloat = 150
@@ -354,8 +356,13 @@ struct CategoryTile: View {
                 .overlay(LinearGradient(colors: [.clear, .black.opacity(0.8)], startPoint: .center, endPoint: .bottom))
                 .overlay(alignment: .topLeading) {
                     if let symbol {
-                        Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(CV.text)
-                            .frame(width: 30, height: 30).background(.black.opacity(0.5), in: Circle()).padding(10)
+                        let c = tint ?? Hue.of(symbol)
+                        Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(c)
+                            .frame(width: 34, height: 34)
+                            .background(c.opacity(0.24), in: Circle())
+                            .background(.black.opacity(0.62), in: Circle())
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                            .padding(10)
                     }
                 }
                 .overlay(alignment: .bottomLeading) {
@@ -461,7 +468,7 @@ struct RouteStats: View {
         }
     }
     private func stat(_ s: String, _ t: String) -> some View {
-        HStack(spacing: 4) { Image(systemName: s).font(.system(size: 11)); Text(t).cvText(12, .semibold, inter: true) }
+        HStack(spacing: 4) { Image(systemName: s).font(.system(size: 11, weight: .semibold)).foregroundStyle(Hue.of(s)); Text(t).cvText(12, .semibold, inter: true) }
             .foregroundStyle(CV.text)
     }
 }
@@ -555,7 +562,7 @@ struct TypeTile: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
-                Image(systemName: category.symbol).font(.system(size: 18, weight: .medium))
+                IconBadge(symbol: category.badgeSymbol, color: category.hue, size: 38)
                 Text(category.plural).cvText(12, .medium, inter: true).lineLimit(1).minimumScaleFactor(0.8)
             }
             .foregroundStyle(CV.text)
@@ -688,8 +695,7 @@ struct DiscoverStateView: View {
     var secondary: (String, () -> Void)? = nil
     var body: some View {
         VStack(spacing: 10) {
-            Image(systemName: symbol).font(.system(size: 18, weight: .medium)).foregroundStyle(CV.text)
-                .frame(width: 44, height: 60).background(CV.glassFill, in: Capsule())
+            IconBadge(symbol: symbol, size: 56)
             Text(title).cvText(18, .semibold, inter: true).multilineTextAlignment(.center).padding(.top, 6)
             Text(message).cvText(13, color: CV.muted, inter: true).multilineTextAlignment(.center)
             VStack(spacing: 10) {
@@ -786,5 +792,37 @@ struct DiscoverScroll<Content: View>: View {
         .background { TopoBackground(glow: false) }
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden()
+    }
+}
+
+// MARK: - Place type colours (app badge style)
+
+extension PlaceCategory {
+    /// Filled symbol for coloured badges.
+    var badgeSymbol: String {
+        switch self {
+        case .lake: "water.waves"
+        case .waterfall: "drop.fill"
+        case .viewpoint: "mountain.2.fill"
+        case .beach: "beach.umbrella.fill"
+        case .forest: "tree.fill"
+        case .cafe: "cup.and.saucer.fill"
+        case .historical: "building.columns.fill"
+        case .hillRoad: "road.lanes"
+        case .hillStation: "mountain.2.circle.fill"
+        case .waterfront: "sailboat.fill"
+        }
+    }
+    var hue: Color {
+        switch self {
+        case .lake, .waterfront: Hue.sky
+        case .waterfall: Hue.teal
+        case .viewpoint, .hillStation: Hue.sage
+        case .beach: Hue.honey
+        case .forest: Hue.sage
+        case .cafe: Hue.ember
+        case .historical: Hue.lavender
+        case .hillRoad: Hue.periwinkle
+        }
     }
 }

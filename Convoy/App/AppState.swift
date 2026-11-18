@@ -263,7 +263,8 @@ final class AppState {
 
     // MARK: - Computed
     var activeRide: Ride? { activeRideID.flatMap { id in rides.first { $0.id == id } } }
-    var upcomingRide: Ride? { activeRide ?? rides.first }
+    /// The ride being navigated, else the next ride that isn't over (never a finished one).
+    var upcomingRide: Ride? { activeRide ?? openRides.first }
     var sortedRides: [Ride] {
         // Tie-break on id so rides at the same time keep a stable order between refreshes.
         rides.sorted { $0.departs != $1.departs ? $0.departs < $1.departs : $0.id.uuidString < $1.id.uuidString }
@@ -282,7 +283,9 @@ final class AppState {
     }
 
     /// Rides still ahead of you (or happening now), soonest first — what Home shows.
-    var openRides: [Ride] { sortedRides.filter { !isFinished($0) } }
+    var openRides: [Ride] { sortedRides.filter { !isFinished($0) && !$0.isPendingInvite } }
+    /// Ride invitations you haven't answered yet.
+    var pendingInvites: [Ride] { sortedRides.filter { $0.isPendingInvite && !isFinished($0) } }
 
     /// A notification the rider tapped; `MainShell` opens the right screen once the app is ready.
     var pendingNotificationTap: NotificationTap? = nil
@@ -365,6 +368,17 @@ final class AppState {
             case "notifications":
                 self.tab = .ride
                 self.path.append(.notifications)
+            case "planWho":
+                self.tab = .ride
+                self.path.append(.planWho)
+            case "shareStudio":
+                // Testing (Debug builds show sample ride data): open Share Studio.
+                self.tab = .ride
+                self.path.append(.shareCard)
+            case "rideNav":
+                // Testing: open the live ride map for the next ride.
+                self.tab = .ride
+                self.path.append(.rideNav)
             case "placeDetail":
                 if idx + 2 < ProcessInfo.processInfo.arguments.count {
                     let pid = ProcessInfo.processInfo.arguments[idx + 2]
@@ -508,7 +522,10 @@ final class AppState {
                 // Keep local rides the server hasn't seen yet (offline-created or local test rides)
                 let localOnly = self.rides.filter { !fetchedIds.contains($0.id) }
                 let hidden = self.hiddenRideIDs
-                self.rides = (fetched + localOnly).filter { !hidden.contains($0.id.uuidString) }.sorted { $0.departs < $1.departs }
+                let done = Set(self.completedRides.map(\.id))
+                self.rides = (fetched + localOnly)
+                    .filter { !hidden.contains($0.id.uuidString) && !done.contains($0.id) }
+                    .sorted { $0.departs < $1.departs }
                 self.ridesLoadedAt = Date()
                 for r in fetched { StorageService.shared.saveRide(r) }
             }
@@ -911,8 +928,7 @@ final class AppState {
     }
 
     func signOut() async {
-        RallyCoordinator.shared.stop()
-        await RideLiveLocationManager.shared.stopSharing()
+        await ActiveRideSession.shared.stopLocal()
         activeRideID = nil
         UserDefaults.standard.removeObject(forKey: "activeRideID")
         await PushNotificationManager.shared.unregisterCurrentDevice()
@@ -1210,7 +1226,19 @@ final class AppState {
 
     @discardableResult
     func acceptRideInvitation(rideId: UUID) async -> Bool {
-        guard let idx = rides.firstIndex(where: { $0.id == rideId }) else { return false }
+        // Tell the server. The invite may not be on this phone yet (it arrived as a notification),
+        // in which case the server answer is all we have to go on.
+        let isLocal = rides.contains { $0.id == rideId }
+        if let userId = backendUserId ?? SupabaseManager.shared.currentUserId {
+            do { try await SupabaseManager.shared.acceptRideInvitation(rideId: rideId, userId: userId) }
+            catch {
+                if !isLocal { lastSocialError = SocialError.from(error).message; return false }
+            }
+        }
+        guard let idx = rides.firstIndex(where: { $0.id == rideId }) else {
+            await refreshRides(force: true)
+            return rides.contains { $0.id == rideId }
+        }
         rides[idx].rsvp = .going
         if let riderIdx = rides[idx].riders.firstIndex(where: { $0.name == displayName }) {
             rides[idx].riders[riderIdx].status = .accepted
@@ -1225,12 +1253,17 @@ final class AppState {
         }
         rides[idx].ridersGoing = rides[idx].acceptedRiders.count
         StorageService.shared.saveRide(rides[idx])
+        return true
+    }
 
-        if let userId = backendUserId {
-            Task {
-                try? await SupabaseManager.shared.acceptRideInvitation(rideId: rideId, userId: userId)
-            }
-        }
+    /// Says no to a ride invitation; the ride leaves this phone.
+    @discardableResult
+    func declineRideInvitation(rideId: UUID) async -> Bool {
+        guard let userId = backendUserId ?? SupabaseManager.shared.currentUserId else { return false }
+        do { try await SupabaseManager.shared.declineRideInvitation(rideId: rideId, userId: userId) }
+        catch { lastSocialError = SocialError.from(error).message; return false }
+        rides.removeAll { $0.id == rideId }
+        hiddenRideIDs.insert(rideId.uuidString)
         return true
     }
 
@@ -1278,11 +1311,69 @@ final class AppState {
         UserDefaults.standard.set(id.uuidString, forKey: "activeRideID")
         StorageService.shared.markRideActive(id: id)
         if let idx = rides.firstIndex(where: { $0.id == id }) { rides[idx].tag = "Ongoing" }
-        RallyCoordinator.shared.start(app: self, rideId: id)
+        // GPS, live sharing, pack alerts and the ride lifecycle all live in the session, which keeps
+        // running whatever screen is open.
+        Task { await ActiveRideSession.shared.start(rideId: id, app: self) }
         // Organiser starting the ride tells everyone on it (the server ignores this for other riders).
-        if let ride = rides.first(where: { $0.id == id }), ride.organiserId == backendUserId || ride.organiser == "you" {
+        if let ride = rides.first(where: { $0.id == id }), ActiveRideSession.isOrganiser(ride, me: backendUserId),
+           !StorageService.shared.wasRideStartAnnounced(id: id) {
+            StorageService.shared.markRideStartAnnounced(id: id)
             Task { try? await SupabaseManager.shared.markRideStarted(rideId: id) }
         }
+    }
+
+    /// New profile photo: shown at once, kept on this phone, and saved to your profile so riders see it.
+    /// Returns false when the server save failed (the photo stays on this phone and is sent next time).
+    @discardableResult
+    func updateAvatar(_ data: Data) async -> Bool {
+        avatarImageData = data
+        StorageService.shared.saveOnboardingCompleted(name: displayName, handle: handle, imageData: data)
+        guard let me = backendUserId ?? SupabaseManager.shared.currentUserId else { return false }
+        do {
+            try await SupabaseManager.shared.updateAvatar(userId: me, avatarData: data)
+            return true
+        } catch {
+            print("[Profile] avatar upload failed: \(error)")
+            return false
+        }
+    }
+
+    /// Before posting a ride you planned: make sure the server has it under your account.
+    /// A ride saved on this phone while another account was signed in (or whose id clashes with someone
+    /// else's) is re-saved as a new ride you organise, and replaces the stale copy here.
+    func ensureOwnRideOnServer(_ ride: Ride) async throws -> Ride {
+        let me = try await SupabaseManager.shared.ensureAuthenticatedUser()
+        switch await ActiveRideSession.serverOrganiser(of: ride.id) {
+        case .found(let organiser) where organiser == me:
+            return ride
+        case .found:
+            // Only a ride this phone says you made; never take over someone else's ride.
+            let madeHere = (ride.organiserId == nil || ride.organiserId == me)
+                && (ride.organiser.lowercased() == "you" || ride.rsvp == .organizing)
+            guard madeHere else { throw SocialError(message: "Only the ride admin can post this ride.") }
+            let mine = ride.reissued(to: me, name: displayName, avatar: avatarImageData)
+            _ = try await SupabaseManager.shared.createRide(mine, userId: me)
+            rides.removeAll { $0.id == ride.id }
+            hiddenRideIDs.insert(ride.id.uuidString)
+            rides.append(mine)
+            rides.sort { $0.departs < $1.departs }
+            StorageService.shared.saveRide(mine)
+            return mine
+        case .notOnServer:
+            _ = try await SupabaseManager.shared.createRide(ride, userId: me)
+            return ride
+        case .unknown:
+            _ = try? await SupabaseManager.shared.createRide(ride, userId: me)
+            return ride
+        }
+    }
+
+    /// After a relaunch (app was closed mid-ride): resume the ride session so sharing continues.
+    func resumeActiveRideIfNeeded() async {
+        guard let id = activeRideID, !ActiveRideSession.shared.isActive else { return }
+        if !rides.contains(where: { $0.id == id }) { await refreshRides(force: true) }
+        guard rides.contains(where: { $0.id == id }) else { return }
+        await ActiveRideSession.shared.start(rideId: id, app: self)
     }
 
     /// The server may have given this account a different username than the one typed at
@@ -1304,10 +1395,12 @@ final class AppState {
     func handlePendingNotificationTap() async {
         guard phase == .main, let tap = pendingNotificationTap else { return }
         pendingNotificationTap = nil
-        if tap.kind.hasPrefix("rally") {
+        if tap.kind.hasPrefix("rally") || tap.kind.hasPrefix("ride_stop") || tap.kind.hasPrefix("ride_rider")
+            || tap.kind == "ride_tracking_problem" {
             if activeRide != nil, path.last != .rideNav { push(.rideNav) }
             return
         }
+        if tap.kind == "ride_session_ended" { return }   // the summary is already on screen
         if let rideId = tap.rideId {
             await refreshRides(force: true)
             tab = .ride
@@ -1346,8 +1439,7 @@ final class AppState {
     func endActiveRide(id: UUID) {
         NotificationService.shared.cancelRideReminder(rideId: id)
         if activeRideID == id || activeRideID == nil {
-            RallyCoordinator.shared.stop()
-            Task { await RideLiveLocationManager.shared.stopSharing() }
+            Task { await ActiveRideSession.shared.stopLocal() }
         }
         if activeRideID == id {
             activeRideID = nil
@@ -1371,7 +1463,12 @@ final class AppState {
         }
         // Close the GPS recording for this ride; its distance and time feed stats and leaderboards.
         let destination = rides.first(where: { $0.id == id })?.plan.to ?? ""
-        if let log = RideRecorder.shared.finish(rideId: id, endName: destination.components(separatedBy: ",").first ?? destination) {
+        let record = ActiveRideSession.shared.rideId == id
+            ? ActiveRideSession.shared.rideRecord(me: backendUserId, myName: displayName)
+            : (participants: backendUserId.map { [RideParticipant(id: $0, name: displayName)] } ?? [], stops: [])
+        let here = LocationService.shared.currentLocation.map { Coord($0.coordinate) }
+        if let log = RideRecorder.shared.finish(rideId: id, endName: destination.components(separatedBy: ",").first ?? destination,
+                                                participants: record.participants, stops: record.stops, endCoord: here) {
             lastRideLog = log
             Task { await social.uploadPendingRideLogs() }
         } else {

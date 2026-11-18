@@ -8,6 +8,8 @@ struct SocialError: LocalizedError, Equatable {
     var errorDescription: String? { message }
     /// A request the app itself cancelled (screen changed); never shown to the rider.
     static let cancelledMessage = "cancelled"
+    /// The server doesn't list you on the ride a recording points to (e.g. it was saved under another account).
+    static let notOnRideMessage = "You're not listed on this ride."
     var isCancellation: Bool { message == Self.cancelledMessage }
 
     static func from(_ error: Error) -> SocialError {
@@ -25,6 +27,7 @@ struct SocialError: LocalizedError, Equatable {
             ("duplicate key", "You've already asked to join this ride."),
             ("your own ride", "You're the admin of this ride."),
             ("no longer pending", "This request was already handled."),
+            ("not a rider on this ride", SocialError.notOnRideMessage),
             ("Only the ride admin", "Only the ride admin can do that."),
             ("Only the trip organizer", "Only the ride admin can do that."),
             ("Forbidden", "Only the ride admin can do that."),
@@ -99,6 +102,32 @@ final class SocialRepository {
         let _: UUID = try await call("add_post_comment", P(p_post_id: postId, p_body: body))
     }
 
+    // MARK: Ride cards on posts (bucket "ride-cards", folder = the author's user id)
+
+    /// Uploads a designed card PNG for one of your posts and attaches it. Returns its public URL.
+    func attachCard(postId: UUID, png: Data, userId: UUID) async throws -> URL {
+        let path = "\(userId.uuidString.lowercased())/\(postId.uuidString.lowercased())-\(Int(Date().timeIntervalSince1970)).png"
+        let bucket = SupabaseManager.shared.client.storage.from("ride-cards")
+        do {
+            try await bucket.upload(path, data: png, options: FileOptions(cacheControl: "31536000", contentType: "image/png", upsert: true))
+            nonisolated struct P: Encodable, Sendable { let p_post_id: UUID; let p_path: String }
+            try await run("set_post_card", P(p_post_id: postId, p_path: path))
+        } catch { throw SocialError.from(error) }
+        return try bucket.getPublicURL(path: path)
+    }
+
+    /// Card images for a page of posts (post id → public URL).
+    func postCards(ids: [UUID]) async -> [UUID: URL] {
+        guard !ids.isEmpty else { return [:] }
+        nonisolated struct P: Encodable, Sendable { let p_ids: [UUID] }
+        nonisolated struct R: Decodable, Sendable { let post_id: UUID; let card_path: String }
+        guard let rows: [R] = try? await call("post_cards", P(p_ids: ids)) else { return [:] }
+        let bucket = SupabaseManager.shared.client.storage.from("ride-cards")
+        var out: [UUID: URL] = [:]
+        for r in rows { if let url = try? bucket.getPublicURL(path: r.card_path) { out[r.post_id] = url } }
+        return out
+    }
+
     func deletePost(id: UUID) async throws {
         do { try await client.from("feed_posts").delete().eq("id", value: id).execute() }
         catch { throw SocialError.from(error) }
@@ -119,13 +148,23 @@ final class SocialRepository {
             let p_moving_s: Int; let p_elapsed_s: Int; let p_max_speed_kmh: Double; let p_path_polyline: String
         }
         nonisolated struct R: Decodable, Sendable { let id: UUID; let points: Int; let rider_count: Int; let is_host: Bool }
-        let r: R = try await call("record_ride_log", P(
-            p_client_log_id: log.id, p_ride_id: log.rideId, p_title: log.title, p_start_name: log.startName,
+        func send(rideId: UUID?) async throws -> R {
+            try await call("record_ride_log", P(
+            p_client_log_id: log.id, p_ride_id: rideId, p_title: log.title, p_start_name: log.startName,
             p_end_name: log.endName, p_started_at: Self.iso(log.startedAt), p_ended_at: Self.iso(log.endedAt),
             p_distance_m: distance, p_moving_s: moving, p_elapsed_s: elapsed,
             p_max_speed_kmh: log.maxSpeedKmh,
             // Everyone can see shared rides, so the uploaded track never includes the start or finish.
             p_path_polyline: RideMath.encode(RideMath.trimEnds(log.path))))
+        }
+        let r: R
+        do {
+            r = try await send(rideId: log.rideId)
+        } catch let e as SocialError where e.message == SocialError.notOnRideMessage && log.rideId != nil {
+            // The ride this recording points to isn't yours on the server (saved under another account):
+            // still record what you rode, as your own ride.
+            r = try await send(rideId: nil)
+        }
         return (r.id, r.points, r.rider_count, r.is_host)
     }
 

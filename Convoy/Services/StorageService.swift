@@ -307,6 +307,12 @@ final class StorageService {
 
     func saveRide(_ ride: Ride) {
         guard let context else { return }
+        // A server refresh must not undo "finished on this phone" (solo rides aren't closed on the server).
+        let rideId = ride.id
+        let existing = try? context.fetch(FetchDescriptor<PersistedRideEntity>(predicate: #Predicate { $0.id == rideId })).first
+        let keepCompleted = existing?.isCompleted ?? false
+        let keepCompletedAt = existing?.completedAt
+        let keepActive = existing?.isActive ?? false
         let stopsData = (try? JSONEncoder().encode(ride.plan.stops)) ?? Data("[]".utf8)
         let stopsJSON = String(data: stopsData, encoding: .utf8) ?? "[]"
 
@@ -321,7 +327,7 @@ final class StorageService {
             tag: ride.tag, departs: ride.departs,
             distance: ride.distance, duration: ride.duration,
             displayDate: ride.displayDate, displayTime: ride.displayTime,
-            organiser: ride.organiser, isCompleted: ride.isCompleted, code: ride.code,
+            organiser: ride.organiser, isCompleted: ride.isCompleted || keepCompleted, code: ride.code,
             fromLocation: ride.plan.from, toLocation: ride.plan.to,
             stopsJSON: stopsJSON, styleRaw: ride.plan.style.rawValue,
             routeSet: ride.plan.routeSet,
@@ -334,9 +340,23 @@ final class StorageService {
 
         let ridersData = (try? JSONEncoder().encode(ride.riders)) ?? Data("[]".utf8)
         entity.ridersJSON = String(data: ridersData, encoding: .utf8) ?? "[]"
+        entity.completedAt = keepCompletedAt ?? (ride.isCompleted ? Date() : nil)
+        entity.isActive = keepActive && !entity.isCompleted
 
         context.insert(entity)
         try? context.save()
+    }
+
+    /// Whether this phone already told the riders that the organiser started this ride.
+    func wasRideStartAnnounced(id: UUID) -> Bool {
+        (UserDefaults.standard.stringArray(forKey: "ride.startAnnounced") ?? []).contains(id.uuidString)
+    }
+
+    func markRideStartAnnounced(id: UUID) {
+        var ids = UserDefaults.standard.stringArray(forKey: "ride.startAnnounced") ?? []
+        guard !ids.contains(id.uuidString) else { return }
+        ids.append(id.uuidString)
+        UserDefaults.standard.set(Array(ids.suffix(50)), forKey: "ride.startAnnounced")
     }
 
     func markRideActive(id: UUID) {
